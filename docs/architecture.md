@@ -46,9 +46,9 @@ ArchCodex uses a language-agnostic semantic model, enabling support for multiple
 |----------|--------|--------|
 | TypeScript | Full support | ts-morph |
 | JavaScript | Full support | ts-morph |
-| Python | Planned | tree-sitter (not yet available) |
-| Go | Planned | go/parser (not yet available) |
-| Java | Planned | tree-sitter (not yet available) |
+| Python | Experimental | regex-based (line-by-line) |
+| Go | Experimental | regex-based (line-by-line) |
+| Java | Planned | — |
 
 ### Architecture Diagram
 
@@ -66,12 +66,12 @@ ArchCodex uses a language-agnostic semantic model, enabling support for multiple
 │  Language-agnostic representation of source code            │
 └─────────────────────────────────┬───────────────────────────┘
                                   │
-         ┌────────────────────────┴────────────────────┐
-         ▼                                             ▼
-┌─────────────────────┐                  ┌─────────────────────┐
-│ TypeScriptValidator │                  │   Future Plugins    │
-│ (built-in)          │                  │ Python, Go, Java    │
-└─────────────────────┘                  └─────────────────────┘
+         ┌────────────────────────┼────────────────────┐
+         ▼                       ▼                    ▼
+┌─────────────────────┐ ┌────────────────┐ ┌────────────────┐
+│ TypeScriptValidator │ │ PythonValidator│ │  GoValidator   │
+│ (ts-morph)          │ │ (regex-based)  │ │ (regex-based)  │
+└─────────────────────┘ └────────────────┘ └────────────────┘
 ```
 
 ### SemanticModel
@@ -104,9 +104,13 @@ languages:
   javascript:
     enabled: true
   python:
-    enabled: false  # Enable when validator is installed
+    enabled: true   # Experimental — regex-based parsing
     skip_constraints: [require_decorator]  # Skip non-applicable constraints
     non_applicable_constraints: skip  # skip | warn
+  go:
+    enabled: true   # Experimental — regex-based parsing
+    skip_constraints: [require_decorator]
+    non_applicable_constraints: skip
 ```
 
 ### Options
@@ -151,7 +155,9 @@ src/
     ├── capabilities.ts      # Language capability definitions
     ├── validator-registry.ts # Plugin registry for validators
     ├── interface.ts         # ILanguageValidator interface
-    └── typescript.ts        # TypeScript/JavaScript validator
+    ├── typescript.ts        # TypeScript/JavaScript validator
+    ├── python.ts            # Python validator (experimental)
+    └── go.ts                # Go validator (experimental)
 ```
 
 ---

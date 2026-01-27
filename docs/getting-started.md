@@ -78,6 +78,26 @@ export class PaymentProcessor {
 
 The tag tells ArchCodex which rules apply to this file. When an AI agent reads the file, ArchCodex expands this into full constraint information.
 
+#### Multi-Language Support (Experimental)
+
+Python and Go files use their native comment syntax for `@arch` tags:
+
+```python
+# @arch app.domain.payment.processor
+
+class PaymentProcessor:
+    ...
+```
+
+```go
+// @arch app.domain.payment.processor
+package payment
+
+type PaymentProcessor struct {}
+```
+
+The same constraints, inheritance, and overrides work across all supported languages. Validation is language-aware — constraints that don't apply to a language (e.g., `require_decorator` for Go) are automatically skipped.
+
 **Naming requirement:** Architecture IDs must contain at least one dot (`.`). This prevents false matches when `@arch` appears in prose text.
 
 | Valid | Invalid |

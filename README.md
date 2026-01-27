@@ -296,7 +296,9 @@ src/
 ## Requirements
 
 - Node.js 18+
-- TypeScript/JavaScript projects (Python, Go, Java support planned)
+- TypeScript/JavaScript projects
+- Python and Go support (experimental, regex-based parsing)
+- Java support planned
 
 ## Community & Support
 

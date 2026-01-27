@@ -97,7 +97,9 @@ languages:
   typescript:
     enabled: true
   python:
-    enabled: false
+    enabled: true   # Experimental
+  go:
+    enabled: true   # Experimental
 
 # Monorepo package boundaries
 packages: []
