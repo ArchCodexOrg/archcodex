@@ -72,8 +72,8 @@ describe('Language Capabilities', () => {
   });
 
   describe('GO_CAPABILITIES', () => {
-    it('should not have class inheritance (embedding only)', () => {
-      expect(GO_CAPABILITIES.hasClassInheritance).toBe(false);
+    it('should have class inheritance (embedding mapped to extends)', () => {
+      expect(GO_CAPABILITIES.hasClassInheritance).toBe(true);
     });
 
     it('should have interfaces', () => {
@@ -144,8 +144,8 @@ describe('constraintAppliesTo', () => {
       expect(constraintAppliesTo('must_extend', 'java')).toBe(true);
     });
 
-    it('should not apply to Go (no class inheritance)', () => {
-      expect(constraintAppliesTo('must_extend', 'go')).toBe(false);
+    it('should apply to Go (embedding mapped to extends in semantic model)', () => {
+      expect(constraintAppliesTo('must_extend', 'go')).toBe(true);
     });
   });
 

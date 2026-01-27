@@ -9,9 +9,12 @@
 import { validatorRegistry } from './validator-registry.js';
 import { TypeScriptValidator } from './typescript.js';
 import { PythonValidator } from './python.js';
-import { TYPESCRIPT_CAPABILITIES, PYTHON_CAPABILITIES } from './capabilities.js';
+import { GoValidator } from './go.js';
+import { TYPESCRIPT_CAPABILITIES, PYTHON_CAPABILITIES, GO_CAPABILITIES } from './capabilities.js';
 
 validatorRegistry.register('typescript', () => new TypeScriptValidator(),
   ['typescript', 'javascript'], ['.ts', '.tsx', '.js', '.jsx'], TYPESCRIPT_CAPABILITIES);
 validatorRegistry.register('python', () => new PythonValidator(),
   ['python'], ['.py'], PYTHON_CAPABILITIES);
+validatorRegistry.register('go', () => new GoValidator(),
+  ['go'], ['.go'], GO_CAPABILITIES);

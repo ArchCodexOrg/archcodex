@@ -27,6 +27,9 @@ eslint.config.js
 # VSCode extension (separate project with its own architecture)
 vscode-extension/
 
+# Test fixture files (non-TypeScript source used by validator tests)
+tests/fixtures/
+
 # Test files containing @arch/@override in test data strings
 # (parser cannot distinguish test data from real annotations)
 tests/unit/cli/commands/promote.test.ts

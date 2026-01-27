@@ -43,7 +43,7 @@ export const PYTHON_CAPABILITIES: LanguageCapabilities = {
  * Note: Go uses struct embedding (not inheritance), implicit interfaces, no decorators.
  */
 export const GO_CAPABILITIES: LanguageCapabilities = {
-  hasClassInheritance: false, // Embedding, not inheritance
+  hasClassInheritance: true,  // Struct embedding maps to extends in semantic model
   hasInterfaces: true,        // Implicit/structural interfaces
   hasDecorators: false,       // No decorators
   hasVisibilityModifiers: true, // Exported (uppercase) vs unexported

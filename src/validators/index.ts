@@ -15,6 +15,7 @@ export * from './validator-registry.js';
 // Built-in validators
 export * from './typescript.js';
 export * from './python.js';
+export * from './go.js';
 
 // Registration (ensures validators are registered when barrel is imported)
 import './register.js';
