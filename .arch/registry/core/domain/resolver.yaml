@@ -1,0 +1,49 @@
+---
+
+archcodex.core.domain.resolver:
+  inherits: archcodex.core.domain
+  mixins:
+    - srp
+    - tested
+  description: Resolution logic (inheritance, constraints)
+  rationale: |
+    Resolvers transform raw input into fully resolved output by applying rules
+    like inheritance, merging, and conflict resolution. They handle the complexity
+    of combining multiple sources into a single coherent result.
+
+    Use for: Files that resolve inheritance chains, merge configurations, or
+    flatten hierarchical structures.
+    Don't use for: Simple data loading (use domain), schema definitions (use domain.schema).
+  reference_implementations:
+    - src/core/registry/resolver.ts
+    - src/core/pointers/resolver.ts
+  file_pattern: ${name}.ts
+  default_path: src/core
+  code_pattern: |-
+    import type { ResolvedResult, ConflictReport } from './types.js';
+
+    /**
+     * Resolve raw input into its fully flattened form.
+     * Handles inheritance, merging, and conflict resolution.
+     */
+    export function resolveXxx(input: RawInput, options?: ResolveOptions): ResolvedResult {
+      // 1. Walk inheritance chain
+      // 2. Merge from least to most specific
+      // 3. Detect and report conflicts
+      return { resolved, conflicts };
+    }
+  constraints:
+    - rule: max_public_methods
+      value: 8
+      severity: warning
+      why: "[SRP] Resolvers should have a focused public API"
+    - rule: max_file_lines
+      value: 500
+      exclude_comments: true
+      severity: warning
+      why: Resolution logic is inherently complex but should stay bounded
+  hints:
+    - Resolvers transform raw input into fully resolved output
+    - Handle edge cases explicitly - document precedence rules in comments
+    - Return conflict reports alongside resolved data for diagnostics
+    - "[SRP] Separate resolution from loading - resolvers take pre-loaded data"

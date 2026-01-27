@@ -1,0 +1,31 @@
+# ArchCodex VSCode Extension - Architecture Configuration
+# Dogfooding: Using ArchCodex to validate the extension itself
+
+version: "1.0"
+
+registry: .arch/registry.yaml
+
+file_policies:
+  require_arch_tag:
+    - "src/**/*.ts"
+    - "!src/**/*.test.ts"
+    - "!src/**/*.d.ts"
+  exclude:
+    - "node_modules/**"
+    - "dist/**"
+    - "**/*.test.ts"
+
+validation:
+  strict: false
+  fail_on_warnings: false
+
+# Layer boundary definitions
+# Client and Server are separate processes that communicate via LSP
+layers:
+  - name: server
+    paths: ["src/server/**"]
+    can_import: []  # Server is independent, shouldn't import client
+
+  - name: client
+    paths: ["src/client/**"]
+    can_import: []  # Client is independent, shouldn't import server internals

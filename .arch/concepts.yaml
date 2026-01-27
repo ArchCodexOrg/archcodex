@@ -1,0 +1,245 @@
+# === Semantic Concept Mapping for ArchCodex Discovery ===
+#
+# Maps natural language searches to architectures.
+# Example: "type guard" → archcodex.core.domain.schema
+#
+# Regenerate: archcodex garden --llm --concepts
+# Validate:   archcodex sync-index
+
+---
+
+concepts:
+  # CLI and Command Handling
+  cli_command:
+    description: "CLI command handlers and terminal interface"
+    aliases:
+      - "cli command"
+      - "command handler"
+      - "terminal command"
+      - "add command"
+      - "commander"
+      - "argparse"
+    architectures:
+      - archcodex.cli.command
+      - archcodex.cli.command.complex
+      - archcodex.cli.command.documented
+      - archcodex.cli.command.meta
+
+  # Validation and Constraints
+  validation:
+    description: "Constraint validators and rule enforcement"
+    aliases:
+      - "validator"
+      - "constraint"
+      - "rule checker"
+      - "type guard"
+      - "schema validation"
+      - "enforce rule"
+    architectures:
+      - archcodex.core.domain.constraint
+      - archcodex.core.domain.schema
+      - archcodex.infra.validator
+
+  # Parsing and Data Extraction
+  parsing:
+    description: "Parsers for @arch tags, YAML, and structured data"
+    aliases:
+      - "parser"
+      - "parse yaml"
+      - "arch tag"
+      - "extract data"
+      - "yaml parsing"
+      - "tag parser"
+    architectures:
+      - archcodex.core.domain.parser
+      - archcodex.core.domain.schema
+
+  # LLM and AI Integration
+  llm_integration:
+    description: "LLM providers and AI-powered features"
+    aliases:
+      - "llm"
+      - "ai integration"
+      - "openai"
+      - "anthropic"
+      - "claude"
+      - "gpt"
+      - "behavioral verification"
+      - "ai provider"
+    architectures:
+      - archcodex.core.domain.llm
+
+  # MCP and Agent Tools
+  mcp_agent:
+    description: "MCP server and LLM agent tooling"
+    aliases:
+      - "mcp"
+      - "mcp server"
+      - "agent tool"
+      - "claude code"
+      - "llm tool"
+      - "model context protocol"
+    architectures:
+      - archcodex.cli.mcp
+
+  # Orchestration and Engines
+  orchestration:
+    description: "Use case orchestrators and workflow engines"
+    aliases:
+      - "engine"
+      - "orchestrator"
+      - "use case"
+      - "workflow"
+      - "coordinator"
+      - "business logic"
+    architectures:
+      - archcodex.core.engine
+      - archcodex.core.domain
+
+  # File System Operations
+  file_system:
+    description: "File reading, writing, and globbing"
+    aliases:
+      - "file system"
+      - "read file"
+      - "write file"
+      - "glob"
+      - "fs"
+      - "file operations"
+    architectures:
+      - archcodex.infra.fs
+
+  # Git Integration
+  git_integration:
+    description: "Git operations, staged files, commits"
+    aliases:
+      - "git"
+      - "version control"
+      - "staged files"
+      - "commit"
+      - "repository"
+      - "vcs"
+    architectures:
+      - archcodex.infra.git
+
+  # Configuration Loading
+  configuration:
+    description: "Config files and environment variables"
+    aliases:
+      - "config"
+      - "configuration"
+      - "settings"
+      - "env vars"
+      - "environment"
+      - "credentials"
+    architectures:
+      - archcodex.infra.config
+
+  # Output Formatting
+  formatting:
+    description: "Output formatters (JSON, human-readable)"
+    aliases:
+      - "formatter"
+      - "output format"
+      - "json output"
+      - "pretty print"
+      - "human readable"
+      - "display"
+    architectures:
+      - archcodex.cli.formatter
+
+  # Type Definitions
+  type_definitions:
+    description: "Interfaces, types, and schemas"
+    aliases:
+      - "types"
+      - "interfaces"
+      - "type definition"
+      - "schema"
+      - "zod"
+      - "typescript types"
+    architectures:
+      - archcodex.core.types
+      - archcodex.cli.types
+      - archcodex.core.domain.schema
+
+  # Utilities and Helpers
+  utilities:
+    description: "Pure utility functions and helpers"
+    aliases:
+      - "utility"
+      - "helper"
+      - "util"
+      - "pure function"
+      - "helper function"
+      - "common"
+    architectures:
+      - archcodex.util
+      - archcodex.common
+
+  # Error Handling
+  error_handling:
+    description: "Error types, codes, and contracts"
+    aliases:
+      - "error"
+      - "error handling"
+      - "error codes"
+      - "exception"
+      - "error types"
+    architectures:
+      - archcodex.common.errors
+
+  # Logging
+  logging:
+    description: "Structured logging and log output"
+    aliases:
+      - "logger"
+      - "logging"
+      - "log"
+      - "debug"
+      - "console output"
+    architectures:
+      - archcodex.infra.logging
+
+  # Infrastructure Adapters
+  infrastructure:
+    description: "External system adapters and integrations"
+    aliases:
+      - "infrastructure"
+      - "adapter"
+      - "external service"
+      - "integration"
+      - "infra"
+    architectures:
+      - archcodex.infra
+      - archcodex.infra.validator
+
+  # Barrel/Index Files
+  barrel_exports:
+    description: "Re-export barrel files for module organization"
+    aliases:
+      - "barrel"
+      - "index file"
+      - "re-export"
+      - "module index"
+      - "exports"
+    architectures:
+      - archcodex.barrel
+      - archcodex.cli.barrel
+      - archcodex.core.barrel
+      - archcodex.infra.barrel
+      - archcodex.util.barrel
+
+  # AST Analysis
+  ast_analysis:
+    description: "Abstract syntax tree parsing and code analysis"
+    aliases:
+      - "ast"
+      - "syntax tree"
+      - "ts-morph"
+      - "code analysis"
+      - "static analysis"
+      - "source code parsing"
+    architectures:
+      - archcodex.infra.validator
+      - archcodex.core.domain.constraint

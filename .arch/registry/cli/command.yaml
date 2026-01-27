@@ -1,0 +1,145 @@
+---
+
+archcodex.cli.command:
+  inherits: archcodex.cli
+  mixins:
+    - tested
+  description: CLI command handlers
+  rationale: |
+    Individual CLI command implementations (check, read, resolve, etc.).
+    Commands are thin orchestrators: parse options, call engine, format output.
+
+    Use for: Files that define a single CLI command with its options and action.
+    Don't use for: Business logic (use core.engine), output formatting (use cli.formatter).
+  expected_intents: [cli-output]
+  suggested_intents:
+    - name: stateless
+      when: "Command has no cleanup requirements (most commands)"
+    - name: cacheable
+      when: "Command output can be cached (e.g., resolve, schema)"
+  reference_implementations:
+    - src/cli/commands/health.ts
+    - src/cli/commands/neighborhood.ts
+  file_pattern: ${name}.ts
+  default_path: src/cli/commands
+  code_pattern: |-
+    import { Command } from 'commander';
+    import { loadConfig } from '../../core/config/loader.js';
+    import { loadRegistry } from '../../core/registry/loader.js';
+    // ... other imports
+
+    interface CommandOptions {
+      config?: string;
+      // ... other options
+    }
+
+    export function createXxxCommand(): Command {
+      return new Command('xxx')
+        .description('Description of command')
+        .argument('[file]', 'File to process')
+        .option('-c, --config <path>', 'Path to config')
+        .action(async (file: string, options: CommandOptions) => {
+          const projectRoot = process.cwd();
+          const config = await loadConfig(projectRoot, options.config);
+          const registry = await loadRegistry(projectRoot);
+          // ... call engine, format output
+        });
+    }
+  constraints:
+    # ts-morph already forbidden by parent (archcodex.cli)
+    - rule: forbid_import
+      value:
+        - fast-glob
+      severity: error
+      why: Commands should use core engines, not infrastructure directly
+      alternative: src/core
+    - rule: require_import
+      value:
+        - commander
+      severity: warning
+      why: Commands should use Commander.js for CLI structure
+      unless: ["@intent:cli-subcommand"]
+    - rule: forbid_pattern
+      value: '''src/\*\*'
+      severity: error
+      why: Use config.files.scan patterns instead of hardcoded 'src/**' - supports custom project layouts
+      alternative: config.files.scan.include
+      intent: Support projects with non-standard source directories
+      counterexamples: ["glob('src/**/*.ts')", "scan('src/**')"]
+      codeExample: "const files = await glob(config.files.scan.include);"
+    - rule: require_companion_call
+      value:
+        target: cacheManager
+        operations: [set]
+        call: save
+        location: same_file
+      pattern: "cacheManager.*"
+      severity: warning
+      why: Cache entries must be persisted with save() or they're lost on exit
+      applies_when: 'cacheManager\.set'
+  hints:
+    - text: Parse options, call engine, format output - nothing more
+      example: code://src/cli/commands/health.ts
+    - Use logger.error/warn for errors, console.log is fine for normal output
+    - text: "[ARCHIGNORE] When globbing files, apply loadArchIgnore() filter for consistency"
+      example: code://src/cli/commands/check.ts
+
+# Meta commands that setup/migrate the architecture system itself
+archcodex.cli.command.meta:
+  inherits: archcodex.cli.command
+  description: Meta commands for architecture setup and migration
+  rationale: |
+    Commands that manage the .arch/ directory structure itself: init, migrate-registry, etc.
+    These commands legitimately need to reference registry.yaml directly for setup/migration.
+    Often contain embedded YAML templates, so larger file size is expected.
+
+    Use for: init, migrate-registry, and similar setup commands.
+    Don't use for: Regular commands that should use loadRegistry().
+  constraints:
+    - rule: allow_pattern
+      value: registry.yaml path allowed for meta commands
+      pattern: '\.arch/registry\.yaml'
+    - rule: max_file_lines
+      value: 800
+      severity: warning
+      why: Meta commands often embed YAML templates for project setup
+  hints:
+    - These commands create or migrate the architecture setup
+    - Direct registry.yaml references are allowed here
+
+# Commands with multiple features/modes requiring more code
+archcodex.cli.command.complex:
+  inherits: archcodex.cli.command
+  description: Commands with multiple features, output modes, or subcommands
+  rationale: |
+    Some commands legitimately need more code due to multiple features:
+    - Multiple output formats (human, json, ai)
+    - Multiple subcommands or modes
+    - Complex analysis with multiple sections
+
+    Use for: check, health, garden, neighborhood, watch, and similar multi-feature commands.
+    Don't use for: Simple single-purpose commands.
+  constraints:
+    - rule: max_file_lines
+      value: 450
+      severity: warning
+      why: Complex commands need more code for multiple features/modes
+  hints:
+    - Consider splitting into sub-files if exceeding 450 lines
+    - Keep each feature/mode as a separate function
+
+# Large commands with embedded documentation or templates
+archcodex.cli.command.documented:
+  inherits: archcodex.cli.command
+  description: Commands with extensive embedded documentation or templates
+  rationale: |
+    Some commands display schema documentation, help text, or contain embedded examples.
+    These naturally require more lines but the extra content is documentation, not logic.
+
+    Use for: schema, help, and other documentation-heavy commands.
+    Don't use for: Regular commands that should stay thin.
+  constraints:
+    - rule: max_file_lines
+      value: 700
+      severity: warning
+      why: Documentation commands embed extensive help text and examples

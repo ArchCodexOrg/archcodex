@@ -1,0 +1,18 @@
+---
+
+archcodex.util.barrel:
+  inherits: archcodex.util
+  kind: organizational
+  mixins:
+    - barrel
+  description: Utility barrel/index files - re-exports only
+  rationale: |
+    Index files that consolidate utility exports.
+
+    Use for: index.ts files in utility directories.
+    Don't use for: Files with implementation logic.
+  constraints:
+    - rule: max_file_lines
+      value: 50
+      severity: warning
+      why: Utility barrels should only contain exports

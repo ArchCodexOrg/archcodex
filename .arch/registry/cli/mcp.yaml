@@ -1,0 +1,82 @@
+---
+
+archcodex.cli.mcp:
+  inherits: archcodex.cli
+  description: MCP server exposing ArchCodex as tools for LLM agents
+  rationale: |
+    Model Context Protocol server that exposes ArchCodex functionality as MCP tools.
+    Allows LLM agents like Claude to use ArchCodex for architectural guidance.
+
+    Use for: MCP server implementation and MCP-specific types/utilities.
+    Don't use for: CLI commands (use cli.command), core logic (use core).
+  file_pattern: ${name}.ts
+  default_path: src/mcp
+  code_pattern: |-
+    import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+    import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+
+    async function main() {
+      const server = new Server(
+        { name: 'archcodex', version: '1.0.0' },
+        { capabilities: { tools: {} } }
+      );
+
+      server.setRequestHandler(ListToolsRequestSchema, async () => ({
+        tools: [ /* tool definitions */ ]
+      }));
+
+      server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        // Handle tool calls - delegate to handlers/
+      });
+
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+    }
+  constraints:
+    - rule: forbid_import
+      value:
+        - commander
+      severity: error
+      why: MCP server doesn't use CLI framework
+    - rule: max_file_lines
+      value: 1200
+      exclude_comments: true
+      severity: warning
+      why: MCP SDK requires central routing in server.ts - handler implementations extracted to handlers/
+  hints:
+    - Tool handlers are in handlers/ - server.ts is the routing layer
+    - Auto-detect project root from file path when possible
+    - Handle errors gracefully with structured error responses
+
+archcodex.cli.mcp.handler:
+  inherits: archcodex.cli.mcp
+  description: MCP tool handler implementations
+  rationale: |
+    Handler implementations for MCP tools, extracted from server.ts for maintainability.
+    Each handler module groups related tool handlers by domain (validation, discovery, etc.).
+
+    Use for: MCP tool handler functions
+    Don't use for: MCP server setup (use cli.mcp), core logic (use core)
+  file_pattern: ${name}.ts
+  default_path: src/mcp/handlers
+  constraints:
+    - rule: max_file_lines
+      value: 750
+      severity: warning
+      why: Keep handlers focused - split further if exceeding limit
+    - rule: forbid_import
+      value:
+        - "@modelcontextprotocol/sdk/server/index.js"
+        - "@modelcontextprotocol/sdk/server/stdio.js"
+      severity: error
+      why: Handlers should not import MCP server SDK - only server.ts needs it
+    - rule: require_companion_file
+      value:
+        path: "./index.ts"
+        must_export: true
+      severity: warning
+      why: All handlers must be re-exported from the barrel file
+  hints:
+    - Each handler should be thin - delegate to core engines
+    - Handle errors gracefully with structured error responses
+    - Return MCP-compliant content structures

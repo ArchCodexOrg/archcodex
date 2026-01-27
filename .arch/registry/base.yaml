@@ -1,0 +1,61 @@
+---
+
+base:
+  description: Root architecture for all ArchCodex code
+  keywords:
+    - root
+    - foundation
+    - base
+    - solid
+    - archcodex
+    - clean architecture
+  rationale: |
+    The foundation architecture that all other architectures inherit from.
+    Establishes core principles (SOLID, DRY, KISS) that apply everywhere.
+
+    Use for: Files that don't fit a more specific architecture category.
+    Prefer: Using a more specific child architecture when one exists.
+  contract: |
+    Follow Clean Architecture and SOLID principles:
+    - Dependencies point inward (toward domain)
+    - Each module has a single, well-defined responsibility (SRP)
+    - Extend behavior through composition, not modification (OCP)
+    - Depend on abstractions (interfaces), not concretions (DIP)
+  constraints:
+    - rule: forbid_pattern
+      value: explicit any type
+      pattern: ':\s*any\b'
+      unless:
+        - "@intent:documentation-examples"
+      severity: warning
+      why: Use explicit types instead of 'any' for type safety
+      intent: Prevent untyped code that bypasses TypeScript's safety
+      counterexamples: ["const x: any = 5", "function foo(x: any)", "data as any"]
+      codeExample: "const x: unknown = getData(); // Use unknown, then narrow with type guards"
+    - rule: forbid_pattern
+      value: 'console\.(log|error|warn|debug)'
+      applies_when: 'console\.'
+      unless:
+        - import:logger
+        - import:chalk
+        - "@intent:cli-output"
+        - "@intent:documentation-examples"
+      severity: warning
+      why: Use structured logger instead of console for consistent output
+      alternative: "logger from src/utils/logger.ts"
+      intent: Ensure consistent, structured logging across the codebase
+      counterexamples: ["console.log('debug')", "console.error(err)"]
+      codeExample: "logger.info('Processing', { fileCount: 10 })"
+  hints:
+    - "[SRP] Each file should have one reason to change"
+    - text: "[OCP] When behavior varies, prefer strategy/composition over switch statements"
+      example: code://src/core/constraints/index.ts
+    - "[LSP] Subtypes must honor base type contracts"
+    - "[ISP] Prefer small, focused interfaces over large ones"
+    - text: "[DIP] Import interfaces/types, not concrete implementations"
+      example: code://src/core/constraints/types.ts
+    - "[DRY] Extract shared logic into utils or base classes"
+    - "[KISS] Prefer simple solutions - avoid premature optimization"
+    - "[KISS] Write code that's easy to read and delete"
+    - Prefer composition over inheritance
+    - Use explicit types, avoid 'any'

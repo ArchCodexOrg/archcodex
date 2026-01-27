@@ -1,0 +1,61 @@
+---
+
+archcodex.infra.validator:
+  inherits: archcodex.infra
+  mixins:
+    - ocp
+    - lsp
+  description: Language-specific AST validators
+  rationale: |
+    AST-based validators that analyze source code structure. Uses ts-morph for
+    TypeScript analysis. Each validator implements ILanguageValidator interface.
+
+    Use for: Files that parse and analyze source code AST for constraint validation.
+    Don't use for: Constraint logic itself (use core.domain.constraint).
+  reference_implementations:
+    - src/validators/typescript.ts
+  file_pattern: ${name}.ts
+  default_path: src/validators
+  code_pattern: |-
+    import { Project } from 'ts-morph';
+    import type { ILanguageValidator } from './interface.types.js';
+    import type { SemanticModel, LanguageCapabilities } from './semantic.types.js';
+
+    export class XxxValidator implements ILanguageValidator {
+      readonly supportedLanguages = ['xxx'];
+      readonly supportedExtensions = ['.xxx'];
+      readonly capabilities: LanguageCapabilities = { ... };
+
+      private project: Project;
+
+      constructor() {
+        this.project = new Project({ skipAddingFilesFromTsConfig: true });
+      }
+
+      async parseFile(filePath: string, content?: string): Promise<SemanticModel> {
+        // Parse file into SemanticModel
+        // Clean up temp source files after parsing
+      }
+
+      dispose(): void {
+        // Clean up project resources
+      }
+    }
+  constraints:
+    - rule: require_import
+      value:
+        - ts-morph
+      severity: warning
+      why: TypeScript validator should use ts-morph
+    - rule: forbid_import
+      value:
+        - commander
+        - chalk
+      severity: error
+      why: "[DIP] Validators must not depend on CLI concerns"
+      alternative: src/utils/logger
+  hints:
+    - text: "[LSP] Implement ILanguageValidator interface"
+      example: code://src/validators/typescript.ts
+    - "[OCP] Add new language support via new validator classes"
+    - Parse once, query multiple times

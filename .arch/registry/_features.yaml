@@ -1,0 +1,127 @@
+# Feature Registry - Multi-file scaffolding templates
+# Features define sets of related files to scaffold together
+
+---
+
+features:
+  # === Validation Constraint ===
+  validation-rule:
+    description: "Complete validation constraint with implementation and tests"
+    components:
+      - role: constraint
+        architecture: archcodex.core.domain.constraint
+        path: "src/core/constraints/${name}.ts"
+      - role: test
+        architecture: archcodex.test.unit
+        path: "tests/unit/core/constraints/${name}.test.ts"
+    shared_variables:
+      CONSTRAINT_NAME: "${name}"
+    checklist:
+      - "Add rule to ConstraintRuleSchema in src/core/registry/schema.ts"
+      - "Register constraint in constraint exports"
+      - "Document constraint in README if public-facing"
+    triggered_by_action: add-constraint
+
+  # === CLI Command ===
+  cli-command:
+    description: "CLI command with optional formatter and test"
+    components:
+      - role: command
+        architecture: archcodex.cli.command
+        path: "src/cli/commands/${name}.ts"
+      - role: test
+        architecture: archcodex.test.unit
+        path: "tests/unit/cli/commands/${name}.test.ts"
+        optional: true
+    checklist:
+      - "Import and register command in src/cli/index.ts"
+      - "Add command to Quick Reference in CLAUDE.md"
+      - "Document command options in help text"
+    triggered_by_action: add-command
+
+  # === Domain Engine ===
+  domain-engine:
+    description: "Domain engine with types and tests"
+    components:
+      - role: engine
+        architecture: archcodex.core.engine
+        path: "src/core/${name}/engine.ts"
+      - role: types
+        architecture: archcodex.core.types
+        path: "src/core/${name}/types.ts"
+      - role: test
+        architecture: archcodex.test.unit
+        path: "tests/unit/core/${name}/engine.test.ts"
+    checklist:
+      - "Define public interface in types.ts"
+      - "Implement core logic in engine.ts"
+      - "Export from core/index.ts if needed"
+
+  # === Language Validator ===
+  language-validator:
+    description: "Language-specific AST validator implementation"
+    components:
+      - role: validator
+        architecture: archcodex.infra.validator
+        path: "src/validators/${name}.ts"
+      - role: test
+        architecture: archcodex.test.unit
+        path: "tests/unit/validators/${name}.test.ts"
+    shared_variables:
+      LANGUAGE_NAME: "${name}"
+    checklist:
+      - "Implement ILanguageValidator interface"
+      - "Define language capabilities"
+      - "Register in src/validators/validator-registry.ts"
+      - "Add file extension mappings"
+    triggered_by_action: add-validator
+
+  # === Parser Module ===
+  parser-module:
+    description: "Parser with types and comprehensive tests"
+    components:
+      - role: parser
+        architecture: archcodex.core.domain.parser
+        path: "src/core/${name}/parser.ts"
+      - role: types
+        architecture: archcodex.core.types
+        path: "src/core/${name}/types.ts"
+      - role: test
+        architecture: archcodex.test.unit
+        path: "tests/unit/core/${name}/parser.test.ts"
+    checklist:
+      - "Define input/output types in types.ts"
+      - "Implement parsing logic with error handling"
+      - "Test edge cases and malformed input"
+
+  # === MCP Tool ===
+  mcp-tool:
+    description: "MCP server tool with handler"
+    components:
+      - role: handler
+        architecture: archcodex.cli.mcp.handler
+        path: "src/mcp/tools/${name}.ts"
+      - role: test
+        architecture: archcodex.test.unit
+        path: "tests/unit/mcp/tools/${name}.test.ts"
+    checklist:
+      - "Define tool schema in handler"
+      - "Register in src/mcp/server.ts tools array"
+      - "Add case handler in switch statement"
+      - "Document in README MCP section"
+    triggered_by_action: add-mcp-tool
+
+  # === Utility Module ===
+  utility-module:
+    description: "Utility module with tests"
+    components:
+      - role: utility
+        architecture: archcodex.util
+        path: "src/utils/${name}.ts"
+      - role: test
+        architecture: archcodex.test.unit
+        path: "tests/unit/utils/${name}.test.ts"
+    checklist:
+      - "Export from src/utils/index.ts"
+      - "Document usage in CLAUDE.md if reusable"
+    triggered_by_action: add-utility

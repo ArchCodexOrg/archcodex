@@ -1,0 +1,24 @@
+---
+
+archcodex.cli.data:
+  inherits: archcodex.cli
+  description: Companion data files with exported constants and templates
+  rationale: |
+    Files that export string constants, template literals, or static configuration data.
+    These support command files by extracting large data blobs to stay under line limits.
+
+    Use for: Template strings, constant maps, embedded documentation literals.
+    Don't use for: Files with logic (use core.domain), CLI commands (use cli.command).
+  constraints:
+    - rule: max_file_lines
+      value: 1000
+      severity: warning
+      why: Data files can be large but should stay reasonable
+    - rule: forbid_pattern
+      value: 'new Command\('
+      pattern: 'new Command\('
+      severity: error
+      why: Data files must not define CLI commands
+  hints:
+    - Only export constants — no logic, no side effects
+    - Extracted from command files to reduce their size

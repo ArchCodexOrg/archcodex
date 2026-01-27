@@ -1,0 +1,130 @@
+# ArchCodex Pattern Registry
+# Canonical implementations that should be used instead of creating duplicates
+#
+# This file helps AI coding agents (and humans) find the right module to import
+# instead of reinventing the wheel or creating duplicates.
+#
+# NOTE: Import examples use .js extensions as required by TypeScript ESM resolution.
+# TypeScript compiles .ts to .js, so imports must use the output extension.
+
+---
+
+patterns:
+  # ---------------------------------------------------------------------------
+  # Infrastructure Patterns
+  # ---------------------------------------------------------------------------
+
+  logger:
+    canonical: src/utils/logger.ts
+    exports: [logger]
+    usage: "Use structured logger for all console output. Never use console.log directly in core or domain code."
+    keywords: [log, debug, error, warn, info, console, output, print]
+    example: |
+      import { logger } from '../utils/logger.js';
+      logger.info('Operation completed');
+      logger.error('Something went wrong', { context: 'details' });
+
+  file_system:
+    canonical: src/utils/file-system.ts
+    exports: [readFile, writeFile, fileExists, ensureDir, readDir, isDirectory]
+    usage: "Use file-system utilities for all filesystem operations. Provides consistent error handling and async API."
+    keywords: [file, read, write, fs, filesystem, directory, path, io]
+    example: |
+      import { readFile, writeFile, fileExists } from '../utils/file-system.js';
+      const content = await readFile(filePath);
+      await writeFile(outputPath, newContent);
+
+  glob_matching:
+    canonical: src/utils/file-system.ts
+    exports: [globFiles]
+    usage: "Use globFiles for pattern matching and file discovery. Part of file-system utilities."
+    keywords: [glob, pattern, match, wildcard, find, search, files]
+    example: |
+      import { globFiles } from '../utils/file-system.js';
+      const files = await globFiles('src/**/*.ts', { ignore: ['**/*.test.ts'] });
+
+  yaml_parsing:
+    canonical: src/utils/yaml.ts
+    exports: [parseYaml, stringifyYaml]
+    usage: "Use YAML utilities for parsing and serializing YAML. Handles errors gracefully."
+    keywords: [yaml, parse, serialize, config, configuration]
+
+  # ---------------------------------------------------------------------------
+  # Core Domain Patterns
+  # ---------------------------------------------------------------------------
+
+  arch_tag_extraction:
+    canonical: src/core/arch-tag/parser.ts
+    exports: [extractArchTag, extractOverrides, parseArchTag]
+    usage: "Use arch-tag parser for extracting @arch and @override tags from source files."
+    keywords: [arch, tag, annotation, docblock, comment, parser, extract]
+
+  registry_resolution:
+    canonical: src/core/registry/resolver.ts
+    exports: [resolveArchitecture]
+    usage: "Use resolver to get flattened architecture with inherited constraints, hints, and mixins."
+    keywords: [resolve, registry, architecture, inheritance, flatten, constraints]
+
+  constraint_validation:
+    canonical: src/core/constraints/index.ts
+    exports: [validateConstraint, getValidator, ConstraintValidator]
+    usage: "Use constraint validators for checking code against architectural rules."
+    keywords: [validate, constraint, rule, check, violation, error]
+
+  hydration:
+    canonical: src/core/hydration/engine.ts
+    exports: [HydrationEngine]
+    usage: "Use HydrationEngine to inject architectural context into source files."
+    keywords: [hydrate, context, inject, header, metadata, documentation]
+
+  discovery:
+    canonical: src/core/discovery/index.ts
+    exports: [DiscoveryEngine, findByArchId, searchByKeywords]
+    usage: "Use discovery engine to find appropriate architectures for new files."
+    keywords: [discover, find, search, architecture, keyword, suggest]
+
+  # ---------------------------------------------------------------------------
+  # Validation Patterns
+  # ---------------------------------------------------------------------------
+
+  typescript_ast:
+    canonical: src/validators/typescript.ts
+    exports: [TypeScriptValidator]
+    usage: "Use TypeScriptValidator for AST-based analysis of TypeScript/JavaScript files."
+    keywords: [typescript, ast, parse, analyze, ts-morph, source, code]
+
+  semantic_model:
+    canonical: src/validators/semantic.types.ts
+    exports: [SemanticModel, MethodInfo, ClassInfo, ImportInfo]
+    usage: "Use semantic model types for language-agnostic code representation."
+    keywords: [semantic, model, method, class, import, export, function]
+
+  # ---------------------------------------------------------------------------
+  # CLI Patterns
+  # ---------------------------------------------------------------------------
+
+  command_structure:
+    canonical: src/cli/commands/health.ts
+    exports: [createHealthCommand]
+    usage: "Reference for CLI command structure. Commands should parse options, call engine, format output."
+    keywords: [cli, command, commander, option, argument, action]
+
+  output_formatting:
+    canonical: src/cli/formatters/json.ts
+    exports: [formatJson, formatHuman, formatCompact]
+    usage: "Use standard formatters for consistent output across commands."
+    keywords: [format, output, json, human, readable, display]
+
+  # ---------------------------------------------------------------------------
+  # Testing Patterns
+  # ---------------------------------------------------------------------------
+
+  test_structure:
+    canonical: tests/unit
+    usage: "Store unit tests in tests/unit/ directory mirroring src/ structure."
+    keywords: [test, unit, vitest, spec, mock]
+
+  unit_test_structure:
+    canonical: tests/unit/core/constraints/forbid-import.test.ts
+    usage: "Reference for unit test structure using Vitest. Include happy path, edge cases, and error handling."
+    keywords: [test, unit, vitest, describe, it, expect, mock]

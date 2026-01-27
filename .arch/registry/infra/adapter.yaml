@@ -1,0 +1,31 @@
+---
+
+archcodex.infra.adapter:
+  inherits: archcodex.infra
+  mixins:
+    - tested
+  description: Infrastructure adapters for external systems (config, git, etc.)
+  rationale: |
+    Small, focused adapters for external system interaction (config files, git,
+    environment variables). Each adapter wraps a single external concern.
+
+    Use for: Files that load config, query git, or interact with specific external systems.
+    Don't use for: General file I/O (use infra.fs), AST parsing (use infra.validator).
+  constraints:
+    # commander, ../cli already forbidden by parent (infra)
+    - rule: forbid_import
+      value:
+        - chalk
+        - ts-morph
+        - ../core
+      severity: error
+      why: "[DIP] Adapters must not depend on presentation, AST, or domain concerns"
+    - rule: max_file_lines
+      value: 150
+      exclude_comments: true
+      severity: warning
+      why: Keep adapter operations focused
+  hints:
+    - Handle external system failures gracefully with defaults
+    - Return meaningful errors, not raw exceptions
+    - Keep each adapter focused on a single external concern

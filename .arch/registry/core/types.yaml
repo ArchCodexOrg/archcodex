@@ -1,0 +1,18 @@
+---
+
+archcodex.core.types:
+  inherits: archcodex.core
+  kind: organizational
+  mixins:
+    - types
+    - immutable
+  description: Type definitions - interfaces, types, enums only
+  rationale: |
+    TypeScript type definitions for the core layer. Compile-time only constructs.
+    Shared across engines and domain components.
+
+    Use for: Files named types.ts containing interfaces and type aliases.
+    Don't use for: Zod schemas (use core.domain.schema), runtime code.
+  hints:
+    - Use readonly modifiers where appropriate
+    - Group related types together

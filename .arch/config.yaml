@@ -1,0 +1,155 @@
+# ArchCodex Self-Configuration
+# Dogfooding: ArchCodex validates itself
+
+---
+
+version: "1.0"
+
+registry: .arch/registry
+
+# file_policies: which files require @arch tags (validation scope)
+# For general exclusions (node_modules, dist, etc.), see .archignore
+file_policies:
+  require_arch_tag:
+    - "src/**/*.ts"
+    - "tests/**/*.ts"
+    - "!src/**/*.d.ts"
+  exclude:
+    - "node_modules/**"
+    - "dist/**"
+    - "examples/**"
+
+files:
+  scan:
+    include: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx']
+    exclude:
+      # Defaults
+      - '**/node_modules/**'
+      - '**/dist/**'
+      - '**/build/**'
+      - '**/*.d.ts'
+      # Project-specific
+      - 'vitest.config.ts'
+      - 'coverage/**'
+      - 'examples/**'
+
+validation:
+  strict: false
+  fail_on_warnings: true
+  parallel: true
+
+hydration:
+  token_limit: 4000
+  format: verbose
+
+pointers:
+  base_path: .arch/docs
+  allowed_schemes:
+    - arch
+    - code
+    - template
+
+overrides:
+  required_fields:
+    - reason
+    - expires
+  max_expiry_days: 180  # Quarterly review cycle
+  fail_on_expired: true
+  max_per_file: 3
+
+# llm:
+#   Provider type refers to API format (OpenAI-compatible), not service.
+#   Works with OpenAI, Mistral, Together, OpenRouter, or any OpenAI-compatible API.
+#   Set ARCHCODEX_OPENAI_API_KEY env var for authentication.
+#
+#   Configure your provider below. Example using OpenAI:
+#     default_provider: openai
+#     providers:
+#       openai:
+#         model: "gpt-4o-mini"
+#         max_tokens: 40960
+#
+#   Example using Mistral Codestral:
+#     default_provider: openai
+#     providers:
+#       openai:
+#         base_url: "https://codestral.mistral.ai/v1"
+#         model: "codestral-latest"
+#         max_tokens: 40960
+
+# Layer boundary definitions for architectural enforcement
+# Run with: archcodex check --project
+layers:
+  - name: utils
+    paths: ["src/utils/**"]
+    can_import: []  # leaf layer - no dependencies on other src layers
+
+  - name: core
+    paths: ["src/core/**"]
+    can_import: [utils, validators]  # core imports validators for semantic types
+
+  - name: validators
+    paths: ["src/validators/**"]
+    can_import: [utils, core]  # validators use core arch-tag parser for intent extraction
+
+  - name: llm
+    paths: ["src/llm/**"]
+    can_import: [utils, core]  # llm can import utils and core
+
+  - name: cli
+    paths: ["src/cli/**", "src/mcp/**"]  # MCP is presentation layer despite separate directory
+    can_import: [utils, core, validators, llm]  # cli is the top layer
+
+  - name: barrel
+    paths: ["src/index.ts"]
+    can_import: [utils, core, validators, llm, cli]  # public API re-exports
+
+  - name: tests
+    paths: ["tests/**"]
+    can_import: [utils, core, validators, llm, cli]  # tests can import any layer
+
+  - name: bin
+    paths: ["bin/**"]
+    can_import: [cli]  # entry points bootstrap CLI
+
+  - name: vscode-extension
+    paths: ["vscode-extension/src/**"]
+    can_import: []  # self-contained, uses vscode packages
+
+# Target detection for require_companion_call constraint
+# method_chain mode: cacheManager.set() → target is 'cacheManager'
+table_detection:
+  mode: method_chain
+
+# Inference settings for architecture auto-detection
+inference:
+  validate_arch_ids: true
+  prepend_custom: true
+  custom_rules:
+    # ArchCodex-specific inference rules
+    - name: archcodex-constraint
+      archId: archcodex.core.domain.constraint
+      confidence: high
+      filePattern: 'src/core/constraints/.*\.ts$'
+      contentPatterns:
+        - "BaseConstraintValidator"
+        - "readonly rule"
+      matchAll: true
+      description: "ArchCodex constraint validator"
+
+    - name: archcodex-command
+      archId: archcodex.cli.command
+      confidence: high
+      filePattern: 'src/cli/commands/.*\.ts$'
+      contentPatterns:
+        - 'new Command\('
+        - "createCommand"
+      description: "ArchCodex CLI command"
+
+    - name: archcodex-barrel
+      archId: archcodex.cli.barrel
+      confidence: high
+      filePattern: 'index\.ts$'
+      contentPatterns:
+        - '^export \{'
+      description: "ArchCodex barrel/index file"

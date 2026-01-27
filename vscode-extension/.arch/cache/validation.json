@@ -1,0 +1,139 @@
+{
+  "version": "1.0",
+  "registryChecksum": "c3ffa4587272befa",
+  "configChecksum": "53dcd470c37bb02d",
+  "createdAt": "2026-01-09T16:38:58.103Z",
+  "updatedAt": "2026-01-09T16:40:21.058Z",
+  "files": {
+    "src/client/decorations.ts": {
+      "checksum": "4b5534e62ce01364",
+      "cachedAt": "2026-01-09T16:38:59.017Z",
+      "archId": "extension.client.decorations",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/extension.ts": {
+      "checksum": "be65baa806599af5",
+      "cachedAt": "2026-01-09T16:38:59.017Z",
+      "archId": "extension.client.entry",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/import-graph-html.ts": {
+      "checksum": "1152416032269525",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.client",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/import-graph-panel.ts": {
+      "checksum": "8875088bc2c8257d",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.client.panel",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/import-graph-types.ts": {
+      "checksum": "fbe804eb9b95fd94",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.client",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/layer-boundary-panel.ts": {
+      "checksum": "f43d2794d098fc33",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.client.panel",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/neighborhood-panel.ts": {
+      "checksum": "bd35689cac7b93d5",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.client.panel",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/tree-provider.ts": {
+      "checksum": "574bbb690a4fdd8d",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.client.provider",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/server/code-actions.ts": {
+      "checksum": "f71866d3d703d454",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.server.diagnostics",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/server/diagnostics.ts": {
+      "checksum": "ebd95316338559d2",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.server.diagnostics",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/server/server.ts": {
+      "checksum": "b30545ba3df8b7e8",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.server.entry",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/server/validator-service.ts": {
+      "checksum": "28e5623389bf0f72",
+      "cachedAt": "2026-01-09T16:38:59.018Z",
+      "archId": "extension.server.service",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    },
+    "src/client/test-panel.ts": {
+      "checksum": "c2044ecf8af1a913",
+      "cachedAt": "2026-01-09T16:40:21.057Z",
+      "archId": "extension.client.panel",
+      "status": "pass",
+      "violations": [],
+      "warnings": [],
+      "imports": [],
+      "overridesCount": 0
+    }
+  }
+}

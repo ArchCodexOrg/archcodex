@@ -1,0 +1,31 @@
+---
+
+archcodex.infra.fs:
+  inherits: archcodex.infra
+  mixins:
+    - tested
+  description: File system operations - reading, writing, globbing
+  rationale: |
+    File system abstraction for reading, writing, and finding files.
+    Wraps Node.js fs operations with error handling and consistent API.
+
+    Use for: Files that perform file system operations (read, write, glob).
+    Don't use for: Git or config operations (use infra.adapter).
+  constraints:
+    # commander, ../cli already forbidden by parent (infra)
+    - rule: forbid_import
+      value:
+        - chalk
+        - ts-morph
+        - ../core
+      severity: error
+      why: "[DIP] FS adapters must not depend on AST or domain concerns"
+    - rule: max_file_lines
+      value: 200
+      exclude_comments: true
+      severity: warning
+      why: Keep file operations focused
+  hints:
+    - Wrap Node.js fs operations with error handling
+    - Return meaningful errors, not raw exceptions
+    - Support both sync and async operations where appropriate

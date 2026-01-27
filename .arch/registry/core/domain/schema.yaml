@@ -1,0 +1,55 @@
+---
+
+archcodex.core.domain.schema:
+  inherits: archcodex.core.domain
+  kind: definition
+  mixins:
+    - srp
+    - immutable
+  description: Zod schemas and type definitions
+  rationale: |
+    Dedicated architecture for Zod schema definitions that validate data structures.
+    Separated from general domain logic because schemas are declarative definitions,
+    not imperative business logic. They define the shape of data, not how to process it.
+
+    Use for: Files that define and export Zod schemas with inferred TypeScript types.
+    Don't use for: Runtime validation logic, data transformation, or business rules.
+  reference_implementations:
+    - src/core/registry/schema.ts
+    - src/core/patterns/schema.ts
+  file_pattern: schema.ts
+  default_path: src/core/${layer}
+  code_pattern: |-
+    import { z } from 'zod';
+
+    /** Description of the schema */
+    export const ItemSchema = z.object({
+      id: z.string(),
+      name: z.string(),
+      value: z.union([z.string(), z.number()]),
+      optional: z.string().optional(),
+    });
+
+    /** Container schema */
+    export const ContainerSchema = z.object({
+      items: z.array(ItemSchema),
+    });
+
+    // Type exports - always export inferred types
+    export type Item = z.infer<typeof ItemSchema>;
+    export type Container = z.infer<typeof ContainerSchema>;
+  constraints:
+    - rule: require_import
+      value:
+        - zod
+      severity: warning
+      why: Schemas should use Zod for validation
+    - rule: max_file_lines
+      value: 350
+      exclude_comments: true
+      severity: warning
+      why: "[SRP] Schema files can be large since they're declarative definitions, not logic"
+  hints:
+    - Export both schema and inferred types
+    - Use descriptive error messages in schemas
+    - "[DRY] Share common schema patterns via composition"

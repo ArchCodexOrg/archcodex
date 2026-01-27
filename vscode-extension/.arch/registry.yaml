@@ -1,0 +1,137 @@
+# ArchCodex VSCode Extension - Architecture Registry
+# Defines architectural patterns for the extension codebase
+
+# =============================================================================
+# BASE ARCHITECTURE
+# =============================================================================
+
+base:
+  description: "Base architecture for all extension code"
+  rationale: "Foundation architecture that all extension code inherits from"
+  constraints:
+    - rule: forbid_pattern
+      value: "explicit any type"
+      pattern: ':\s*any\b'
+      severity: warning
+      why: "Use explicit types instead of 'any' for type safety"
+  hints:
+    - "Follow VSCode extension best practices"
+    - "Use proper error handling for async operations"
+    - "Dispose resources properly to prevent memory leaks"
+
+# =============================================================================
+# CLIENT LAYER - Extension Host Process
+# =============================================================================
+
+extension.client:
+  inherits: base
+  description: "VSCode extension client code running in extension host"
+  rationale: "Client code runs in the extension host process and uses the vscode API"
+  constraints:
+    - rule: forbid_import
+      value: ["./server/", "../server/"]
+      severity: error
+      why: "Client must not import server internals - they run in separate processes"
+  hints:
+    - "Register disposables with context.subscriptions"
+    - "Use vscode API for all UI interactions"
+
+extension.client.entry:
+  inherits: extension.client
+  description: "Extension entry point (activate/deactivate)"
+  rationale: "Single entry point for extension lifecycle"
+  file_pattern: "extension.ts"
+  constraints:
+    - rule: require_coverage
+      value:
+        source_type: export_names
+        source_pattern: "*Panel"
+        in_files: "src/client/*-panel.ts"
+        target_pattern: "${value}"
+        in_target_files: "src/client/extension.ts"
+      severity: error
+      why: "All panel classes must be imported and wired up in extension.ts"
+  hints:
+    - "Keep activate() thin - delegate to specialized modules"
+    - "Clean up all resources in deactivate()"
+    - "Register all commands and providers here"
+
+extension.client.panel:
+  inherits: extension.client
+  description: "WebView panel implementations"
+  rationale: "Panels provide rich UI via webviews for visualization features"
+  file_pattern: "*-panel.ts"
+  constraints:
+    - rule: max_file_lines
+      value: 800
+      severity: warning
+      why: "Panels can be large due to HTML templates, but keep reasonable"
+  hints:
+    - "Use nonce for Content Security Policy"
+    - "Escape all user content to prevent XSS"
+    - "Handle panel disposal properly"
+    - "Use postMessage for webview communication"
+
+extension.client.provider:
+  inherits: extension.client
+  description: "VSCode providers (tree, hover, etc.)"
+  rationale: "Providers implement VSCode interfaces for UI integration"
+  file_pattern: "*-provider.ts"
+  hints:
+    - "Implement proper TreeDataProvider interface"
+    - "Use unique IDs for tree items"
+    - "Handle refresh efficiently"
+
+extension.client.decorations:
+  inherits: extension.client
+  description: "Editor decorations and hover providers"
+  rationale: "Decorations enhance the editor with visual cues"
+  hints:
+    - "Cache registry data for performance"
+    - "Dispose decoration types on deactivate"
+    - "Update decorations on document change"
+
+# =============================================================================
+# SERVER LAYER - Language Server Process
+# =============================================================================
+
+extension.server:
+  inherits: base
+  description: "LSP server code running in separate process"
+  rationale: "Server runs in isolated process for performance and stability"
+  constraints:
+    - rule: forbid_import
+      value: ["./client/", "../client/", "vscode"]
+      severity: error
+      why: "Server runs in separate process, cannot use vscode API or client code"
+  hints:
+    - "Use vscode-languageserver APIs only"
+    - "Handle text document synchronization properly"
+    - "Send diagnostics efficiently"
+
+extension.server.entry:
+  inherits: extension.server
+  description: "LSP server entry point"
+  rationale: "Single entry point for LSP server initialization"
+  file_pattern: "server.ts"
+  hints:
+    - "Initialize connection and capabilities"
+    - "Set up document listeners"
+    - "Handle shutdown gracefully"
+
+extension.server.service:
+  inherits: extension.server
+  description: "Server-side services"
+  rationale: "Services encapsulate business logic for validation"
+  hints:
+    - "Keep services focused and testable"
+    - "Handle validation asynchronously"
+
+extension.server.diagnostics:
+  inherits: extension.server
+  description: "Diagnostic mapping and code actions"
+  rationale: "Transforms ArchCodex violations to LSP format"
+  hints:
+    - "Map violations to LSP diagnostics correctly"
+    - "Include fix suggestions in code actions"
+    - "Set proper severity levels"

@@ -1,0 +1,279 @@
+---
+
+version: "1.0"
+description: "ArchCodex architecture selection guide"
+start: q0
+
+nodes:
+  # Q0: Structural files first (barrels, tests, types)
+  q0:
+    type: question
+    text: "Is this a test file (*.test.ts, *.spec.ts)?"
+    examples: "forbid-import.test.ts, health.test.ts"
+    yes: q_test
+    no: q0b
+
+  q_test:
+    type: question
+    text: "Is it a unit test in tests/unit/?"
+    yes: r_test_unit
+    no: r_test
+
+  r_test:
+    type: result
+    arch_id: archcodex.test
+    why: "Test files have relaxed constraints for mocking and debugging"
+
+  r_test_unit:
+    type: result
+    arch_id: archcodex.test.unit
+    why: "Unit tests live in tests/unit/ and test isolated behavior"
+
+  q0b:
+    type: question
+    text: "Is this a barrel/index file (only re-exports, no logic)?"
+    examples: "src/core/health/index.ts, src/cli/commands/index.ts"
+    yes: q_barrel
+    no: q1
+
+  q_barrel:
+    type: question
+    text: "Which layer does it belong to?"
+    examples: "src/cli/ → cli.barrel, src/core/ → core.barrel"
+    yes: r_barrel_info
+    no: r_barrel_info
+
+  r_barrel_info:
+    type: result
+    arch_id: archcodex.barrel
+    why: "Use layer-specific barrels: cli.barrel, core.barrel, infra.barrel, util.barrel, or top-level barrel for src/index.ts"
+
+  # Q1: CLI vs Core
+  q1:
+    type: question
+    text: "Is this a CLI command handler or CLI-related code?"
+    examples: "check.ts, read.ts, health.ts, formatters"
+    yes: q_cli
+    no: q2
+
+  # CLI branch
+  q_cli:
+    type: question
+    text: "Is it an MCP server or MCP tool handler?"
+    examples: "server.ts, handlers/validation.ts, handlers/discovery.ts"
+    yes: q_mcp
+    no: q_cli2
+
+  q_mcp:
+    type: question
+    text: "Is it a tool handler implementation (not the server itself)?"
+    examples: "handlers/validation.ts, handlers/discovery.ts"
+    yes: r_mcp_handler
+    no: r_mcp
+
+  r_mcp:
+    type: result
+    arch_id: archcodex.cli.mcp
+    why: "MCP server routing and setup"
+
+  r_mcp_handler:
+    type: result
+    arch_id: archcodex.cli.mcp.handler
+    why: "MCP tool handler implementations - thin delegates to core engines"
+
+  q_cli2:
+    type: question
+    text: "Does it output formatted data to the user?"
+    examples: "JSON output, table output, colored text"
+    yes: r_cli_formatter
+    no: r_cli_command
+
+  r_cli_command:
+    type: result
+    arch_id: archcodex.cli.command
+    why: "CLI commands parse options, orchestrate core logic, and handle output"
+
+  r_cli_formatter:
+    type: result
+    arch_id: archcodex.cli.formatter
+    why: "Formatters transform data structures into display formats"
+
+  # Q2: Core domain
+  q2:
+    type: question
+    text: "Is this core business logic or a domain concept?"
+    examples: "validation, parsing, discovery, constraint checking"
+    yes: q_core
+    no: q3
+
+  # Core branch
+  q_core:
+    type: question
+    text: "Is this pure type definitions (interfaces, types only)?"
+    examples: "types.ts, schema.ts with Zod schemas"
+    yes: q_types_or_schema
+    no: q_core2
+
+  q_types_or_schema:
+    type: question
+    text: "Does it use Zod for runtime validation?"
+    yes: r_core_schema
+    no: r_core_types
+
+  r_core_types:
+    type: result
+    arch_id: archcodex.core.types
+    why: "Pure type definitions without runtime behavior"
+
+  r_core_schema:
+    type: result
+    arch_id: archcodex.core.domain.schema
+    why: "Zod schemas provide runtime validation"
+
+  q_core2:
+    type: question
+    text: "Does it orchestrate multiple operations or coordinate workflows?"
+    examples: "validation engine, hydration engine, audit scanner"
+    yes: r_core_engine
+    no: q_core3
+
+  r_core_engine:
+    type: result
+    arch_id: archcodex.core.engine
+    why: "Engines orchestrate complex workflows and coordinate components"
+
+  q_core3:
+    type: question
+    text: "Does it validate constraints or enforce rules?"
+    examples: "forbid-import.ts, naming-pattern.ts"
+    yes: r_core_constraint
+    no: q_core4
+
+  r_core_constraint:
+    type: result
+    arch_id: archcodex.core.domain.constraint
+    why: "Constraint validators enforce architectural rules"
+
+  q_core4:
+    type: question
+    text: "Is this a parser or resolver for specific syntax/format?"
+    examples: "@arch tag parser, registry resolver, YAML parser"
+    yes: r_core_parser
+    no: r_core_domain
+
+  r_core_parser:
+    type: result
+    arch_id: archcodex.core.domain.parser
+    why: "Parsers extract structured data from text or files"
+
+  r_core_domain:
+    type: result
+    arch_id: archcodex.core.domain
+    why: "Core domain logic with encapsulated behavior"
+
+  # Q3: Infrastructure
+  q3:
+    type: question
+    text: "Is this infrastructure code (file I/O, git, logging, config loading)?"
+    examples: "file-system.ts, git.ts, logger.ts, config loader"
+    yes: q_infra
+    no: q4
+
+  q_infra:
+    type: question
+    text: "Does it interact with the file system?"
+    yes: r_infra_fs
+    no: q_infra2
+
+  r_infra_fs:
+    type: result
+    arch_id: archcodex.infra.fs
+    why: "File system operations for reading/writing files"
+
+  q_infra2:
+    type: question
+    text: "Does it interact with git?"
+    yes: r_infra_git
+    no: q_infra3
+
+  r_infra_git:
+    type: result
+    arch_id: archcodex.infra.git
+    why: "Git operations adapter for version control integration"
+
+  q_infra3:
+    type: question
+    text: "Does it load configuration or environment variables?"
+    yes: r_infra_config
+    no: q_infra4
+
+  r_infra_config:
+    type: result
+    arch_id: archcodex.infra.config
+    why: "Configuration loading from files and environment"
+
+  q_infra4:
+    type: question
+    text: "Is it a logging implementation?"
+    yes: r_infra_logging
+    no: r_infra
+
+  r_infra_logging:
+    type: result
+    arch_id: archcodex.infra.logging
+    why: "Structured logging infrastructure"
+
+  r_infra:
+    type: result
+    arch_id: archcodex.infra
+    why: "General infrastructure code"
+
+  # Q4: LLM
+  q4:
+    type: question
+    text: "Is this LLM-related code (verification, reindexing, prompts)?"
+    examples: "verifier.ts, reindexer.ts, provider implementations"
+    yes: r_llm
+    no: q5
+
+  r_llm:
+    type: result
+    arch_id: archcodex.core.domain.llm
+    why: "LLM integration for AI-powered features"
+
+  # Q5: Common foundation
+  q5:
+    type: question
+    text: "Is this a shared error type, error code, or foundational constant?"
+    examples: "error codes, shared constants, base error classes"
+    yes: q_common
+    no: q6
+
+  q_common:
+    type: question
+    text: "Is it specifically error types and codes?"
+    yes: r_common_errors
+    no: r_common
+
+  r_common_errors:
+    type: result
+    arch_id: archcodex.common.errors
+    why: "Error types and codes shared across the application"
+
+  r_common:
+    type: result
+    arch_id: archcodex.common
+    why: "Foundation layer with zero dependencies on other layers"
+
+  # Q6: Utility
+  q6:
+    type: question
+    text: "Is this a utility function (reusable, foundational)?"
+    examples: "string helpers, array utilities, hash functions, path matching"
+    yes: r_util
+    no: r_core_domain
+
+  r_util:
+    type: result
+    arch_id: archcodex.util
+    why: "Foundational utility functions - stateless and reusable"

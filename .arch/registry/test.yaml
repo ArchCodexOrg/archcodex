@@ -1,0 +1,52 @@
+---
+
+archcodex.test:
+  inherits: base
+  description: Test files - unit tests, integration tests
+  rationale: |
+    Test files have different constraints than production code.
+    Allows console.log for debugging and any type for mocking flexibility.
+
+    Use for: Test files (*.test.ts, *.spec.ts)
+    Don't use for: Production code
+  expected_intents:
+    - cli-output
+  constraints:
+    - rule: allow_pattern
+      value: "any type allowed in tests"
+      pattern: ':\s*any\b'
+    - rule: allow_pattern
+      value: "console allowed in tests"
+      pattern: 'console\.(log|error|warn)'
+    - rule: naming_pattern
+      value:
+        pattern: ^\S+\.(test|spec)\.(ts|tsx|js|jsx)$
+      severity: error
+      why: Test files must have .test or .spec suffix
+  hints:
+    - Use descriptive test names that explain what behavior is being tested
+    - Group related tests with describe blocks
+    - Cover happy path, edge cases, and error handling
+    - Keep tests focused and independent
+
+archcodex.test.unit:
+  inherits: archcodex.test
+  description: Unit tests - isolated, fast, focused
+  rationale: |
+    Unit tests for individual modules with mocked dependencies.
+    Should be fast and isolated from external systems.
+
+    Use for: tests/unit/**/*.test.ts
+    Don't use for: Integration tests or end-to-end tests
+  file_pattern: ${name}.test.ts
+  default_path: tests/unit
+  constraints:
+    - rule: location_pattern
+      value: tests/unit/
+      severity: warning
+      why: Unit tests should be in tests/unit/ directory
+  hints:
+    - Mock external dependencies (file system, network, etc.)
+    - Test one behavior per test case
+    - Keep tests fast (no I/O, no external services)
+    - Use factories or builders for test data

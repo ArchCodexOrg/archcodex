@@ -1,0 +1,37 @@
+# ArchCodex Ignore File
+# Files matching these patterns will be excluded from validation and verification
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# Binary entry points (thin wrappers)
+bin/
+
+# Dependencies
+node_modules/
+
+# Type definitions
+*.d.ts
+
+# Example/demo files
+examples/
+
+# Generated files
+*.generated.ts
+
+# Config files (root level)
+eslint.config.js
+
+# VSCode extension (separate project with its own architecture)
+vscode-extension/
+
+# Test files containing @arch/@override in test data strings
+# (parser cannot distinguish test data from real annotations)
+tests/unit/cli/commands/promote.test.ts
+tests/unit/core/arch-tag/parser.test.ts
+tests/unit/core/audit/scanner.test.ts
+tests/unit/core/hydration/engine.test.ts
+tests/unit/core/promote/engine.test.ts
+tests/unit/core/validation/engine.test.ts

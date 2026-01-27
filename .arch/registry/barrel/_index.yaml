@@ -1,0 +1,23 @@
+---
+
+archcodex.barrel:
+  inherits: base
+  kind: organizational
+  mixins:
+    - barrel
+  description: Top-level library barrel file - main entry point exports
+  rationale: |
+    The main entry point for the library (src/index.ts). Defines the public API
+    by re-exporting from submodules. Consumers import from here.
+
+    Use for: The top-level src/index.ts file only.
+    Don't use for: Sub-module index files (use layer-specific barrels).
+  constraints:
+    - rule: max_file_lines
+      value: 100
+      exclude_comments: true
+      severity: warning
+      why: Main entry barrel can be larger but should only contain exports
+  hints:
+    - This is the main library entry point
+    - Re-export public API from submodules

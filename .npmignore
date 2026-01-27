@@ -1,0 +1,42 @@
+# Source files (compiled to dist/)
+/src/
+/bin/
+
+# Tests
+/tests/
+**/*.test.ts
+**/*.test.js
+**/*.test.d.ts
+**/*.test.d.ts.map
+**/*.test.js.map
+
+# Development configs
+.arch/
+.github/
+.husky/
+.vscode/
+.claude/
+.eslintrc.*
+eslint.config.*
+.prettierrc*
+tsconfig.json
+vitest.config.*
+
+# Build artifacts and caches
+coverage/
+binaries/
+*.tsbuildinfo
+.archconfig
+dist/archcodex.cjs
+
+# Documentation (keep README.md)
+docs/
+
+# Extensions and examples
+vscode-extension/
+examples/
+
+# Misc
+*.log
+.DS_Store
+.archignore

@@ -1,0 +1,71 @@
+---
+
+archcodex.core.domain.llm:
+  inherits: archcodex.core.domain
+  mixins:
+    - ocp
+    - dip
+    - tested
+  description: LLM integration for behavioral verification and reindexing
+  rationale: |
+    LLM provider implementations that handle API calls, prompt construction, and
+    response parsing. Each provider (OpenAI, Anthropic, Prompt) implements the
+    ILLMProvider interface for consistent behavior.
+
+    Use for: Files that implement a specific LLM provider with API integration.
+    Don't use for: Provider factory/selection logic (use domain), LLM-agnostic
+    orchestration (use core.engine).
+  reference_implementations:
+    - src/llm/providers/openai.ts
+    - src/llm/providers/anthropic.ts
+  file_pattern: ${name}.ts
+  default_path: src/llm/providers
+  code_pattern: |-
+    import type { ILLMProvider, LLMConfig, VerificationRequest } from '../types.js';
+
+    export class XxxProvider implements ILLMProvider {
+      readonly name = 'xxx' as const;
+      private config: LLMConfig;
+
+      constructor(config: Partial<LLMConfig> = {}) {
+        this.config = { ...defaults, ...config };
+      }
+
+      isAvailable(): boolean {
+        return !!this.config.apiKey;
+      }
+
+      async verify(request: VerificationRequest): Promise<VerificationResponse> {
+        if (!this.isAvailable()) return { error: 'Not configured' };
+        // Call API with timeout, parse response
+      }
+
+      private async callAPI(prompt: string): Promise<{ content: string }> {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+        try {
+          // fetch with signal: controller.signal
+        } finally {
+          clearTimeout(timeoutId);  // Always clean up timeout
+        }
+      }
+    }
+  constraints:
+    - rule: forbid_import
+      value:
+        - commander
+        - chalk
+        - ora
+      severity: error
+      why: "[DIP] LLM domain must not depend on CLI concerns"
+      alternative: src/utils/logger
+    - rule: max_file_lines
+      value: 300
+      exclude_comments: true
+      severity: warning
+      why: LLM providers handle API calls, prompts, and parsing - needs room
+  hints:
+    - text: "[OCP] Add new LLM providers via new classes, not modifying existing ones"
+      example: code://src/llm/providers/openai.ts
+    - "[DIP] Use ILLMProvider interface for provider abstraction"
+    - Handle API errors gracefully - don't crash on network failures

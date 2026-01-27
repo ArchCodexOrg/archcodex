@@ -1,0 +1,82 @@
+---
+
+archcodex.core.engine:
+  inherits: archcodex.core
+  mixins:
+    - dip
+    - kiss
+    - tested
+  description: Application layer - use case orchestrators
+  rationale: |
+    Engines orchestrate domain objects and infrastructure to fulfill use cases.
+    Each engine handles one use case (validation, hydration, audit, scaffold, garden).
+
+    Use for: Files that coordinate multiple components to complete a workflow.
+    Don't use for: Domain rules (use core.domain), individual validators (use constraint).
+  reference_implementations:
+    - src/core/health/analyzer.ts
+    - src/core/validation/engine.ts
+    - src/core/hydration/engine.ts
+  file_pattern: ${name}.ts
+  default_path: src/core
+  code_pattern: |-
+    import type { Config } from '../config/schema.js';
+    import type { Registry } from '../registry/schema.js';
+
+    export interface AnalyzerOptions {
+      // options for the analyzer
+    }
+
+    export interface AnalyzerResult {
+      // result type
+    }
+
+    export class XxxAnalyzer {
+      private config: Config;
+      private projectRoot: string;
+
+      constructor(projectRoot: string, config: Config) {
+        this.projectRoot = projectRoot;
+        this.config = config;
+      }
+
+      async analyze(options: AnalyzerOptions): Promise<AnalyzerResult> {
+        // orchestrate domain objects and infrastructure
+      }
+
+      dispose(): void {
+        // clean up resources (caches, file handles, etc.)
+      }
+    }
+  constraints:
+    - rule: max_public_methods
+      value: 10
+      severity: warning
+      why: Engines should have focused public API
+    - rule: max_file_lines
+      value: 600
+      exclude_comments: true
+      severity: warning
+      why: Engines orchestrate complex workflows and may need more space
+    - rule: require_one_of
+      value:
+        - "dispose()"
+        - "dispose():"
+        - "@intent:stateless"
+      severity: warning
+      why: Engines with caches/resources need dispose(); stateless engines use @intent:stateless
+      intent: Prevent resource leaks by ensuring cleanup or documenting statelessness
+      examples: ["dispose(): void { this.cache.clear(); }", "@intent:stateless"]
+      codeExample: |-
+        // With state: implement dispose()
+        dispose(): void { this.project?.dispose(); }
+
+        // Stateless: add @intent:stateless in file header
+  hints:
+    - text: Engines orchestrate domain objects and infrastructure
+      example: code://src/core/health/analyzer.ts
+    - One engine per use case (validation, hydration, audit, scaffold)
+    - "[SRP] Each engine handles exactly one use case"
+    - text: "[ARCHIGNORE] When globbing files, apply loadArchIgnore() filter for consistency across
+        commands"
+      example: code://src/core/health/analyzer.ts

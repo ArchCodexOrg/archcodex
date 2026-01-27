@@ -1,0 +1,153 @@
+# Standard Inference Rules
+# Copy these rules into your .arch/config.yaml under inference.custom_rules
+# Adjust the archId values to match your registry.yaml architecture definitions
+#
+# Usage:
+#   inference:
+#     custom_rules:
+#       # Paste rules from this file here
+#       - name: react-hook
+#         archId: your.project.hook  # <-- Change to your archId
+#         ...
+
+# ============================================================================
+# REACT RULES
+# ============================================================================
+
+# React Hooks - files starting with "use" that export hook functions
+- name: react-hook
+  archId: frontend.hook  # Change to match your registry
+  confidence: high
+  filePattern: "^use[A-Z].*\\.(ts|tsx)$"
+  contentPatterns:
+    - "export\\s+(const|function)\\s+use[A-Z]"
+  description: "React hook (use* naming convention)"
+
+# React Context - files creating React contexts
+- name: react-context
+  archId: frontend.context  # Change to match your registry
+  confidence: high
+  contentPatterns:
+    - "createContext\\s*[<(]"
+  description: "React Context provider"
+
+# React Components - TSX files with JSX returns
+- name: react-component
+  archId: frontend.component  # Change to match your registry
+  confidence: medium
+  filePattern: "\\.(tsx|jsx)$"
+  contentPatterns:
+    - "return\\s*\\(?\\s*<"
+    - "export\\s+(default\\s+)?(function|const)"
+  matchAll: true
+  description: "React component (.tsx with JSX return)"
+
+# ============================================================================
+# CONVEX RULES (Backend-as-a-Service)
+# ============================================================================
+
+# Convex Mutations
+- name: convex-mutation
+  archId: convex.mutation  # Change to match your registry
+  confidence: high
+  contentPatterns:
+    - "export\\s+const\\s+\\w+\\s*=\\s*mutation\\s*\\("
+  description: "Convex mutation"
+
+# Convex Queries
+- name: convex-query
+  archId: convex.query  # Change to match your registry
+  confidence: high
+  contentPatterns:
+    - "export\\s+const\\s+\\w+\\s*=\\s*query\\s*\\("
+  description: "Convex query"
+
+# Convex Actions
+- name: convex-action
+  archId: convex.action  # Change to match your registry
+  confidence: high
+  contentPatterns:
+    - "export\\s+const\\s+\\w+\\s*=\\s*action\\s*\\("
+  description: "Convex action"
+
+# ============================================================================
+# COMMON FILE TYPES
+# ============================================================================
+
+# Barrel/Index files - re-export only
+- name: barrel-file
+  archId: base.barrel  # Change to match your registry
+  confidence: high
+  filePattern: "^index\\.(ts|js)$"
+  contentPatterns:
+    - "^export\\s+(\\*|\\{)"
+  description: "Barrel file (index.ts with re-exports)"
+
+# Type definition files
+- name: types-file
+  archId: base.types  # Change to match your registry
+  confidence: medium
+  filePattern: "\\.types?\\.(ts|tsx)$"
+  description: "Type definitions file (*.types.ts)"
+
+# Test files
+- name: test-file
+  archId: base.test  # Change to match your registry
+  confidence: high
+  filePattern: "\\.(test|spec)\\.(ts|tsx|js|jsx)$"
+  description: "Test file"
+
+# Utility/Helper files
+- name: utility-file
+  archId: base.utility  # Change to match your registry
+  confidence: low
+  filePattern: "(utils?|helpers?|lib)\\.(ts|js)$"
+  description: "Utility/helper file"
+
+# ============================================================================
+# BACKEND PATTERNS
+# ============================================================================
+
+# Service files (NestJS-style or general)
+- name: service-file
+  archId: core.service  # Change to match your registry
+  confidence: low
+  filePattern: "[Ss]ervice\\.(ts|js)$"
+  description: "Service file (*Service.ts)"
+
+# Zod Schema files
+- name: schema-file
+  archId: core.schema  # Change to match your registry
+  confidence: medium
+  filePattern: "schema\\.(ts|js)$"
+  contentPatterns:
+    - "z\\.(object|string|number|array|enum)"
+  description: "Zod schema file"
+
+# NestJS Controllers
+- name: nestjs-controller
+  archId: api.controller  # Change to match your registry
+  confidence: high
+  filePattern: "\\.controller\\.(ts|js)$"
+  contentPatterns:
+    - "@Controller\\("
+  description: "NestJS controller"
+
+# NestJS Services (injectable)
+- name: nestjs-service
+  archId: domain.service  # Change to match your registry
+  confidence: high
+  contentPatterns:
+    - "@Injectable\\("
+    - "class\\s+\\w+Service"
+  matchAll: true
+  description: "NestJS injectable service"
+
+# Express/Fastify Route handlers
+- name: route-handler
+  archId: api.route  # Change to match your registry
+  confidence: medium
+  filePattern: "(route|router)s?\\.(ts|js)$"
+  contentPatterns:
+    - "(app|router)\\.(get|post|put|delete|patch)\\("
+  description: "Express/Fastify route handler"

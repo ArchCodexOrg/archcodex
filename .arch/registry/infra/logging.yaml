@@ -1,0 +1,30 @@
+---
+
+archcodex.infra.logging:
+  inherits: archcodex.infra
+  mixins:
+    - tested
+  description: Logging infrastructure
+  rationale: |
+    Structured logging with levels (debug, info, warn, error).
+    Provides consistent output formatting across the application.
+
+    Use for: Logger implementation and logging utilities.
+    Don't use for: Direct console.log calls in other modules.
+  constraints:
+    # commander, ../cli already forbidden by parent (infra)
+    - rule: forbid_import
+      value:
+        - ts-morph
+        - ../core
+      severity: error
+      why: "[DIP] Logger must not depend on AST or domain concerns"
+    - rule: max_file_lines
+      exclude_comments: true
+      value: 150
+      severity: warning
+      why: Keep logger simple and focused
+  hints:
+    - Provide structured logging with levels
+    - Support different output formats (human, JSON)
+    - No business logic in logger

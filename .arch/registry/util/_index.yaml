@@ -1,0 +1,68 @@
+---
+
+archcodex.util:
+  inherits: base
+  mixins:
+    - dry
+    - kiss
+  description: Shared utilities - zero internal dependencies
+  rationale: |
+    Foundational utility functions used across the application. No dependencies on
+    core, CLI, or other application layers.
+
+    Some utils wrap I/O (file-system.ts, git.ts, logger.ts) — these are
+    infrastructure-grade but live here for import simplicity. They are the
+    canonical implementations referenced by patterns.yaml.
+
+    Use for: General-purpose utility functions (path matching, string helpers, I/O wrappers).
+    Don't use for: Business logic or layer-specific utilities.
+  reference_implementations:
+    - src/utils/file-system.ts
+    - src/utils/logger.ts
+  file_pattern: ${name}.ts
+  default_path: src/utils
+  code_pattern: |-
+    /**
+     * @arch archcodex.util
+     *
+     * Brief description of utility purpose.
+     */
+
+    /**
+     * Pure utility function - same input always produces same output.
+     */
+    export function utilityFunction(input: string): string {
+      // No side effects, no I/O
+      return input.transform();
+    }
+  constraints:
+    - rule: forbid_import
+      value:
+        - ../core
+        - ../cli
+        - ../validators
+      severity: error
+      why: "[DIP] Utils must not import from other layers - they are the foundation"
+      intent: Maintain clean architecture - utils are the bottom layer with no upward dependencies
+      counterexamples: ["import { validate } from '../core/validation'", "import { Command } from '../cli'"]
+    - rule: forbid_import
+      value:
+        - fs
+        - fs/promises
+      severity: warning
+      why: Use file-system.ts wrapper instead of raw fs - provides consistent error handling
+      alternative: src/utils/file-system.ts
+      intent: Centralize file I/O behind a consistent abstraction
+      counterexamples: ["import fs from 'fs'", "import { readFile } from 'fs/promises'"]
+      codeExample: "import { readFile, writeFile, fileExists } from '../utils/file-system.js';"
+      unless:
+        - "@arch:archcodex.infra.fs"
+    - rule: max_file_lines
+      value: 200
+      exclude_comments: true
+      severity: warning
+      why: "[KISS] Keep utility files focused"
+  hints:
+    - "[DRY] Utils are the single source of truth for common operations"
+    - "[KISS] Simple, focused functions that do one thing well"
+    - No business logic in utils

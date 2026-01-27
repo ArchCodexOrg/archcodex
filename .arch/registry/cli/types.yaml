@@ -1,0 +1,39 @@
+---
+
+archcodex.cli.types:
+  inherits: archcodex.cli
+  kind: organizational
+  mixins:
+    - types
+    - immutable
+  description: CLI type definitions
+  rationale: |
+    TypeScript type definitions for the CLI layer. Compile-time only constructs
+    that define interfaces, types, and enums used by CLI components.
+
+    Use for: Files named types.ts or *.types.ts containing only type exports.
+    Don't use for: Runtime code, Zod schemas (use core.domain.schema).
+  file_pattern: "*.types.ts"
+  default_path: src/cli
+  code_pattern: |-
+    /**
+     * @arch archcodex.cli.types
+     */
+
+    export interface CommandOptions {
+      config?: string;
+      format?: 'human' | 'json' | 'ai';
+    }
+
+    export type OutputMode = 'compact' | 'verbose';
+  constraints:
+    - rule: forbid_pattern
+      value: function implementation
+      pattern: '^\s*export\s+(async\s+)?function\s+\w+\s*\([^)]*\)\s*(\{|=>)'
+      severity: error
+      why: Type files must contain only type-level constructs, no runtime code
+      counterexamples: ["export function foo() {", "export async function bar() {", "export const baz = () => {"]
+  hints:
+    - Only export types, interfaces, and enums for the CLI layer
+    - No runtime code, no function implementations
+    - Keep type files focused on a single concern

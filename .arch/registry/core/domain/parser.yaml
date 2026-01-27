@@ -1,0 +1,43 @@
+---
+
+archcodex.core.domain.parser:
+  inherits: archcodex.core.domain
+  mixins:
+    - srp
+    - tested
+  description: Parsing logic (@arch tags, YAML)
+  rationale: |
+    Stateless parsing functions that extract structured data from raw input.
+    Separated from other domain logic because parsing is a distinct concern.
+
+    Use for: Files that parse @arch tags, YAML files, or other structured input.
+    Don't use for: Schema validation (use domain.schema), data transformation (use resolver).
+  reference_implementations:
+    - src/core/arch-tag/parser.ts
+  file_pattern: ${name}.ts
+  default_path: src/core
+  code_pattern: |-
+    import type { ParseResult, ParseError } from './types.js';
+
+    const SOME_PATTERN = /regex/;
+
+    /**
+     * Parse raw input into structured data.
+     * Pure function - no side effects, no I/O.
+     */
+    export function parseXxx(content: string): ParseResult {
+      const errors: ParseError[] = [];
+      // Extract structured data using regex or tokenization
+      return { data, errors };
+    }
+  constraints:
+    - rule: max_file_lines
+      value: 250
+      exclude_comments: true
+      severity: warning
+      why: "[SRP] Parsers should be focused on one input format"
+  hints:
+    - Parsers must be stateless - same input always produces same output
+    - Return structured results with explicit error arrays, never throw
+    - Use named regex constants at module level for readability
+    - "[SRP] One parser per input format (arch tags, YAML, etc.)"

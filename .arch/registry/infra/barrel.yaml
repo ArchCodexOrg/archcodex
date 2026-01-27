@@ -1,0 +1,18 @@
+---
+
+archcodex.infra.barrel:
+  inherits: archcodex.infra
+  kind: organizational
+  mixins:
+    - barrel
+  description: Infrastructure barrel/index files - re-exports only
+  rationale: |
+    Index files that consolidate infrastructure exports.
+
+    Use for: index.ts files in infrastructure directories.
+    Don't use for: Files with implementation logic.
+  constraints:
+    - rule: max_file_lines
+      value: 50
+      severity: warning
+      why: Infrastructure barrels should only contain exports

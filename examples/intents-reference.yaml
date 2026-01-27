@@ -1,0 +1,135 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Intent Reference - Example intents for projects adopting ArchCodex
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# These intents are NOT used by the ArchCodex project itself, but serve as
+# examples for teams adopting ArchCodex in their own projects.
+#
+# To use: Copy relevant intents into your project's .arch/registry/_intents.yaml
+# ═══════════════════════════════════════════════════════════════════════════════
+
+intents:
+  # === Authentication ===
+  public-endpoint:
+    description: "Endpoint requires no authentication"
+    forbids:
+      - "requireAuth"
+      - "authenticate"
+      - "isAuthenticated"
+    conflicts_with:
+      - admin-only
+      - owner-only
+    category: auth
+    suggest_for_paths:
+      - "**/public/**"
+      - "**/health/**"
+      - "**/status/**"
+    suggest_for_archs:
+      - "api.public.*"
+      - "*.health"
+
+  admin-only:
+    description: "Restricted to admin users"
+    requires:
+      - "/isAdmin|hasAdminRole|adminOnly|checkAdmin/i"
+    conflicts_with:
+      - public-endpoint
+    category: auth
+    suggest_for_paths:
+      - "**/admin/**"
+      - "**/backoffice/**"
+      - "**/internal/**"
+    suggest_for_archs:
+      - "api.admin.*"
+      - "*.admin.*"
+
+  owner-only:
+    description: "Resource accessible only by owner"
+    requires:
+      - "/isOwner|checkOwnership|ownerId.*===|userId.*===/i"
+    conflicts_with:
+      - public-endpoint
+    category: auth
+
+  system-internal:
+    description: "Internal system operation, not user-facing"
+    category: auth
+    suggest_for_paths:
+      - "**/internal/**"
+      - "**/system/**"
+      - "**/cron/**"
+      - "**/jobs/**"
+    suggest_for_archs:
+      - "infra.*"
+      - "*.internal.*"
+      - "*.cron.*"
+
+  # === Data Access ===
+  includes-deleted:
+    description: "Query includes soft-deleted records"
+    requires:
+      - "/deleted|archived|trashed|withDeleted/i"
+    conflicts_with:
+      - deleted-only
+    category: data-access
+    suggest_for_paths:
+      - "**/trash/**"
+      - "**/archive/**"
+      - "**/deleted/**"
+
+  deleted-only:
+    description: "Query returns only deleted records"
+    requires:
+      - "/deleted.*true|isDeleted|onlyDeleted/i"
+    conflicts_with:
+      - includes-deleted
+    category: data-access
+    suggest_for_paths:
+      - "**/trash/**"
+      - "**/restore/**"
+
+  # === Performance ===
+  real-time-required:
+    description: "Cannot use caching, must be fresh data"
+    forbids:
+      - "withCache"
+      - "cached"
+      - "memoize"
+    conflicts_with:
+      - cacheable
+    category: performance
+    suggest_for_paths:
+      - "**/realtime/**"
+      - "**/live/**"
+      - "**/streaming/**"
+
+  cacheable:
+    description: "Safe to cache, idempotent operation"
+    conflicts_with:
+      - real-time-required
+    category: performance
+    suggest_for_paths:
+      - "**/cached/**"
+      - "**/static/**"
+    suggest_for_archs:
+      - "*.query"
+      - "*.read"
+
+  # === Audit ===
+  no-audit-required:
+    description: "System operation that doesn't need audit logging"
+    category: audit
+    suggest_for_paths:
+      - "**/internal/**"
+      - "**/system/**"
+      - "**/health/**"
+
+  audit-reads:
+    description: "Sensitive data access that must be logged"
+    requires:
+      - "/auditLog|logAccess|trackRead/i"
+    category: audit
+    suggest_for_paths:
+      - "**/pii/**"
+      - "**/sensitive/**"
+      - "**/compliance/**"

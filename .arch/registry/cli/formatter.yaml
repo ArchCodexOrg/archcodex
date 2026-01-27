@@ -1,0 +1,25 @@
+---
+
+archcodex.cli.formatter:
+  inherits: archcodex.cli
+  mixins:
+    - isp
+    - pure
+    - tested
+  description: Output formatters (JSON, Human-readable)
+  rationale: |
+    Pure functions that transform data structures into formatted output strings.
+    Separated from commands to allow multiple output formats (JSON, human, compact).
+
+    Use for: Files that convert result objects into displayable strings.
+    Don't use for: Data processing or business logic (use core).
+  constraints:
+    - rule: forbid_import
+      value:
+        - commander
+        - ts-morph
+      severity: error
+      why: Formatters should only transform data, not interact with CLI or AST
+  hints:
+    - Formatters are pure functions - input data, output string
+    - No side effects in formatters

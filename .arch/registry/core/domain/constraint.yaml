@@ -1,0 +1,75 @@
+---
+
+archcodex.core.domain.constraint:
+  inherits: archcodex.core.domain
+  mixins:
+    - srp
+    - ocp
+    - lsp
+    - tested
+  description: Individual constraint validators
+  rationale: |
+    Each constraint validator is a self-contained unit following the IConstraintValidator
+    interface. Separated from general domain logic to enforce single responsibility -
+    one file validates one type of constraint rule.
+
+    Use for: Files that implement a single constraint validation rule (forbid_import,
+    max_file_lines, naming_pattern, etc.).
+    Don't use for: Constraint orchestration or registry logic (use domain).
+  reference_implementations:
+    - src/core/constraints/forbid-import.ts
+    - src/core/constraints/require-import.ts
+    - src/core/constraints/max-file-lines.ts
+  file_pattern: ${name}.ts
+  default_path: src/core/constraints
+  code_pattern: |-
+    import type { IConstraintValidator } from './interface.js';
+    import type { Constraint, ConstraintContext, ConstraintResult } from './types.js';
+
+    export class XxxConstraint implements IConstraintValidator {
+      readonly rule = 'xxx_rule';
+
+      validate(constraint: Constraint, context: ConstraintContext): ConstraintResult {
+        const violations: Violation[] = [];
+        // Use context.parsedFile for AST data (classes, imports, etc.)
+        // Check constraint.value against the parsed file
+        return { violations };
+      }
+
+      getFixHint(constraint: Constraint): string {
+        return `How to fix this violation`;
+      }
+    }
+  constraints:
+    - rule: max_file_lines
+      value: 175
+      exclude_comments: true
+      severity: warning
+      why: "[SRP] Each constraint should be focused. Complex validators may need more room."
+    - rule: max_public_methods
+      value: 5
+      severity: warning
+      why: "[ISP] Core: validate(), rule, getFixHint(). Optional: isApplicable(), describe()"
+      intent: Keep constraint validators focused with minimal public interface
+      examples: ["validate()", "rule", "getFixHint()", "isApplicable()", "describe()"]
+    # Coverage: Every documented constraint rule must have a validator implementation
+    - rule: require_coverage
+      value:
+        source_type: string_literals
+        source_pattern: 'CONSTRAINT_RULES_VALIDATED\s*=\s*\[([\s\S]*?)\];'
+        extract_values: 'rule:\s*''([^'']+)'''
+        in_files: "src/mcp/schema-data.ts"
+        target_pattern: 'validatorRegistry\.set\([''"]${value}[''"]'
+        in_target_files: "src/core/constraints/registry.ts"
+      severity: warning
+      why: Every per-file constraint rule must have a registered validator
+  hints:
+    - text: "[SRP] One file per constraint type"
+      example: code://src/core/constraints/forbid-import.ts
+    - text: "[LSP] Implement IConstraintValidator interface consistently"
+      example: code://src/core/constraints/types.ts
+    - "[OCP] Add new constraints by adding new files, not modifying existing ones"
+    - text: "[AST] Use SemanticModel fields (namedImports, defaultImport, decorators, classes, etc.)
+        instead of string matching on raw content. Check all relevant fields: for imports check
+        moduleSpecifier AND namedImports AND defaultImport."
+      example: code://src/core/constraints/require-import.ts

@@ -1,0 +1,84 @@
+# Intent Registry - Semantic annotations that can satisfy constraints
+# Intents are first-class patterns validated against code behavior
+#
+# For additional example intents (auth, data-access, audit, etc.),
+# see: examples/intents-reference.yaml
+
+---
+
+intents:
+  # === Lifecycle ===
+  stateless:
+    description: "Component has no internal state requiring cleanup"
+    forbids:
+      - 'this\.cache\b'
+      - 'this\.disposables\b'
+      - 'this\.connections\b'
+    category: lifecycle
+    suggest_for_paths:
+      - "**/validators/**"
+      - "**/formatters/**"
+      - "**/parsers/**"
+    suggest_for_archs:
+      - "*.validator"
+      - "*.formatter"
+      - "*.parser"
+
+  # === CLI ===
+  cli-output:
+    description: "File outputs to stdout/stderr (console.log allowed)"
+    category: cli
+    suggest_for_paths:
+      - "**/cli/**"
+      - "**/commands/**"
+      - "**/formatters/**"
+      - "**/tests/**"
+      - "**/*.test.ts"
+      - "**/*.spec.ts"
+    suggest_for_archs:
+      - "*.cli.*"
+      - "*.command"
+      - "*.formatter"
+      - "*.test"
+      - "*.test.*"
+
+  documentation-examples:
+    description: "File contains static data used for documentation/examples"
+    category: cli
+    suggest_for_paths:
+      - "**/schema-data*"
+      - "**/examples/**"
+    suggest_for_archs:
+      - "*.mcp"
+
+  cli-subcommand:
+    description: "Action handler registered by a parent command - does not create its own Command"
+    category: cli
+    suggest_for_paths:
+      - "**/commands/**/list.ts"
+      - "**/commands/**/show.ts"
+      - "**/commands/**/usage.ts"
+      - "**/commands/**/validate.ts"
+    suggest_for_archs:
+      - "*.command"
+
+  # === Core ===
+  ast-analysis:
+    description: "Engine performs direct AST analysis using ts-morph"
+    category: lifecycle
+    suggest_for_paths:
+      - "**/similarity/**"
+      - "**/imports/**"
+      - "**/garden/**"
+      - "**/learn/**"
+      - "**/scaffold/**"
+    suggest_for_archs:
+      - "*.engine"
+
+  # === Infrastructure ===
+  registry-infrastructure:
+    description: "File is the canonical registry loader/accessor infrastructure"
+    category: lifecycle
+    suggest_for_paths:
+      - "**/registry/loader*"
+      - "**/diff/git-loader*"

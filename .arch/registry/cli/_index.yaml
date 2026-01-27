@@ -1,0 +1,32 @@
+---
+
+archcodex.cli:
+  inherits: base
+  description: Presentation layer - CLI commands and formatters
+  rationale: |
+    The outermost layer handling user interaction via command line.
+    Thin layer that parses input, delegates to core, and formats output.
+
+    Use for: General CLI-related code that doesn't fit command/formatter.
+    Prefer: archcodex.cli.command for commands, archcodex.cli.formatter for formatters.
+  constraints:
+    - rule: forbid_import
+      value:
+        - ts-morph
+      severity: error
+      why: CLI layer must not depend on AST parsing directly - use core abstractions
+    - rule: forbid_pattern
+      value: hardcoded registry.yaml path
+      pattern: '\.arch/registry\.yaml'
+      severity: error
+      why: Use loadRegistry() or getRegistryContent() for auto-detection of single-file vs multi-file registry
+      unless:
+        - "@intent:documentation-examples"
+      intent: Support both single-file and multi-file registry layouts
+      counterexamples: ["readFile('.arch/registry.yaml')", "path.join('.arch', 'registry.yaml')"]
+      codeExample: "const registry = await loadRegistry(projectRoot);"
+      alternative: src/core/registry/loader.ts
+  hints:
+    - Commands should be thin - delegate to core engines
+    - Handle errors gracefully with user-friendly messages
+    - Never hardcode .arch/registry.yaml - use loader functions for auto-detection

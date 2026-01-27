@@ -1,0 +1,36 @@
+---
+
+archcodex.core:
+  inherits: base
+  description: Core layer - application and domain logic
+  rationale: |
+    The heart of the application containing business logic and use cases.
+    Framework-agnostic - could be used as a library, not just CLI.
+
+    Use for: General core code that doesn't fit engine/domain subcategories.
+    Prefer: core.engine for orchestration, core.domain for business rules.
+  constraints:
+    - rule: forbid_import
+      value:
+        - commander
+        - chalk
+        - ora
+        - ts-morph
+        - fast-glob
+      severity: error
+      why: Core must not depend on CLI/presentation or infrastructure concerns - use abstractions
+      unless:
+        - "@intent:ast-analysis"
+      alternatives:
+        - module: src/utils/logger
+          export: logger
+          description: Use structured logger for console output
+        - module: src/validators/typescript
+          export: TypeScriptValidator
+          description: Use validator abstraction for AST analysis
+        - module: src/utils/file-system
+          export: globFiles
+          description: Use file-system utility for glob operations
+  hints:
+    - Core modules should be framework-agnostic
+    - Could be used as a library, not just CLI

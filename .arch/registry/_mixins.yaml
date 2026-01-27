@@ -1,0 +1,178 @@
+---
+
+srp:
+  description: Single Responsibility Principle - one reason to change
+  rationale: |
+    Apply to modules that should have exactly one reason to change.
+    Enforces focused, maintainable code by limiting public API surface.
+  constraints:
+    - rule: max_public_methods
+      value: 7
+      severity: warning
+      why: "[SRP] Too many public methods suggests multiple responsibilities"
+  hints:
+    - "[SRP] Ask: 'What is the single reason this module would change?'"
+    - text: "[SRP] If you can't describe the module's purpose in one sentence, split it"
+      example: code://src/core/constraints/forbid-import.ts
+ocp:
+  description: Open/Closed Principle - open for extension, closed for modification
+  rationale: |
+    Apply to modules where new behavior should be added via new code, not
+    by modifying existing code. Use strategy/plugin patterns for extensibility.
+  hints:
+    - text: "[OCP] When adding new variants, add new classes rather than modifying existing ones"
+      example: code://src/core/constraints/index.ts
+    - "[OCP] Use dependency injection to swap implementations"
+lsp:
+  description: Liskov Substitution Principle - subtypes must be substitutable
+  rationale: |
+    Apply to modules that implement interfaces or extend base classes.
+    Ensures derived types can replace base types without breaking behavior.
+  hints:
+    - "[LSP] Derived classes must honor base class contracts"
+    - "[LSP] Don't throw unexpected exceptions in overrides"
+    - "[LSP] Preconditions can't be strengthened in subtypes"
+    - "[LSP] Postconditions can't be weakened in subtypes"
+isp:
+  description: Interface Segregation Principle - prefer small, focused interfaces
+  rationale: |
+    Apply to modules defining interfaces. Keeps interfaces small so clients
+    only depend on methods they use. Limits public API to essential methods.
+  constraints:
+    - rule: max_public_methods
+      value: 5
+      severity: warning
+      why: "[ISP] Large interfaces force clients to depend on methods they don't use"
+  hints:
+    - "[ISP] Split large interfaces into smaller, role-specific ones"
+    - "[ISP] Clients should not be forced to depend on unused methods"
+dip:
+  description: Dependency Inversion Principle - depend on abstractions
+  rationale: |
+    Apply to modules that should depend on interfaces, not implementations.
+    Enables flexibility by allowing different implementations to be swapped.
+  hints:
+    - "[DIP] High-level modules should not depend on low-level modules"
+    - "[DIP] Both should depend on abstractions (interfaces)"
+    - text: "[DIP] Import types/interfaces, not concrete classes where possible"
+      example: code://src/core/constraints/types.ts
+dry:
+  description: Don't Repeat Yourself - single source of truth
+  rationale: |
+    Apply to modules where code reuse is important. Encourages extracting
+    common patterns into shared utilities and avoiding copy-paste.
+  hints:
+    - "[DRY] If you copy-paste, you're probably doing it wrong"
+    - "[DRY] Extract common patterns into shared utilities"
+    - "[DRY] Use generics to avoid duplicating logic for different types"
+    - "[DRY] Constants and config should be defined once"
+kiss:
+  description: Keep It Simple, Stupid - simplicity over cleverness
+  rationale: |
+    Apply to modules that should prioritize simplicity and readability.
+    Discourages premature optimization and over-engineering.
+  hints:
+    - "[KISS] Write code for humans first, computers second"
+    - "[KISS] Avoid premature optimization"
+    - "[KISS] Simple and working beats complex and perfect"
+    - "[KISS] If it's hard to explain, it's probably too complex"
+tested:
+  description: Marks modules that require test coverage
+  rationale: |
+    Apply to critical modules that need companion test files. Ensures
+    important business logic has automated test coverage.
+  inline: forbidden  # Testing requirements should be centrally managed in registry
+  constraints:
+    - rule: require_test_file
+      value:
+        - "*.test.ts"
+        - "*.spec.ts"
+      severity: warning
+      why: Modules marked 'tested' must have a companion test file
+  hints:
+    - Companion test file should exist (enforced by constraint)
+pure:
+  description: Marks modules with pure functions only
+  rationale: |
+    Apply to modules that should contain only pure functions with no side
+    effects. Same input always produces same output, no I/O operations.
+  inline: allowed  # Can be used in registry mixins:[] or inline (+pure)
+  constraints:
+    - rule: forbid_import
+      value:
+        - fs
+        - fs/promises
+        - path
+        - child_process
+        - http
+        - https
+        - net
+      severity: warning
+      why: Pure modules must not have side effects - no I/O or network operations
+      intent: Ensure functions are deterministic and testable without mocking I/O
+      counterexamples: ["import fs from 'fs'", "import { readFile } from 'fs/promises'", "import { exec } from 'child_process'"]
+      codeExample: "// Pass file contents as parameter instead of reading inside function"
+  hints:
+    - Functions should be deterministic - same input produces same output
+    - Avoid side effects and global state mutations
+singleton:
+  description: Marks singleton instances
+  rationale: |
+    Apply sparingly to modules providing global instances. Singletons can
+    make testing difficult - prefer dependency injection when possible.
+  inline: only  # Per-file marker for specific singleton modules
+  hints:
+    - Use module-level instance, not class
+    - Consider dependency injection instead
+    - "[DIP] Singletons can make testing difficult - use sparingly"
+immutable:
+  description: Marks modules that should use immutable data
+  rationale: |
+    Apply to modules where data should not be mutated after creation.
+    Encourages using readonly modifiers and creating new objects for updates.
+  hints:
+    - Use readonly modifiers on properties
+    - Return new objects instead of mutating
+    - Use spread operator for updates
+    - Consider using Readonly<T> and ReadonlyArray<T>
+barrel:
+  description: Barrel/index files - re-exports only, no logic
+  rationale: |
+    Apply to index.ts files that consolidate exports from a directory.
+    Must contain only export statements, no implementation logic.
+    Specific barrel architectures define max_file_lines based on their needs.
+  inline: forbidden  # Structural pattern, should be defined in registry
+  constraints:
+    - rule: naming_pattern
+      value: ^index\.(ts|tsx|js|jsx)$
+      severity: warning
+      why: Barrel files should be named index.ts
+      examples: [index.ts, index.tsx]
+      counterexamples: [exports.ts, barrel.ts, main.ts]
+  hints:
+    - text: Only re-export from other modules
+      example: code://src/core/health/index.ts
+    - Use 'export * from' or 'export { } from' syntax
+    - No implementation logic - just exports
+types:
+  description: Type definition files - compile-time only constructs
+  rationale: |
+    Apply to files containing only TypeScript type definitions. No runtime
+    code - just interfaces, type aliases, and enums that exist at compile time.
+  inline: forbidden  # Structural pattern, should be defined in registry
+  constraints:
+    - rule: naming_pattern
+      value: ^(types|.*\.types)\.(ts|tsx)$
+      severity: warning
+      why: Type files should be named types.ts or *.types.ts
+      examples: [types.ts, validation.types.ts, api.types.tsx]
+      counterexamples: [ValidationTypes.ts, types-file.ts, myTypes.ts]
+    - rule: max_file_lines
+      value: 300
+      exclude_comments: true
+      severity: warning
+      why: Type files can grow with the domain but should stay focused
+  hints:
+    - text: Only export types, interfaces, enums, and type guards
+      example: code://src/core/health/types.ts
+    - No runtime logic - only compile-time constructs

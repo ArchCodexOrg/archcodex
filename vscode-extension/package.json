@@ -1,0 +1,163 @@
+{
+  "name": "archcodex",
+  "displayName": "ArchCodex",
+  "description": "Architectural constraints validation and visualization for TypeScript/JavaScript projects",
+  "version": "0.1.0",
+  "publisher": "archcodex",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/archcodex/archcodex"
+  },
+  "homepage": "https://github.com/archcodex/archcodex",
+  "bugs": {
+    "url": "https://github.com/archcodex/archcodex/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "architecture",
+    "constraints",
+    "validation",
+    "typescript",
+    "linting"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/.arch/registry.yaml"
+  ],
+  "main": "./dist/client/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "archcodex.validate",
+        "title": "Validate Current File",
+        "category": "ArchCodex"
+      },
+      {
+        "command": "archcodex.validateWorkspace",
+        "title": "Validate Workspace",
+        "category": "ArchCodex"
+      },
+      {
+        "command": "archcodex.showArchTree",
+        "title": "Show Architecture Tree",
+        "category": "ArchCodex"
+      },
+      {
+        "command": "archcodex.refreshArchTree",
+        "title": "Refresh Architecture Tree",
+        "category": "ArchCodex",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "archcodex.showImportGraph",
+        "title": "Show Import Graph",
+        "category": "ArchCodex"
+      },
+      {
+        "command": "archcodex.showLayerBoundaries",
+        "title": "Show Layer Boundaries",
+        "category": "ArchCodex"
+      },
+      {
+        "command": "archcodex.showNeighborhood",
+        "title": "Show File Neighborhood",
+        "category": "ArchCodex"
+      },
+      {
+        "command": "archcodex.discover",
+        "title": "Discover Architecture",
+        "category": "ArchCodex"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "archcodex.refreshArchTree",
+          "when": "view == archcodexTree",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ArchCodex",
+      "properties": {
+        "archcodex.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable ArchCodex validation"
+        },
+        "archcodex.configPath": {
+          "type": "string",
+          "default": ".arch/config.yaml",
+          "description": "Path to ArchCodex config file"
+        },
+        "archcodex.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate files on save"
+        },
+        "archcodex.severityFilter": {
+          "type": "string",
+          "enum": [
+            "all",
+            "errors",
+            "warnings"
+          ],
+          "default": "all",
+          "description": "Filter diagnostics by severity"
+        },
+        "archcodex.graph.maxNodes": {
+          "type": "number",
+          "default": 500,
+          "description": "Maximum nodes to display in import graph"
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "archcodexTree",
+          "name": "Architecture"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "esbuild src/server/server.ts --bundle --outfile=dist/server/server.js --platform=node --external:vscode --format=cjs",
+    "build:client": "esbuild src/client/extension.ts --bundle --outfile=dist/client/extension.js --platform=node --external:vscode --format=cjs",
+    "watch": "npm run build -- --watch",
+    "lint": "eslint src --ext ts",
+    "test": "vitest run",
+    "package": "vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies"
+  },
+  "dependencies": {
+    "d3": "^7.9.0",
+    "mermaid": "^11.12.2",
+    "minimatch": "^10.1.1",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.19.8",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.2",
+    "vitest": "^1.0.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/archcodex-pre-write.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/archcodex-reminder.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-write-archcodex.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

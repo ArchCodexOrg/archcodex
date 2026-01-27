@@ -1,0 +1,41 @@
+---
+
+archcodex.infra:
+  inherits: base
+  mixins:
+    - dip
+  description: Infrastructure layer - external system adapters
+  rationale: |
+    Adapters for external systems (file system, git, APIs). Implements interfaces
+    defined in the domain layer. Isolates external dependencies from core logic.
+
+    Use for: General infrastructure code not covered by specific subcategories.
+    Prefer: infra.fs, infra.adapter, infra.validator for specific concerns.
+  reference_implementations:
+    - src/utils/file-system.ts
+    - src/utils/git.ts
+  code_pattern: |-
+    import type { ISomePort } from '../core/ports.js';
+
+    /**
+     * Adapter for external system X.
+     * Implements the port interface defined in the domain layer.
+     */
+    export class XxxAdapter implements ISomePort {
+      async execute(input: Input): Promise<Output> {
+        // Wrap external system calls
+        // Handle errors gracefully with sensible defaults
+      }
+    }
+  constraints:
+    - rule: forbid_import
+      value:
+        - commander
+        - ../cli
+      severity: error
+      why: "[DIP] Infrastructure must not depend on CLI concerns"
+  hints:
+    - "[DIP] Infrastructure implements interfaces defined in domain"
+    - Isolate external dependencies here
+    - "[OCP] Add new adapters without modifying existing ones"
+    - Handle external system failures gracefully with sensible defaults

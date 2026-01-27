@@ -1,0 +1,26 @@
+---
+
+archcodex.common:
+  inherits: base
+  description: Common foundation - zero dependencies on other layers
+  rationale: |
+    The lowest layer containing pure types and constants shared everywhere.
+    Has zero dependencies on other application layers to avoid circular imports.
+
+    Use for: Shared constants, error codes, and foundational types.
+    Don't use for: Business logic, I/O operations, or anything with side effects.
+  constraints:
+    - rule: forbid_import
+      value:
+        - ../core
+        - ../cli
+        - ../validators
+        - ../llm
+        - fs
+        - path
+      severity: error
+      why: Common layer is the foundation - no external dependencies
+  hints:
+    - Pure types and constants only
+    - No I/O operations
+    - No side effects

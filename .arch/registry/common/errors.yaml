@@ -1,0 +1,33 @@
+---
+
+archcodex.common.errors:
+  inherits: archcodex.common
+  mixins:
+    - tested
+  description: Error types and codes - the error contract
+  rationale: |
+    Error type definitions and error codes used throughout the application.
+    Provides consistent error handling with structured, serializable errors.
+
+    Use for: Error classes, error codes, and error utility functions.
+    Don't use for: Throwing errors (that happens where errors occur).
+  constraints:
+    - rule: max_file_lines
+      value: 200
+      exclude_comments: true
+      severity: warning
+      why: Error definitions can be extensive but should stay focused
+    # Coverage: Every error code must be used somewhere in the codebase
+    - rule: require_coverage
+      value:
+        source_type: object_keys
+        source_pattern: "ErrorCodes"
+        in_files: "src/utils/errors.ts"
+        target_pattern: "ErrorCodes.${value}"
+        in_target_files: "src/**/*.ts"
+      severity: warning
+      why: Error codes should be used; unused codes indicate dead code
+  hints:
+    - Define error codes as constants
+    - Error classes should be simple and serializable
+    - Include toJSON() for structured error output

@@ -1,0 +1,30 @@
+---
+
+archcodex.core.domain:
+  inherits: archcodex.core
+  mixins:
+    - dip
+    - tested
+  description: Domain layer - pure business logic and schemas
+  rationale: |
+    The base domain architecture for general business logic that doesn't fit
+    a more specific category. Use this for orchestration, factories, and logic
+    that coordinates between more specialized domain components.
+
+    Use domain.schema for Zod schemas, domain.resolver for resolution logic,
+    domain.constraint for validators, domain.parser for parsing, domain.llm for LLM providers.
+  constraints:
+    # commander, chalk, ora, ts-morph, fast-glob all inherited from archcodex.core
+    - rule: forbid_pattern
+      value: '''\.arch/registry\.yaml'''
+      severity: error
+      why: Use loadRegistry() or getRegistryContent() from registry/loader.ts - supports multi-file registry
+      unless:
+        - "@intent:registry-infrastructure"
+      alternative: src/core/registry/loader.ts
+      intent: Decouple domain from registry file layout details
+      counterexamples: ["readFile('.arch/registry.yaml')", "fs.readFileSync('.arch/registry.yaml')"]
+      codeExample: "const registry = await loadRegistry(projectRoot);"
+  hints:
+    - Domain logic should be easily testable
+    - "[DIP] Domain defines interfaces, infrastructure implements them"

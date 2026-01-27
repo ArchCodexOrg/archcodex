@@ -1,0 +1,213 @@
+# Action Registry - Intent-based discovery for common tasks
+# Maps "I want to add X" to architecture + checklist + intents
+
+---
+
+actions:
+  # === CLI Commands ===
+  add-command:
+    description: "Add a new CLI command to ArchCodex"
+    aliases:
+      - "create command"
+      - "new command"
+      - "add cli command"
+    architecture: archcodex.cli.command
+    checklist:
+      - "Define command options and arguments"
+      - "Implement the run function"
+      - "Register command in src/cli/index.ts"
+      - "Add command to CLAUDE.md documentation"
+      - "Write unit tests"
+    suggested_path: "src/cli/commands"
+    file_pattern: "${name}.ts"
+    test_pattern: "tests/unit/cli/commands/${name}.test.ts"
+    variables:
+      - name: name
+        prompt: "Command name (e.g., 'health', 'verify')"
+
+  add-formatter:
+    description: "Add a new output formatter for CLI commands"
+    aliases:
+      - "create formatter"
+      - "new formatter"
+      - "add output format"
+    architecture: archcodex.cli.formatter
+    checklist:
+      - "Implement format function"
+      - "Handle both human-readable and JSON output"
+      - "Add formatter to relevant command"
+    suggested_path: "src/cli/formatters"
+    file_pattern: "${name}.ts"
+
+  # === Core Domain ===
+  add-constraint:
+    description: "Add a new validation constraint type"
+    aliases:
+      - "create constraint"
+      - "new constraint"
+      - "add validation rule"
+      - "add rule"
+    architecture: archcodex.core.domain.constraint
+    intents:
+      - stateless
+    checklist:
+      - "Define constraint rule name in schema.ts ConstraintRuleSchema"
+      - "Implement validation logic in new constraint file"
+      - "Register constraint in constraint registry"
+      - "Add constraint to exports"
+      - "Document constraint in README"
+      - "Write unit tests"
+    suggested_path: "src/core/constraints"
+    file_pattern: "${name}.ts"
+    test_pattern: "tests/unit/core/constraints/${name}.test.ts"
+    variables:
+      - name: name
+        prompt: "Constraint name (e.g., 'require-logging', 'max-complexity')"
+      - name: rule
+        prompt: "Constraint rule type (for registry.yaml)"
+
+  add-engine:
+    description: "Add a new domain engine or orchestrator"
+    aliases:
+      - "create engine"
+      - "new engine"
+      - "add orchestrator"
+      - "add use case"
+    architecture: archcodex.core.engine
+    intents:
+      - stateless
+    checklist:
+      - "Define engine interface and types"
+      - "Implement core orchestration logic"
+      - "Handle error cases gracefully"
+      - "Write unit tests with mocks for dependencies"
+    suggested_path: "src/core"
+    file_pattern: "${name}/engine.ts"
+
+  add-parser:
+    description: "Add a new domain parser"
+    aliases:
+      - "create parser"
+      - "new parser"
+      - "add extractor"
+    architecture: archcodex.core.domain.parser
+    intents:
+      - stateless
+    checklist:
+      - "Define input/output types"
+      - "Implement parsing logic"
+      - "Handle edge cases and malformed input"
+      - "Write unit tests with various inputs"
+    suggested_path: "src/core"
+    file_pattern: "${name}/parser.ts"
+
+  add-resolver:
+    description: "Add a new domain resolver"
+    aliases:
+      - "create resolver"
+      - "new resolver"
+    architecture: archcodex.core.domain.resolver
+    checklist:
+      - "Define resolution strategy"
+      - "Implement resolution logic"
+      - "Handle not-found cases"
+      - "Write unit tests"
+    suggested_path: "src/core"
+    file_pattern: "${name}/resolver.ts"
+
+  # === Validators ===
+  add-validator:
+    description: "Add a new language-specific AST validator"
+    aliases:
+      - "create validator"
+      - "new language validator"
+      - "add language support"
+    architecture: archcodex.infra.validator
+    checklist:
+      - "Implement ILanguageValidator interface"
+      - "Define language capabilities"
+      - "Register in validator registry"
+      - "Add file extension mappings"
+      - "Write unit tests with sample code"
+    suggested_path: "src/validators"
+    file_pattern: "${language}.ts"
+    test_pattern: "tests/unit/validators/${language}.test.ts"
+    variables:
+      - name: language
+        prompt: "Language name (e.g., 'python', 'go', 'rust')"
+
+  # === MCP Tools ===
+  add-mcp-tool:
+    description: "Add a new MCP server tool"
+    aliases:
+      - "create mcp tool"
+      - "new mcp tool"
+      - "add tool"
+    architecture: archcodex.cli.mcp.handler
+    checklist:
+      - "Define tool schema with parameters"
+      - "Implement tool handler"
+      - "Register in MCP server"
+      - "Document in README"
+      - "Test with MCP inspector"
+    suggested_path: "src/mcp"
+    file_pattern: "tools/${name}.ts"
+    variables:
+      - name: name
+        prompt: "Tool name (e.g., 'discover', 'validate')"
+
+  # === Utilities ===
+  add-utility:
+    description: "Add a shared utility function"
+    aliases:
+      - "create utility"
+      - "new utility"
+      - "add helper"
+      - "add util"
+    architecture: archcodex.util
+    intents:
+      - stateless
+    checklist:
+      - "Implement pure function"
+      - "Add to utils/index.ts exports"
+      - "Write unit tests"
+    suggested_path: "src/utils"
+    file_pattern: "${name}.ts"
+
+  # === Testing ===
+  add-test:
+    description: "Add unit tests for existing code"
+    aliases:
+      - "create test"
+      - "new test"
+      - "add unit test"
+    architecture: archcodex.test.unit
+    checklist:
+      - "Import the module to test"
+      - "Write describe blocks for each function"
+      - "Cover happy path and edge cases"
+      - "Add error case tests"
+    suggested_path: "tests/unit"
+    file_pattern: "${module}.test.ts"
+    variables:
+      - name: module
+        prompt: "Module path relative to src (e.g., 'core/constraints/forbid-import')"
+
+  # === Schema/Types ===
+  add-schema:
+    description: "Add a new Zod schema for validation"
+    aliases:
+      - "create schema"
+      - "new schema"
+      - "add zod schema"
+      - "add types"
+    architecture: archcodex.core.domain.schema
+    intents:
+      - stateless
+    checklist:
+      - "Define Zod schema with proper types"
+      - "Export inferred TypeScript type"
+      - "Add to module exports"
+      - "Write tests for validation edge cases"
+    suggested_path: "src/core"
+    file_pattern: "${name}/schema.ts"
