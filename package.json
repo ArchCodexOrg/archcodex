@@ -1,6 +1,6 @@
 {
   "name": "archcodex",
-  "version": "1.37.0",
+  "version": "1.38.0",
   "description": "The Architectural Compiler for LLM Agents - Transform architectural guidelines into executable constraints",
   "type": "module",
   "main": "./dist/index.js",

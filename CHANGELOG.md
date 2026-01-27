@@ -8,14 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Python language validator — regex-based parsing (experimental)
-- Go language validator — regex-based parsing (experimental)
-- Multi-language validation support (mixed TypeScript/Python/Go projects)
-- Test fixtures for Python and Go validators
 - GitHub Actions CI/CD workflow
 - ESLint flat config for contributors
 - CONTRIBUTING.md with development guidelines
 - LICENSE file (MIT)
+
+## [1.38.0] - 2026-01-27
+
+### Added
+- Python language validator — regex-based parsing (experimental)
+- Go language validator — regex-based parsing (experimental)
+- Multi-language validation support (mixed TypeScript/Python/Go projects)
+- Test fixtures for Python and Go validators
 
 ## [1.37.0] - 2025-01-25
 
