@@ -1,6 +1,6 @@
 /**
- * @arch archcodex.infra.validator
- * @intent:stateless
+ * @arch archcodex.infra
+ * @intent:ast-analysis
  *
  * Type extractor for extracting full type definitions from TypeScript files.
  * Uses ts-morph for AST analysis.

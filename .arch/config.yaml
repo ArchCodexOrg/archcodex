@@ -21,7 +21,7 @@ file_policies:
 
 files:
   scan:
-    include: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx']
+    include: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py']
     exclude:
       # Defaults
       - '**/node_modules/**'

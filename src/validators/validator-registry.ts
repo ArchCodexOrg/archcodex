@@ -1,5 +1,5 @@
 /**
- * @arch archcodex.core.domain
+ * @arch archcodex.infra.validator-support
  *
  * Validator registry for managing language validators.
  * Supports plugin architecture for adding new language support.

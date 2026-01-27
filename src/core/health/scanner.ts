@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { globFiles, readFile } from '../../utils/file-system.js';
 import { extractArchId, parseArchTags } from '../arch-tag/parser.js';
-import { TypeScriptValidator } from '../../validators/typescript.js';
+import { validatorRegistry } from '../../validators/validator-registry.js';
 import { HealthCacheManager } from '../cache/health-cache.js';
 import type { HealthCache } from '../cache/health-cache.js';
 import type { OverrideTag } from '../arch-tag/types.js';
@@ -250,8 +250,12 @@ export class UnifiedHealthScanner {
       return metadata.semanticModel!;
     }
 
-    // Parse fresh
-    const validator = new TypeScriptValidator();
+    // Parse fresh using the appropriate validator for this file type
+    const ext = path.extname(metadata.absolutePath).toLowerCase();
+    const validator = validatorRegistry.getForExtension(ext);
+    if (!validator) {
+      throw new Error(`No validator registered for extension: ${ext}`);
+    }
     const model = await validator.parseFile(
       metadata.absolutePath,
       metadata.content

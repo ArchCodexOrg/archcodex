@@ -1,5 +1,5 @@
 /**
- * @arch archcodex.core.domain
+ * @arch archcodex.infra.validator-support
  *
  * Language capabilities definitions.
  * Each language has different features that affect which constraints apply.
@@ -98,7 +98,7 @@ export function constraintAppliesTo(
     case 'forbid_decorator':
       return caps.hasDecorators;
     case 'max_public_methods':
-      return caps.hasVisibilityModifiers || true; // Can still count methods
+      return true; // All languages can count methods regardless of visibility modifiers
     default:
       // All other constraints apply to all languages
       return true;

@@ -7,8 +7,8 @@
  * Supports function-level intent exemptions via the `unless` field.
  */
 import type { Constraint } from '../registry/schema.js';
-import type { ConstraintContext, ConstraintResult, Violation, Suggestion, DidYouMean } from './types.js';
-import { BaseConstraintValidator } from './base.js';
+import type { ConstraintContext, ConstraintResult, Violation } from './types.js';
+import { BaseForbidValidator } from './forbid-base.js';
 import { ErrorCodes } from '../../utils/errors.js';
 import { getPatternFromConstraint } from './pattern-utils.js';
 import { getAllFunctionsWithIntents, findContainingFunction } from './intent-resolver.js';
@@ -26,7 +26,7 @@ import { getAllFunctionsWithIntents, findContainingFunction } from './intent-res
  * The `pattern` field specifies the regex to match.
  * The `value` field provides a human-readable description.
  */
-export class ForbidPatternValidator extends BaseConstraintValidator {
+export class ForbidPatternValidator extends BaseForbidValidator {
   readonly rule = 'forbid_pattern' as const;
   readonly errorCode = ErrorCodes.FORBID_PATTERN;
 
@@ -126,112 +126,11 @@ export class ForbidPatternValidator extends BaseConstraintValidator {
   }
 
   /**
-   * Extract intent exemptions from the unless clause.
-   * Returns intent names without the @intent: prefix.
-   */
-  private extractIntentExemptions(unless?: string[]): string[] {
-    if (!unless) return [];
-
-    return unless
-      .filter(u => u.startsWith('@intent:'))
-      .map(u => u.slice(8)); // Remove '@intent:' prefix
-  }
-
-
-  /**
    * Get line number from character index.
    */
   private getLineNumber(content: string, index: number): number {
     const lines = content.substring(0, index).split('\n');
     return lines.length;
-  }
-
-  /**
-   * Build a structured suggestion for fixing the forbidden pattern.
-   */
-  private buildSuggestion(constraint: Constraint, matchedText?: string): Suggestion | undefined {
-    // If alternative is provided, suggest replacement
-    if (constraint.alternative) {
-      return {
-        action: 'replace',
-        target: matchedText,
-        replacement: constraint.alternative,
-      };
-    }
-
-    // If detailed alternatives are provided
-    if (constraint.alternatives && constraint.alternatives.length > 0) {
-      const alt = constraint.alternatives[0];
-      return {
-        action: 'replace',
-        target: matchedText,
-        replacement: alt.module,
-        importStatement: alt.export
-          ? `import { ${alt.export} } from '${alt.module}';`
-          : undefined,
-      };
-    }
-
-    // Default: suggest removal
-    return {
-      action: 'remove',
-      target: matchedText,
-    };
-  }
-
-  /**
-   * Build a "did you mean" suggestion from alternatives or pattern registry.
-   */
-  private buildDidYouMean(constraint: Constraint, context: ConstraintContext): DidYouMean | undefined {
-    // If simple alternative
-    if (constraint.alternative) {
-      return {
-        file: constraint.alternative,
-        description: constraint.why || 'Use the approved alternative instead',
-      };
-    }
-
-    // If detailed alternatives
-    if (constraint.alternatives && constraint.alternatives.length > 0) {
-      const alt = constraint.alternatives[0];
-      return {
-        file: alt.module,
-        export: alt.export,
-        description: alt.description || 'Use the canonical implementation',
-        exampleUsage: alt.example,
-      };
-    }
-
-    // Try pattern registry lookup based on constraint description
-    if (context.patternRegistry) {
-      const description = typeof constraint.value === 'string' ? constraint.value.toLowerCase() : '';
-      const matchingPattern = this.findMatchingPattern(context.patternRegistry, description);
-      if (matchingPattern) {
-        return {
-          file: matchingPattern.canonical,
-          export: matchingPattern.exports?.[0],
-          description: matchingPattern.usage || 'Use the canonical implementation',
-          exampleUsage: matchingPattern.example,
-        };
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Find a pattern in the registry that matches the description.
-   */
-  private findMatchingPattern(registry: import('../patterns/types.js').PatternRegistry, description: string): import('../patterns/types.js').Pattern | undefined {
-    if (!registry.patterns) return undefined;
-
-    for (const [, pattern] of Object.entries(registry.patterns)) {
-      if (pattern.keywords?.some(k => description.includes(k.toLowerCase()) || k.toLowerCase().includes(description))) {
-        return pattern;
-      }
-    }
-
-    return undefined;
   }
 
   protected getFixHint(constraint: Constraint): string {

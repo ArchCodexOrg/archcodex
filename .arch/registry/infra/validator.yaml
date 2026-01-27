@@ -1,23 +1,55 @@
 ---
 
+archcodex.infra.validator-support:
+  inherits: archcodex.infra
+  mixins:
+    - ocp
+  description: Validator subsystem support - registry, capabilities, and types
+  rationale: |
+    Support infrastructure for the language validator plugin system.
+    Defines the contracts (interfaces, types, capabilities) and the registry
+    that manages validator instances.
+
+    Use for: Validator registry, language capabilities, validator interfaces/types.
+    Don't use for: Actual language validator implementations (use infra.validator).
+  reference_implementations:
+    - src/validators/validator-registry.ts
+    - src/validators/capabilities.ts
+    - src/validators/register.ts
+  file_pattern: ${name}.ts
+  default_path: src/validators
+  constraints:
+    - rule: forbid_import
+      value:
+        - commander
+        - chalk
+        - ../cli
+      severity: error
+      why: "[DIP] Validator support must not depend on CLI concerns"
+  hints:
+    - "[OCP] Support new languages by extending capabilities and registering new validators"
+    - "[DIP] Define interfaces here, implementations go in infra.validator"
+
 archcodex.infra.validator:
   inherits: archcodex.infra
   mixins:
     - ocp
     - lsp
-  description: Language-specific AST validators
+  description: Language-specific source code validators
   rationale: |
-    AST-based validators that analyze source code structure. Uses ts-morph for
-    TypeScript analysis. Each validator implements ILanguageValidator interface.
+    Validators that analyze source code structure and produce SemanticModel.
+    Each validator implements ILanguageValidator interface and uses a parser
+    appropriate for its target language (e.g., ts-morph for TypeScript,
+    regex-based parsing for Python).
 
-    Use for: Files that parse and analyze source code AST for constraint validation.
+    Use for: Files that parse and analyze source code for constraint validation.
     Don't use for: Constraint logic itself (use core.domain.constraint).
   reference_implementations:
     - src/validators/typescript.ts
+    - src/validators/python.ts
   file_pattern: ${name}.ts
   default_path: src/validators
   code_pattern: |-
-    import { Project } from 'ts-morph';
     import type { ILanguageValidator } from './interface.types.js';
     import type { SemanticModel, LanguageCapabilities } from './semantic.types.js';
 
@@ -26,27 +58,25 @@ archcodex.infra.validator:
       readonly supportedExtensions = ['.xxx'];
       readonly capabilities: LanguageCapabilities = { ... };
 
-      private project: Project;
-
-      constructor() {
-        this.project = new Project({ skipAddingFilesFromTsConfig: true });
-      }
-
       async parseFile(filePath: string, content?: string): Promise<SemanticModel> {
-        // Parse file into SemanticModel
-        // Clean up temp source files after parsing
+        // Parse file into SemanticModel using language-appropriate parser
       }
 
       dispose(): void {
-        // Clean up project resources
+        // Clean up resources if needed
       }
     }
   constraints:
     - rule: require_import
       value:
-        - ts-morph
-      severity: warning
-      why: TypeScript validator should use ts-morph
+        - ./interface.types.js
+      severity: error
+      why: "[LSP] All validators must implement ILanguageValidator"
+    - rule: require_import
+      value:
+        - ./semantic.types.js
+      severity: error
+      why: All validators must produce SemanticModel
     - rule: forbid_import
       value:
         - commander

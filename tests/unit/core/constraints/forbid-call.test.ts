@@ -514,7 +514,7 @@ describe('ForbidCallValidator', () => {
         action: 'replace',
         target: 'axios',
         replacement: 'src/utils/http-client',
-        importStatement: "import * from 'src/utils/http-client';",
+        importStatement: undefined,
       });
     });
   });

@@ -7,8 +7,8 @@
  * Supports function-level intent exemptions.
  */
 import type { Constraint } from '../registry/schema.js';
-import type { ConstraintContext, ConstraintResult, Violation, Suggestion, DidYouMean } from './types.js';
-import { BaseConstraintValidator } from './base.js';
+import type { ConstraintContext, ConstraintResult, Violation } from './types.js';
+import { BaseForbidValidator } from './forbid-base.js';
 import { ErrorCodes } from '../../utils/errors.js';
 import { findMatchingCallPattern } from './pattern-utils.js';
 import { getAllFunctionsWithIntents, getEffectiveIntentsForCall } from './intent-resolver.js';
@@ -22,7 +22,7 @@ import { getAllFunctionsWithIntents, getEffectiveIntentsForCall } from './intent
  * - Wildcard: "api.*" matches api.fetch(), api.post()
  * - Deep wildcard: "api.**" matches api.client.fetch()
  */
-export class ForbidCallValidator extends BaseConstraintValidator {
+export class ForbidCallValidator extends BaseForbidValidator {
   readonly rule = 'forbid_call' as const;
   readonly errorCode = ErrorCodes.FORBID_CALL;
 
@@ -79,107 +79,7 @@ export class ForbidCallValidator extends BaseConstraintValidator {
     return { passed: violations.length === 0, violations };
   }
 
-  /**
-   * Extract intent names from unless conditions.
-   * Returns intent names (without @intent: prefix) for intent-based exemptions.
-   */
-  private extractIntentExemptions(unless?: string[]): string[] {
-    if (!unless) return [];
-    return unless
-      .filter(u => u.startsWith('@intent:'))
-      .map(u => u.slice(8)); // Remove "@intent:" prefix
-  }
-
   // Pattern matching delegated to shared findMatchingCallPattern from pattern-utils.ts
-
-  /**
-   * Build a structured suggestion for replacing the forbidden call.
-   */
-  private buildSuggestion(constraint: Constraint, callee: string): Suggestion | undefined {
-    // If alternative is provided
-    if (constraint.alternative) {
-      return {
-        action: 'replace',
-        target: callee,
-        replacement: constraint.alternative,
-      };
-    }
-
-    // If detailed alternatives are provided
-    if (constraint.alternatives && constraint.alternatives.length > 0) {
-      const alt = constraint.alternatives[0];
-      return {
-        action: 'replace',
-        target: callee,
-        replacement: alt.export || alt.module,
-        importStatement: alt.export
-          ? `import { ${alt.export} } from '${alt.module}';`
-          : `import * from '${alt.module}';`,
-      };
-    }
-
-    // Default: suggest removal
-    return {
-      action: 'remove',
-      target: callee,
-    };
-  }
-
-  /**
-   * Build a "did you mean" suggestion from alternatives or pattern registry.
-   */
-  private buildDidYouMean(constraint: Constraint, context: ConstraintContext, callee: string): DidYouMean | undefined {
-    // If simple alternative
-    if (constraint.alternative) {
-      return {
-        file: constraint.alternative,
-        description: constraint.why || 'Use the approved alternative instead',
-      };
-    }
-
-    // If detailed alternatives
-    if (constraint.alternatives && constraint.alternatives.length > 0) {
-      const alt = constraint.alternatives[0];
-      return {
-        file: alt.module,
-        export: alt.export,
-        description: alt.description || 'Use the canonical implementation',
-        exampleUsage: alt.example,
-      };
-    }
-
-    // Try pattern registry lookup
-    if (context.patternRegistry) {
-      const matchingPattern = this.findMatchingPattern(context.patternRegistry, callee);
-      if (matchingPattern) {
-        return {
-          file: matchingPattern.canonical,
-          export: matchingPattern.exports?.[0],
-          description: matchingPattern.usage || 'Use the canonical implementation',
-          exampleUsage: matchingPattern.example,
-        };
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Find a pattern in the registry that matches the forbidden call.
-   */
-  private findMatchingPattern(registry: import('../patterns/types.js').PatternRegistry, callee: string): import('../patterns/types.js').Pattern | undefined {
-    if (!registry.patterns) return undefined;
-
-    const calleeLower = callee.toLowerCase();
-
-    for (const [, pattern] of Object.entries(registry.patterns)) {
-      if (pattern.keywords?.some(k => calleeLower.includes(k.toLowerCase()) || k.toLowerCase().includes(calleeLower))) {
-        return pattern;
-      }
-    }
-
-    return undefined;
-  }
 
   protected getFixHint(constraint: Constraint): string {
     if (constraint.alternative) {

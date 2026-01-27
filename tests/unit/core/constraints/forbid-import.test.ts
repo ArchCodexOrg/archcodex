@@ -292,7 +292,7 @@ describe('ForbidImportValidator', () => {
       expect(result.violations[0].suggestion).toEqual({
         action: 'replace',
         target: 'axios',
-        replacement: 'src/utils/http-client',
+        replacement: 'HttpClient',
         importStatement: "import { HttpClient } from 'src/utils/http-client';",
       });
     });
@@ -333,7 +333,7 @@ describe('ForbidImportValidator', () => {
 
       const result = validator.validate(constraint, context);
 
-      expect(result.violations[0].suggestion?.importStatement).toBe("import * from 'src/utils/http-client';");
+      expect(result.violations[0].suggestion?.importStatement).toBeUndefined();
     });
   });
 

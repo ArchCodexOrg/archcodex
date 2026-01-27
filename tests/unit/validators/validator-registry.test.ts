@@ -303,6 +303,138 @@ describe('ValidatorRegistry', () => {
     });
   });
 
+  describe('multi-language registration', () => {
+    it('should register multiple validators for different languages', () => {
+      const tsValidator = createMockValidator();
+      const pyValidator: ILanguageValidator = {
+        supportedLanguages: ['python'],
+        supportedExtensions: ['.py'],
+        capabilities: {
+          hasClassInheritance: true,
+          hasInterfaces: true,
+          hasDecorators: true,
+          hasVisibilityModifiers: false,
+        },
+        parseFile: vi.fn().mockResolvedValue({} as SemanticModel),
+        dispose: vi.fn(),
+      };
+
+      validatorRegistry.register(
+        'typescript', () => tsValidator,
+        ['typescript', 'javascript'], ['.ts', '.tsx', '.js', '.jsx']
+      );
+      validatorRegistry.register(
+        'python', () => pyValidator,
+        ['python'], ['.py']
+      );
+
+      expect(validatorRegistry.getRegisteredValidators()).toContain('typescript');
+      expect(validatorRegistry.getRegisteredValidators()).toContain('python');
+    });
+
+    it('should resolve correct validator by extension across languages', () => {
+      const tsValidator = createMockValidator();
+      const pyValidator: ILanguageValidator = {
+        supportedLanguages: ['python'],
+        supportedExtensions: ['.py'],
+        capabilities: {
+          hasClassInheritance: true,
+          hasInterfaces: true,
+          hasDecorators: true,
+          hasVisibilityModifiers: false,
+        },
+        parseFile: vi.fn().mockResolvedValue({} as SemanticModel),
+        dispose: vi.fn(),
+      };
+
+      validatorRegistry.register(
+        'typescript', () => tsValidator,
+        ['typescript'], ['.ts', '.tsx']
+      );
+      validatorRegistry.register(
+        'python', () => pyValidator,
+        ['python'], ['.py']
+      );
+
+      expect(validatorRegistry.getForExtension('.ts')).toBe(tsValidator);
+      expect(validatorRegistry.getForExtension('.tsx')).toBe(tsValidator);
+      expect(validatorRegistry.getForExtension('.py')).toBe(pyValidator);
+      expect(validatorRegistry.getForExtension('.rs')).toBeNull();
+    });
+
+    it('should return different capabilities per language', () => {
+      const tsCaps = {
+        hasClassInheritance: true,
+        hasInterfaces: true,
+        hasDecorators: true,
+        hasVisibilityModifiers: true,
+      };
+      const pyCaps = {
+        hasClassInheritance: true,
+        hasInterfaces: true,
+        hasDecorators: true,
+        hasVisibilityModifiers: false,
+      };
+
+      validatorRegistry.register(
+        'typescript', () => createMockValidator(),
+        ['typescript'], ['.ts'], tsCaps
+      );
+      validatorRegistry.register(
+        'python', () => createMockValidator(),
+        ['python'], ['.py'], pyCaps
+      );
+
+      expect(validatorRegistry.getCapabilitiesForExtension('.ts')?.hasVisibilityModifiers).toBe(true);
+      expect(validatorRegistry.getCapabilitiesForExtension('.py')?.hasVisibilityModifiers).toBe(false);
+    });
+
+    it('should list all supported extensions from all validators', () => {
+      validatorRegistry.register(
+        'typescript', () => createMockValidator(),
+        ['typescript'], ['.ts', '.tsx']
+      );
+      validatorRegistry.register(
+        'python', () => createMockValidator(),
+        ['python'], ['.py']
+      );
+
+      const extensions = validatorRegistry.getSupportedExtensions();
+      expect(extensions).toContain('.ts');
+      expect(extensions).toContain('.tsx');
+      expect(extensions).toContain('.py');
+      expect(extensions).toHaveLength(3);
+    });
+
+    it('should dispose all validators from all languages', () => {
+      const tsValidator = createMockValidator();
+      const pyValidator: ILanguageValidator = {
+        supportedLanguages: ['python'],
+        supportedExtensions: ['.py'],
+        capabilities: {
+          hasClassInheritance: true,
+          hasInterfaces: true,
+          hasDecorators: true,
+          hasVisibilityModifiers: false,
+        },
+        parseFile: vi.fn().mockResolvedValue({} as SemanticModel),
+        dispose: vi.fn(),
+      };
+
+      validatorRegistry.register('typescript', () => tsValidator, ['typescript'], ['.ts']);
+      validatorRegistry.register('python', () => pyValidator, ['python'], ['.py']);
+
+      // Instantiate both
+      validatorRegistry.getForExtension('.ts');
+      validatorRegistry.getForExtension('.py');
+
+      validatorRegistry.disposeAll();
+
+      expect(tsValidator.dispose).toHaveBeenCalled();
+      expect(pyValidator.dispose).toHaveBeenCalled();
+    });
+  });
+
   describe('clear', () => {
     it('should remove all registrations', () => {
       validatorRegistry.register(

@@ -468,7 +468,7 @@ line 4`);
       expect(result.violations[0].suggestion).toEqual({
         action: 'replace',
         target: 'console.log',
-        replacement: 'src/utils/logger',
+        replacement: 'logger',
         importStatement: "import { logger } from 'src/utils/logger';",
       });
     });

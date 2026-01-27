@@ -12,8 +12,7 @@ import {
   validatorRegistry,
   type ILanguageValidator,
 } from '../../validators/validator-registry.js';
-import { TypeScriptValidator } from '../../validators/typescript.js';
-import { TYPESCRIPT_CAPABILITIES } from '../../validators/capabilities.js';
+import '../../validators/register.js';
 import { readFile, basename } from '../../utils/file-system.js';
 import type {
   ValidationResult,
@@ -26,10 +25,6 @@ import { evaluateCondition, hasCondition } from '../constraints/condition-evalua
 import type { OverrideTag, IntentAnnotation } from '../arch-tag/types.js';
 import type { PatternRegistry } from '../patterns/types.js';
 import { stringSimilarity } from '../../utils/pattern-matcher.js';
-
-// Register the TypeScript validator on module load
-validatorRegistry.register('typescript', () => new TypeScriptValidator(),
-  ['typescript', 'javascript'], ['.ts', '.tsx', '.js', '.jsx'], TYPESCRIPT_CAPABILITIES);
 
 /** Validation engine that orchestrates constraint checking. */
 export class ValidationEngine {

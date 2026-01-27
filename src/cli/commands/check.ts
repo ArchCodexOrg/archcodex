@@ -122,7 +122,7 @@ export function createCheckCommand(): Command {
         if (effectiveSettings.onlyStagedFiles) {
           // Only check staged files
           const stagedFiles = await getStagedFiles(projectRoot);
-          allFiles = stagedFiles.filter(f => /\.(ts|tsx|js|jsx)$/.test(f));
+          allFiles = stagedFiles.filter(f => /\.(ts|tsx|js|jsx|py)$/.test(f));
         } else if (filePatterns.length === 0) {
           // Default: use patterns from config.files.scan (configurable)
           const scanPatterns = config.files.scan;
@@ -372,7 +372,7 @@ async function resolveFilePatterns(patterns: string[], projectRoot: string): Pro
       allFiles.push(filePath);
     }
   }
-  return [...new Set(allFiles)].filter(f => /\.(ts|tsx|js|jsx)$/.test(f));
+  return [...new Set(allFiles)].filter(f => /\.(ts|tsx|js|jsx|py)$/.test(f));
 }
 
 /** Create formatter based on output format. */
