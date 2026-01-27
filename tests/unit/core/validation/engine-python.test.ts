@@ -621,6 +621,88 @@ describe('ValidationEngine - Python support', () => {
       expect(result.violations.some(v => v.rule === 'require_import')).toBe(true);
     });
 
+    it('should detect forbid_call violation in Python file', async () => {
+      const config = createConfig();
+      const registry = createRegistry({
+        'app.service': {
+          inherits: 'base',
+          description: 'Service',
+          constraints: [
+            { rule: 'forbid_call', value: ['exit'], severity: 'error' },
+          ],
+          hints: [],
+        },
+      });
+
+      // Need functionCalls in mock
+      mockPythonParseFile.mockImplementationOnce((_path: string, content?: string) => {
+        return Promise.resolve({
+          language: 'python',
+          filePath: _path,
+          fileName: _path.split('/').pop(),
+          extension: '.py',
+          content: content || '',
+          lineCount: 3,
+          locCount: 2,
+          imports: [],
+          classes: [],
+          interfaces: [],
+          functions: [],
+          functionCalls: [
+            {
+              callee: 'exit',
+              methodName: 'exit',
+              arguments: [],
+              argumentCount: 0,
+              location: { line: 2, column: 1 },
+              rawText: 'exit(...)',
+              controlFlow: { inTryBlock: false, inCatchBlock: false, inFinallyBlock: false, tryDepth: 0 },
+              isConstructorCall: false,
+              isOptionalChain: false,
+            },
+          ],
+          mutations: [],
+          exports: [],
+        });
+      });
+
+      vi.mocked(readFile).mockResolvedValue(
+        '# @arch app.service\n' +
+        'exit(1)\n'
+      );
+
+      const engine = new ValidationEngine(projectRoot, config, registry);
+      const result = await engine.validateFile('src/services/bad.py');
+
+      expect(result.violations.some(v => v.rule === 'forbid_call')).toBe(true);
+    });
+
+    it('should detect require_test_file violation for Python file', async () => {
+      const config = createConfig();
+      const registry = createRegistry({
+        'app.tested': {
+          inherits: 'base',
+          description: 'Tested module',
+          constraints: [
+            { rule: 'require_test_file', value: ['*.test.ts', '*.spec.ts', '*.test.py', 'test_*.py'], severity: 'warning' },
+          ],
+          hints: [],
+        },
+      });
+
+      vi.mocked(readFile).mockResolvedValue(
+        '# @arch app.tested\n' +
+        'class MyService:\n' +
+        '    pass\n'
+      );
+
+      const engine = new ValidationEngine(projectRoot, config, registry);
+      const result = await engine.validateFile('src/services/my_service.py');
+
+      // require_test_file checks for companion files — should warn since none exist
+      expect(result.warnings.some(v => v.rule === 'require_test_file')).toBe(true);
+    });
+
     it('should handle Python override annotations', async () => {
       const config = createConfig({
         overrides: {

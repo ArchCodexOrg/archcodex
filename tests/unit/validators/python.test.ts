@@ -418,5 +418,178 @@ describe('PythonValidator', () => {
       const printCall = model.functionCalls.find(c => c.methodName === 'print');
       expect(printCall).toBeDefined();
     });
+
+    it('handles nested classes (known limitation: inner methods included in outer)', async () => {
+      const content = [
+        'class Outer:',
+        '    def outer_method(self):',
+        '        pass',
+        '    class Inner:',
+        '        def inner_method(self):',
+        '            pass',
+      ].join('\n');
+      const model = await parse(content);
+      // Regex parser limitation: nested class methods are included in Outer's methods
+      // because extractMethods scans all indented lines until dedent to class level.
+      // Inner class is detected separately as its own class.
+      const outer = model.classes.find(c => c.name === 'Outer');
+      expect(outer).toBeDefined();
+      expect(outer!.methods.some(m => m.name === 'outer_method')).toBe(true);
+      // Known limitation: inner_method bleeds into Outer
+      expect(outer!.methods.some(m => m.name === 'inner_method')).toBe(true);
+      // Inner is also detected as a standalone class (indented, but matches pattern)
+      // This is acceptable for constraint validation purposes
+    });
+
+    it('handles decorators with arguments on functions', async () => {
+      const content = '@app.route("/api/users")\ndef list_users():\n    pass\n';
+      const model = await parse(content);
+      expect(model.functions).toHaveLength(1);
+      expect(model.functions[0].decorators).toHaveLength(1);
+      expect(model.functions[0].decorators[0].name).toBe('app.route');
+      expect(model.functions[0].decorators[0].arguments).toEqual(['"/api/users"']);
+    });
+
+    it('does not false-positive on import/class/def keywords in strings', async () => {
+      const content = [
+        'x = "import os"',
+        'y = "class Foo:"',
+        'z = "def bar():"',
+      ].join('\n');
+      const model = await parse(content);
+      // String content should not be parsed as real imports/classes/functions
+      expect(model.imports).toHaveLength(0);
+      expect(model.classes).toHaveLength(0);
+      expect(model.functions).toHaveLength(0);
+    });
+
+    it('handles triple-dot relative imports', async () => {
+      const model = await parse('from ...base import Config\n');
+      expect(model.imports).toHaveLength(1);
+      expect(model.imports[0].moduleSpecifier).toBe('...base');
+      expect(model.imports[0].namedImports).toEqual(['Config']);
+    });
+
+    it('handles multi-line from imports with trailing comma', async () => {
+      const content = [
+        'from typing import (',
+        '    List,',
+        '    Dict,',
+        '    Optional,',
+        ')',
+      ].join('\n');
+      const model = await parse(content);
+      expect(model.imports).toHaveLength(1);
+      expect(model.imports[0].moduleSpecifier).toBe('typing');
+      expect(model.imports[0].namedImports).toEqual(['List', 'Dict', 'Optional']);
+    });
+
+    it('handles classes without parentheses', async () => {
+      const content = 'class Simple:\n    x = 1\n';
+      const model = await parse(content);
+      expect(model.classes).toHaveLength(1);
+      expect(model.classes[0].name).toBe('Simple');
+      expect(model.classes[0].extends).toBeUndefined();
+    });
+
+    it('handles multiple base classes', async () => {
+      const content = 'class Multi(Base, MixinA, MixinB):\n    pass\n';
+      const model = await parse(content);
+      expect(model.classes).toHaveLength(1);
+      expect(model.classes[0].extends).toBe('Base');
+      expect(model.classes[0].implements).toEqual(['MixinA', 'MixinB']);
+    });
+
+    it('handles function with type hints and defaults', async () => {
+      const content = 'def create(name: str, age: int = 0, active: bool = True) -> dict:\n    pass\n';
+      const model = await parse(content);
+      expect(model.functions).toHaveLength(1);
+      expect(model.functions[0].parameterCount).toBe(3);
+      expect(model.functions[0].returnType).toBe('dict');
+    });
+
+    it('handles dunder methods as public', async () => {
+      const content = [
+        'class Foo:',
+        '    def __init__(self):',
+        '        pass',
+        '    def __str__(self):',
+        '        pass',
+      ].join('\n');
+      const model = await parse(content);
+      // Dunder methods (__x__) are public, not private
+      expect(model.classes[0].methods).toHaveLength(2);
+      expect(model.classes[0].methods[0].visibility).toBe('public');
+      expect(model.classes[0].methods[1].visibility).toBe('public');
+    });
+
+    it('handles finally block control flow', async () => {
+      const content = [
+        'try:',
+        '    pass',
+        'except Exception:',
+        '    pass',
+        'finally:',
+        '    cleanup()',
+      ].join('\n');
+      const model = await parse(content);
+      const call = model.functionCalls.find(c => c.methodName === 'cleanup');
+      expect(call).toBeDefined();
+      expect(call!.controlFlow.inFinallyBlock).toBe(true);
+    });
+
+    it('handles file with only comments', async () => {
+      const content = '# This is a comment\n# Another comment\n';
+      const model = await parse(content);
+      expect(model.lineCount).toBe(2);
+      expect(model.locCount).toBe(0);
+      expect(model.imports).toHaveLength(0);
+      expect(model.classes).toHaveLength(0);
+    });
+
+    it('handles augmented assignments on nested properties', async () => {
+      const content = 'self.stats.count += 1\n';
+      const model = await parse(content);
+      expect(model.mutations).toHaveLength(1);
+      expect(model.mutations[0].target).toBe('self.stats.count');
+      expect(model.mutations[0].rootObject).toBe('self');
+      expect(model.mutations[0].propertyPath).toEqual(['stats', 'count']);
+    });
+
+    it('handles classmethod decorator', async () => {
+      const content = [
+        'class Foo:',
+        '    @classmethod',
+        '    def from_dict(cls, data):',
+        '        pass',
+      ].join('\n');
+      const model = await parse(content);
+      expect(model.classes[0].methods).toHaveLength(1);
+      expect(model.classes[0].methods[0].name).toBe('from_dict');
+      expect(model.classes[0].methods[0].parameterCount).toBe(1); // cls excluded
+    });
+
+    it('handles chained method calls', async () => {
+      const content = 'result = builder.add(x).build()\n';
+      const model = await parse(content);
+      const addCall = model.functionCalls.find(c => c.methodName === 'add');
+      const buildCall = model.functionCalls.find(c => c.methodName === 'build');
+      expect(addCall).toBeDefined();
+      expect(addCall!.receiver).toBe('builder');
+      expect(buildCall).toBeDefined();
+    });
+
+    it('exports interfaces from __all__', async () => {
+      const content = [
+        '__all__ = ["IService"]',
+        'class IService(ABC):',
+        '    @abstractmethod',
+        '    def execute(self):',
+        '        pass',
+      ].join('\n');
+      const model = await parse(content);
+      expect(model.exports).toHaveLength(1);
+      expect(model.exports[0].name).toBe('IService');
+    });
   });
 });
