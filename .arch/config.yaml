@@ -80,6 +80,10 @@ overrides:
 # Layer boundary definitions for architectural enforcement
 # Run with: archcodex check --project
 layers:
+  - name: config
+    paths: ["eslint.config.js", "vitest.config.ts"]
+    can_import: []  # config files are standalone
+
   - name: utils
     paths: ["src/utils/**"]
     can_import: []  # leaf layer - no dependencies on other src layers

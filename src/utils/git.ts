@@ -1,5 +1,5 @@
 /**
- * @arch archcodex.infra.git
+ * @arch archcodex.infra.adapter
  *
  * Git integration utilities for pre-commit hooks.
  * Provides staged file detection and git state queries.

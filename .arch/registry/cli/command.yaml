@@ -128,18 +128,3 @@ archcodex.cli.command.complex:
     - Consider splitting into sub-files if exceeding 450 lines
     - Keep each feature/mode as a separate function
 
-# Large commands with embedded documentation or templates
-archcodex.cli.command.documented:
-  inherits: archcodex.cli.command
-  description: Commands with extensive embedded documentation or templates
-  rationale: |
-    Some commands display schema documentation, help text, or contain embedded examples.
-    These naturally require more lines but the extra content is documentation, not logic.
-
-    Use for: schema, help, and other documentation-heavy commands.
-    Don't use for: Regular commands that should stay thin.
-  constraints:
-    - rule: max_file_lines
-      value: 700
-      severity: warning
-      why: Documentation commands embed extensive help text and examples

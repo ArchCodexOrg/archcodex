@@ -1,5 +1,5 @@
 /**
- * @arch archcodex.cli.command.documented
+ * @arch archcodex.cli.command +documented
  * @intent:cli-output
  */
 import { Command } from 'commander';

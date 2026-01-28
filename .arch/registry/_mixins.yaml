@@ -176,3 +176,14 @@ types:
     - text: Only export types, interfaces, enums, and type guards
       example: code://src/core/health/types.ts
     - No runtime logic - only compile-time constructs
+documented:
+  description: Files with extensive embedded documentation or templates
+  rationale: |
+    Apply to files that contain extensive help text, examples, or schema
+    documentation. The extra lines are documentation content, not logic.
+  inline: allowed  # Can be used inline (+documented) for files needing larger limits
+  constraints:
+    - rule: max_file_lines
+      value: 700
+      severity: warning
+      why: Documentation-heavy files embed extensive help text and examples

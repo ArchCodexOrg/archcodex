@@ -1,5 +1,5 @@
 /**
- * @arch archcodex.infra.config
+ * @arch archcodex.infra.adapter
  *
  * Loader for .archconfig credentials file.
  * Supports loading API keys from ~/.archconfig or .archconfig in project root.
