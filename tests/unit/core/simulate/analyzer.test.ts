@@ -20,10 +20,12 @@ vi.mock('../../../../src/utils/file-system.js', () => ({
 }));
 
 vi.mock('../../../../src/core/validation/engine.js', () => ({
-  ValidationEngine: vi.fn().mockImplementation(() => ({
+  ValidationEngine: vi.fn(function() {
+    return {
     validateFiles: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 import { compareRegistries } from '../../../../src/core/diff/comparator.js';
@@ -69,7 +71,8 @@ describe('SimulationAnalyzer', () => {
     vi.mocked(globFiles).mockResolvedValue(['src/a.ts', 'src/b.ts']);
 
     // Mock ValidationEngine to return results
-    vi.mocked(ValidationEngine).mockImplementation(() => ({
+    vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
       validateFiles: vi.fn().mockResolvedValue({
         results: [
           {
@@ -92,7 +95,8 @@ describe('SimulationAnalyzer', () => {
         },
       }),
       dispose: vi.fn(),
-    } as unknown as ValidationEngine));
+    } as unknown as ValidationEngine;
+    });
   });
 
   describe('SimulationAnalyzer class', () => {
@@ -126,14 +130,17 @@ describe('SimulationAnalyzer', () => {
     it('should detect would_break files', async () => {
       // Current passes, proposed fails
       vi.mocked(ValidationEngine)
-        .mockImplementationOnce(() => ({
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{ archId: 'test.arch', status: 'pass', violations: [], warnings: [] }],
             summary: { total: 1, passed: 1, failed: 0 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine))
-        .mockImplementationOnce(() => ({
+        } as unknown as ValidationEngine;
+        })
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{
               archId: 'test.arch',
@@ -144,7 +151,8 @@ describe('SimulationAnalyzer', () => {
             summary: { total: 1, passed: 0, failed: 1 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine));
+        } as unknown as ValidationEngine;
+        });
 
       vi.mocked(globFiles).mockResolvedValue(['src/test.ts']);
 
@@ -158,7 +166,8 @@ describe('SimulationAnalyzer', () => {
     it('should detect would_fix files', async () => {
       // Current fails, proposed passes
       vi.mocked(ValidationEngine)
-        .mockImplementationOnce(() => ({
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{
               archId: 'test.arch',
@@ -169,14 +178,17 @@ describe('SimulationAnalyzer', () => {
             summary: { total: 1, passed: 0, failed: 1 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine))
-        .mockImplementationOnce(() => ({
+        } as unknown as ValidationEngine;
+        })
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{ archId: 'test.arch', status: 'pass', violations: [], warnings: [] }],
             summary: { total: 1, passed: 1, failed: 0 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine));
+        } as unknown as ValidationEngine;
+        });
 
       vi.mocked(globFiles).mockResolvedValue(['src/test.ts']);
 
@@ -189,20 +201,24 @@ describe('SimulationAnalyzer', () => {
 
     it('should skip files without @arch tag', async () => {
       vi.mocked(ValidationEngine)
-        .mockImplementationOnce(() => ({
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{ archId: null, status: 'pass', violations: [], warnings: [] }],
             summary: { total: 1, passed: 1, failed: 0 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine))
-        .mockImplementationOnce(() => ({
+        } as unknown as ValidationEngine;
+        })
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{ archId: null, status: 'pass', violations: [], warnings: [] }],
             summary: { total: 1, passed: 1, failed: 0 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine));
+        } as unknown as ValidationEngine;
+        });
 
       vi.mocked(globFiles).mockResolvedValue(['src/untagged.ts']);
 
@@ -224,7 +240,8 @@ describe('SimulationAnalyzer', () => {
 
     it('should filter by archId when specified', async () => {
       vi.mocked(ValidationEngine)
-        .mockImplementation(() => ({
+        .mockImplementation(function() {
+      return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [
               { archId: 'test.arch', status: 'pass', violations: [], warnings: [] },
@@ -233,7 +250,8 @@ describe('SimulationAnalyzer', () => {
             summary: { total: 2, passed: 2, failed: 0 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine));
+        } as unknown as ValidationEngine;
+    });
 
       vi.mocked(globFiles).mockResolvedValue(['a.ts', 'b.ts']);
 
@@ -262,7 +280,8 @@ describe('SimulationAnalyzer', () => {
 
     it('should generate safe-to-apply recommendation when only fixes occur', async () => {
       vi.mocked(ValidationEngine)
-        .mockImplementationOnce(() => ({
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{
               archId: 'test.arch',
@@ -273,14 +292,17 @@ describe('SimulationAnalyzer', () => {
             summary: { total: 1, passed: 0, failed: 1 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine))
-        .mockImplementationOnce(() => ({
+        } as unknown as ValidationEngine;
+        })
+        .mockImplementationOnce(function() {
+          return {
           validateFiles: vi.fn().mockResolvedValue({
             results: [{ archId: 'test.arch', status: 'pass', violations: [], warnings: [] }],
             summary: { total: 1, passed: 1, failed: 0 },
           }),
           dispose: vi.fn(),
-        } as unknown as ValidationEngine));
+        } as unknown as ValidationEngine;
+        });
 
       vi.mocked(globFiles).mockResolvedValue(['src/test.ts']);
 

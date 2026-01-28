@@ -56,9 +56,11 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/hydration/engine.js', () => ({
-  HydrationEngine: vi.fn().mockImplementation(() => ({
+  HydrationEngine: vi.fn(function() {
+    return {
     hydrateFile: vi.fn().mockImplementation(async () => mockHydrationResult),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/patterns/loader.js', () => ({
@@ -80,12 +82,14 @@ vi.mock('../../../../src/utils/file-system.js', () => ({
 }));
 
 vi.mock('../../../../src/core/arch-tag/parser.js', () => ({
-  parseArchTags: vi.fn().mockImplementation(() => ({
+  parseArchTags: vi.fn(function() {
+    return {
     archTag: mockArchTag,
     overrides: [],
     intents: [],
     inlineMixins: [],
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/registry/resolver.js', () => ({
@@ -141,9 +145,11 @@ describe('read command', () => {
     };
 
     // Reset the HydrationEngine mock to use the configurable behavior
-    vi.mocked(HydrationEngine).mockImplementation(() => ({
+    vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
       hydrateFile: vi.fn().mockImplementation(async () => mockHydrationResult),
-    }) as any);
+    } as any;
+    });
   });
 
   afterEach(() => {
@@ -298,9 +304,11 @@ describe('read command', () => {
   describe('content options', () => {
     it('should pass includeContent based on format', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/file.ts', '--format', 'verbose']);
@@ -313,9 +321,11 @@ describe('read command', () => {
 
     it('should exclude content by default for AI format', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/file.ts', '--format', 'ai']);
@@ -329,9 +339,11 @@ describe('read command', () => {
 
     it('should include content for AI format with --with-source', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/file.ts', '--format', 'ai', '--with-source']);
@@ -344,9 +356,11 @@ describe('read command', () => {
 
     it('should pass includePointers option', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/file.ts', '--no-pointers']);
@@ -359,9 +373,11 @@ describe('read command', () => {
 
     it('should pass token limit', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/file.ts', '--token-limit', '2000']);
@@ -385,9 +401,11 @@ describe('read command', () => {
       });
 
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/core/file.ts', '--format', 'ai']);
@@ -414,9 +432,11 @@ describe('read command', () => {
       });
 
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/core/file.ts', '--format', 'ai']);
@@ -571,9 +591,11 @@ describe('read command', () => {
   describe('arch config files', () => {
     it('should skip pattern registry for .arch/ files', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      }) as any);
+      } as any;
+    });
 
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', '.arch/config.yaml']);

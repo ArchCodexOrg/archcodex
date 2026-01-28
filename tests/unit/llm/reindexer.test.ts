@@ -25,10 +25,12 @@ vi.mock('../../../src/llm/providers/index.js', () => ({
 }));
 
 vi.mock('../../../src/llm/providers/prompt.js', () => ({
-  PromptProvider: vi.fn().mockImplementation(() => ({
+  PromptProvider: vi.fn(function() {
+    return {
     formatReindexPrompt: vi.fn().mockReturnValue('Reindex prompt output'),
     isAvailable: vi.fn().mockReturnValue(true),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../src/utils/checksum.js', () => ({

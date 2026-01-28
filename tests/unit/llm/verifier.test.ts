@@ -28,10 +28,12 @@ vi.mock('../../../src/llm/providers/index.js', () => ({
 }));
 
 vi.mock('../../../src/llm/providers/prompt.js', () => ({
-  PromptProvider: vi.fn().mockImplementation(() => ({
+  PromptProvider: vi.fn(function() {
+    return {
     formatVerificationPrompt: vi.fn().mockReturnValue('Verification prompt output'),
     isAvailable: vi.fn().mockReturnValue(true),
-  })),
+  };
+  }),
 }));
 
 import { readFile } from 'fs/promises';

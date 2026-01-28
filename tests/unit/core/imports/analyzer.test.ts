@@ -12,13 +12,15 @@ import { ProjectAnalyzer } from '../../../../src/core/imports/analyzer.js';
 
 // Mock dependencies
 vi.mock('ts-morph', () => ({
-  Project: vi.fn().mockImplementation(() => ({
+  Project: vi.fn(function() {
+    return {
     addSourceFileAtPath: vi.fn(),
     getSourceFile: vi.fn().mockReturnValue({
       getImportDeclarations: vi.fn().mockReturnValue([]),
       getExportDeclarations: vi.fn().mockReturnValue([]),
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/file-system.js', () => ({

@@ -48,7 +48,8 @@ vi.mock('../../../src/core/plan-context/index.js', () => ({
 }));
 
 vi.mock('../../../src/core/health/analyzer.js', () => ({
-  HealthAnalyzer: vi.fn().mockImplementation(() => ({
+  HealthAnalyzer: vi.fn(function() {
+    return {
     analyze: vi.fn().mockResolvedValue({
       overrideDebt: { active: 0 },
       coverage: { totalFiles: 100, taggedFiles: 95 },
@@ -56,7 +57,8 @@ vi.mock('../../../src/core/health/analyzer.js', () => ({
       recommendations: [],
       generatedAt: new Date().toISOString(),
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../src/core/discovery/index.js', () => ({

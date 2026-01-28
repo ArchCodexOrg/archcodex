@@ -29,7 +29,8 @@ let mockAnalyzerError: Error | null = null;
 
 // Mock dependencies
 vi.mock('../../../../src/core/feedback/index.js', () => ({
-  FeedbackStore: vi.fn().mockImplementation(() => ({
+  FeedbackStore: vi.fn(function() {
+    return {
     exists: vi.fn().mockImplementation(async () => {
       if (mockStoreError) throw mockStoreError;
       return mockStoreExists;
@@ -41,8 +42,10 @@ vi.mock('../../../../src/core/feedback/index.js', () => ({
       if (mockStoreError) throw mockStoreError;
       return mockPrunedCount;
     }),
-  })),
-  FeedbackAnalyzer: vi.fn().mockImplementation(() => ({
+  };
+  }),
+  FeedbackAnalyzer: vi.fn(function() {
+    return {
     generateReport: vi.fn().mockImplementation(async () => {
       if (mockAnalyzerError) throw mockAnalyzerError;
       return mockReport;
@@ -51,7 +54,8 @@ vi.mock('../../../../src/core/feedback/index.js', () => ({
       if (mockAnalyzerError) throw mockAnalyzerError;
       return mockStats;
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/logger.js', () => ({
@@ -97,7 +101,8 @@ describe('feedback command', () => {
 
     // Reset mocks
     const feedback = await import('../../../../src/core/feedback/index.js');
-    vi.mocked(feedback.FeedbackStore).mockImplementation(() => ({
+    vi.mocked(feedback.FeedbackStore).mockImplementation(function() {
+      return {
       exists: vi.fn().mockImplementation(async () => {
         if (mockStoreError) throw mockStoreError;
         return mockStoreExists;
@@ -109,8 +114,10 @@ describe('feedback command', () => {
         if (mockStoreError) throw mockStoreError;
         return mockPrunedCount;
       }),
-    }));
-    vi.mocked(feedback.FeedbackAnalyzer).mockImplementation(() => ({
+    };
+    });
+    vi.mocked(feedback.FeedbackAnalyzer).mockImplementation(function() {
+      return {
       generateReport: vi.fn().mockImplementation(async () => {
         if (mockAnalyzerError) throw mockAnalyzerError;
         return mockReport;
@@ -119,7 +126,8 @@ describe('feedback command', () => {
         if (mockAnalyzerError) throw mockAnalyzerError;
         return mockStats;
       }),
-    }));
+    };
+    });
   });
 
   describe('createFeedbackCommand', () => {
@@ -148,11 +156,13 @@ describe('feedback command', () => {
   describe('report subcommand', () => {
     it('should warn when no feedback data exists', async () => {
       const feedback = await import('../../../../src/core/feedback/index.js');
-      vi.mocked(feedback.FeedbackStore).mockImplementation(() => ({
+      vi.mocked(feedback.FeedbackStore).mockImplementation(function() {
+      return {
         exists: vi.fn().mockResolvedValue(false),
         clear: vi.fn(),
         pruneOldEntries: vi.fn(),
-      }));
+      };
+    });
 
       const logger = await import('../../../../src/utils/logger.js');
 
@@ -276,11 +286,13 @@ describe('feedback command', () => {
   describe('stats subcommand', () => {
     it('should warn when no feedback data exists', async () => {
       const feedback = await import('../../../../src/core/feedback/index.js');
-      vi.mocked(feedback.FeedbackStore).mockImplementation(() => ({
+      vi.mocked(feedback.FeedbackStore).mockImplementation(function() {
+      return {
         exists: vi.fn().mockResolvedValue(false),
         clear: vi.fn(),
         pruneOldEntries: vi.fn(),
-      }));
+      };
+    });
 
       const logger = await import('../../../../src/utils/logger.js');
 
@@ -364,11 +376,13 @@ describe('feedback command', () => {
   describe('clear subcommand', () => {
     it('should inform when no feedback data exists', async () => {
       const feedback = await import('../../../../src/core/feedback/index.js');
-      vi.mocked(feedback.FeedbackStore).mockImplementation(() => ({
+      vi.mocked(feedback.FeedbackStore).mockImplementation(function() {
+      return {
         exists: vi.fn().mockResolvedValue(false),
         clear: vi.fn(),
         pruneOldEntries: vi.fn(),
-      }));
+      };
+    });
 
       const logger = await import('../../../../src/utils/logger.js');
 
@@ -382,11 +396,13 @@ describe('feedback command', () => {
 
     it('should require --confirm flag', async () => {
       const feedback = await import('../../../../src/core/feedback/index.js');
-      vi.mocked(feedback.FeedbackStore).mockImplementation(() => ({
+      vi.mocked(feedback.FeedbackStore).mockImplementation(function() {
+      return {
         exists: vi.fn().mockResolvedValue(true),
         clear: vi.fn(),
         pruneOldEntries: vi.fn(),
-      }));
+      };
+    });
 
       const logger = await import('../../../../src/utils/logger.js');
 
@@ -426,11 +442,13 @@ describe('feedback command', () => {
   describe('prune subcommand', () => {
     it('should inform when no feedback data exists', async () => {
       const feedback = await import('../../../../src/core/feedback/index.js');
-      vi.mocked(feedback.FeedbackStore).mockImplementation(() => ({
+      vi.mocked(feedback.FeedbackStore).mockImplementation(function() {
+      return {
         exists: vi.fn().mockResolvedValue(false),
         clear: vi.fn(),
         pruneOldEntries: vi.fn(),
-      }));
+      };
+    });
 
       const logger = await import('../../../../src/utils/logger.js');
 

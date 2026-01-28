@@ -56,23 +56,31 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/validation/engine.js', () => ({
-  ValidationEngine: vi.fn().mockImplementation(() => ({
+  ValidationEngine: vi.fn(function() {
+    return {
     validateFiles: vi.fn().mockImplementation(async () => mockValidationResult),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/cli/formatters/index.js', () => ({
-  JsonFormatter: vi.fn().mockImplementation(() => ({
+  JsonFormatter: vi.fn(function() {
+    return {
     formatBatch: vi.fn().mockReturnValue('{}'),
-  })),
-  HumanFormatter: vi.fn().mockImplementation(() => ({
+  };
+  }),
+  HumanFormatter: vi.fn(function() {
+    return {
     formatBatch: vi.fn().mockReturnValue('All files passed'),
     formatSuggestions: vi.fn().mockReturnValue(''),
-  })),
-  CompactFormatter: vi.fn().mockImplementation(() => ({
+  };
+  }),
+  CompactFormatter: vi.fn(function() {
+    return {
     formatBatch: vi.fn().mockReturnValue(''),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/file-system.js', () => ({
@@ -107,9 +115,11 @@ vi.mock('../../../../src/utils/path-matcher.js', () => ({
 }));
 
 vi.mock('../../../../src/core/feedback/store.js', () => ({
-  FeedbackStore: vi.fn().mockImplementation(() => ({
+  FeedbackStore: vi.fn(function() {
+    return {
     recordViolations: vi.fn().mockResolvedValue(0),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/similarity/index.js', () => ({
@@ -121,9 +131,11 @@ vi.mock('../../../../src/core/patterns/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/cache/index.js', () => ({
-  CacheManager: vi.fn().mockImplementation(() => ({
+  CacheManager: vi.fn(function() {
+    return {
     load: vi.fn().mockResolvedValue(undefined),
-  })),
+  };
+  }),
 }));
 
 vi.mock('./check-helpers.js', async (importOriginal) => {
@@ -461,10 +473,12 @@ describe('check command', () => {
   describe('validation options', () => {
     it('should pass strict option to validation engine', async () => {
       const mockValidateFiles = vi.fn().mockResolvedValue(mockValidationResult);
-      vi.mocked(ValidationEngine).mockImplementation(() => ({
+      vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
         validateFiles: mockValidateFiles,
         dispose: vi.fn(),
-      }) as any);
+      } as any;
+    });
 
       try {
         const command = createCheckCommand();
@@ -481,10 +495,12 @@ describe('check command', () => {
 
     it('should pass severity filter when --severity specified', async () => {
       const mockValidateFiles = vi.fn().mockResolvedValue(mockValidationResult);
-      vi.mocked(ValidationEngine).mockImplementation(() => ({
+      vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
         validateFiles: mockValidateFiles,
         dispose: vi.fn(),
-      }) as any);
+      } as any;
+    });
 
       try {
         const command = createCheckCommand();
@@ -572,10 +588,12 @@ describe('check command', () => {
 
   describe('error handling', () => {
     it('should handle validation errors', async () => {
-      vi.mocked(ValidationEngine).mockImplementation(() => ({
+      vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
         validateFiles: vi.fn().mockRejectedValue(new Error('Validation failed')),
         dispose: vi.fn(),
-      }) as any);
+      } as any;
+    });
 
       try {
         const command = createCheckCommand();

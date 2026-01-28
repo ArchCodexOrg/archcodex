@@ -22,12 +22,14 @@ let mockPromoteError: Error | null = null;
 
 // Mock dependencies
 vi.mock('../../../../src/core/promote/index.js', () => ({
-  PromoteEngine: vi.fn().mockImplementation(() => ({
+  PromoteEngine: vi.fn(function() {
+    return {
     promote: vi.fn().mockImplementation(async () => {
       if (mockPromoteError) throw mockPromoteError;
       return mockPromoteResult;
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/logger.js', () => ({
@@ -78,12 +80,14 @@ describe('promote command', () => {
 
     // Reset mock
     const promote = await import('../../../../src/core/promote/index.js');
-    vi.mocked(promote.PromoteEngine).mockImplementation(() => ({
+    vi.mocked(promote.PromoteEngine).mockImplementation(function() {
+      return {
       promote: vi.fn().mockImplementation(async () => {
         if (mockPromoteError) throw mockPromoteError;
         return mockPromoteResult;
       }),
-    }));
+    };
+    });
   });
 
   describe('createPromoteCommand', () => {
@@ -144,7 +148,9 @@ describe('promote command', () => {
     it('should pass intent name to engine', async () => {
       const promote = await import('../../../../src/core/promote/index.js');
       const mockPromote = vi.fn().mockResolvedValue(mockPromoteResult);
-      vi.mocked(promote.PromoteEngine).mockImplementation(() => ({ promote: mockPromote }));
+      vi.mocked(promote.PromoteEngine).mockImplementation(function() {
+      return { promote: mockPromote };
+    });
 
       const command = createPromoteCommand();
       await command.parseAsync(['node', 'test', 'forbid_pattern:console', '--intent', 'cli-output']);
@@ -162,7 +168,9 @@ describe('promote command', () => {
     it('should pass description when provided', async () => {
       const promote = await import('../../../../src/core/promote/index.js');
       const mockPromote = vi.fn().mockResolvedValue(mockPromoteResult);
-      vi.mocked(promote.PromoteEngine).mockImplementation(() => ({ promote: mockPromote }));
+      vi.mocked(promote.PromoteEngine).mockImplementation(function() {
+      return { promote: mockPromote };
+    });
 
       const command = createPromoteCommand();
       await command.parseAsync([
@@ -181,7 +189,9 @@ describe('promote command', () => {
     it('should pass category when provided', async () => {
       const promote = await import('../../../../src/core/promote/index.js');
       const mockPromote = vi.fn().mockResolvedValue(mockPromoteResult);
-      vi.mocked(promote.PromoteEngine).mockImplementation(() => ({ promote: mockPromote }));
+      vi.mocked(promote.PromoteEngine).mockImplementation(function() {
+      return { promote: mockPromote };
+    });
 
       const command = createPromoteCommand();
       await command.parseAsync([
@@ -200,7 +210,9 @@ describe('promote command', () => {
     it('should pass apply=true when --apply is provided', async () => {
       const promote = await import('../../../../src/core/promote/index.js');
       const mockPromote = vi.fn().mockResolvedValue(mockPromoteResult);
-      vi.mocked(promote.PromoteEngine).mockImplementation(() => ({ promote: mockPromote }));
+      vi.mocked(promote.PromoteEngine).mockImplementation(function() {
+      return { promote: mockPromote };
+    });
 
       const command = createPromoteCommand();
       await command.parseAsync([
@@ -255,9 +267,11 @@ describe('promote command', () => {
 
     it('should handle non-Error exceptions', async () => {
       const promote = await import('../../../../src/core/promote/index.js');
-      vi.mocked(promote.PromoteEngine).mockImplementation(() => ({
+      vi.mocked(promote.PromoteEngine).mockImplementation(function() {
+      return {
         promote: vi.fn().mockRejectedValue('string error'),
-      }));
+      };
+    });
 
       const logger = await import('../../../../src/utils/logger.js');
 

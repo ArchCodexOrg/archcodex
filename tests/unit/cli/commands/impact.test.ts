@@ -34,7 +34,8 @@ let disposeWasCalled = false;
 
 // Mock dependencies
 vi.mock('../../../../src/core/imports/analyzer.js', () => ({
-  ProjectAnalyzer: vi.fn().mockImplementation(() => ({
+  ProjectAnalyzer: vi.fn(function() {
+    return {
     buildImportGraph: vi.fn().mockImplementation(async () => {
       if (mockBehavior.buildError) {
         throw mockBehavior.buildError;
@@ -51,7 +52,8 @@ vi.mock('../../../../src/core/imports/analyzer.js', () => ({
     dispose: vi.fn().mockImplementation(() => {
       disposeWasCalled = true;
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/logger.js', () => ({
@@ -420,7 +422,7 @@ describe('impact command', () => {
 
   describe('error handling', () => {
     it('should handle errors gracefully', async () => {
-      vi.mocked(ProjectAnalyzer).mockImplementation(() => {
+      vi.mocked(ProjectAnalyzer).mockImplementation(function() {
         throw new Error('Failed to analyze');
       });
 
@@ -437,7 +439,7 @@ describe('impact command', () => {
     });
 
     it('should handle non-Error exceptions', async () => {
-      vi.mocked(ProjectAnalyzer).mockImplementation(() => {
+      vi.mocked(ProjectAnalyzer).mockImplementation(function() {
         throw 'string error';
       });
 

@@ -47,10 +47,12 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/graph/index.js', () => ({
-  GraphBuilder: vi.fn().mockImplementation(() => ({
+  GraphBuilder: vi.fn(function() {
+    return {
     build: vi.fn().mockImplementation(async () => mockBuildResult),
     format: vi.fn().mockImplementation(() => mockFormatOutput),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/logger.js', () => ({

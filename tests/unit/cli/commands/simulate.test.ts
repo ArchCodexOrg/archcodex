@@ -91,9 +91,11 @@ vi.mock('../../../../src/core/diff/git-loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/simulate/index.js', () => ({
-  SimulationAnalyzer: vi.fn().mockImplementation(() => ({
+  SimulationAnalyzer: vi.fn(function() {
+    return {
     simulate: vi.fn().mockImplementation(async () => mockSimulationResult),
-  })),
+  };
+  }),
   formatRegistryChanges: vi.fn().mockImplementation(() => mockRegistryChanges),
 }));
 
@@ -148,9 +150,11 @@ describe('simulate command', () => {
     };
 
     // Reset mocks
-    vi.mocked(SimulationAnalyzer).mockImplementation(() => ({
+    vi.mocked(SimulationAnalyzer).mockImplementation(function() {
+      return {
       simulate: vi.fn().mockImplementation(async () => mockSimulationResult),
-    }) as any);
+    } as any;
+    });
     vi.mocked(formatRegistryChanges).mockImplementation(() => mockRegistryChanges);
     vi.mocked(fileExists).mockImplementation(async () => mockFileExists);
   });
@@ -705,7 +709,7 @@ describe('simulate command', () => {
 
   describe('error handling', () => {
     it('should handle unexpected errors', async () => {
-      vi.mocked(SimulationAnalyzer).mockImplementation(() => {
+      vi.mocked(SimulationAnalyzer).mockImplementation(function() {
         throw new Error('Unexpected error');
       });
 
@@ -722,7 +726,7 @@ describe('simulate command', () => {
     });
 
     it('should handle non-Error exceptions', async () => {
-      vi.mocked(SimulationAnalyzer).mockImplementation(() => {
+      vi.mocked(SimulationAnalyzer).mockImplementation(function() {
         throw 'string error';
       });
 

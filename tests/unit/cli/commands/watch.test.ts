@@ -53,10 +53,12 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/validation/engine.js', () => ({
-  ValidationEngine: vi.fn().mockImplementation(() => ({
+  ValidationEngine: vi.fn(function() {
+    return {
     validateFiles: vi.fn().mockResolvedValue({ results: [] }),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/archignore.js', () => ({

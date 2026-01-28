@@ -42,9 +42,11 @@ vi.mock('../../../../src/core/config/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/health/index.js', () => ({
-  HealthAnalyzer: vi.fn().mockImplementation(() => ({
+  HealthAnalyzer: vi.fn(function() {
+    return {
     analyze: vi.fn().mockImplementation(async () => mockHealthReport),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/discovery/staleness.js', () => ({
@@ -122,9 +124,11 @@ describe('health command', () => {
     };
 
     // Reset HealthAnalyzer mock
-    vi.mocked(HealthAnalyzer).mockImplementation(() => ({
+    vi.mocked(HealthAnalyzer).mockImplementation(function() {
+      return {
       analyze: vi.fn().mockImplementation(async () => mockHealthReport),
-    }) as any);
+    } as any;
+    });
 
     // Reset staleness mock
     vi.mocked(checkIndexStaleness).mockImplementation(async () => mockStaleness);
@@ -926,9 +930,11 @@ describe('health command', () => {
     });
 
     it('should handle health analyzer errors', async () => {
-      vi.mocked(HealthAnalyzer).mockImplementation(() => ({
+      vi.mocked(HealthAnalyzer).mockImplementation(function() {
+      return {
         analyze: vi.fn().mockRejectedValue(new Error('Analysis failed')),
-      }) as any);
+      } as any;
+    });
 
       const command = createHealthCommand();
 

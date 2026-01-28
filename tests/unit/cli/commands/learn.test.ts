@@ -71,10 +71,12 @@ vi.mock('../../../../src/core/config/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/learn/index.js', () => ({
-  SkeletonExtractor: vi.fn().mockImplementation(() => ({
+  SkeletonExtractor: vi.fn(function() {
+    return {
     extract: vi.fn().mockImplementation(async () => mockSkeletonResult),
     dispose: vi.fn(),
-  })),
+  };
+  }),
   formatSkeletonForPrompt: vi.fn().mockReturnValue('skeleton: yaml'),
 }));
 
@@ -167,10 +169,12 @@ describe('learn command', () => {
 
     // Reset mocks to use current variables
     vi.mocked(loadConfig).mockImplementation(async () => mockConfigResult);
-    vi.mocked(SkeletonExtractor).mockImplementation(() => ({
+    vi.mocked(SkeletonExtractor).mockImplementation(function() {
+      return {
       extract: vi.fn().mockImplementation(async () => mockSkeletonResult),
       dispose: vi.fn(),
-    }) as any);
+    } as any;
+    });
     vi.mocked(getAvailableProvider).mockImplementation(() => mockCurrentProvider as any);
     vi.mocked(listProviders).mockImplementation(() => mockProvidersList as any);
     vi.mocked(fileExists).mockImplementation(async () => mockFileExists);
@@ -602,10 +606,12 @@ describe('learn command', () => {
     });
 
     it('should handle extraction errors', async () => {
-      vi.mocked(SkeletonExtractor).mockImplementation(() => ({
+      vi.mocked(SkeletonExtractor).mockImplementation(function() {
+      return {
         extract: vi.fn().mockRejectedValue(new Error('Extraction failed')),
         dispose: vi.fn(),
-      }) as any);
+      } as any;
+    });
 
       const command = createLearnCommand();
 

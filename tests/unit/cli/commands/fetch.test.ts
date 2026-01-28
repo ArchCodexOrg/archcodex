@@ -42,12 +42,14 @@ vi.mock('../../../../src/core/config/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/pointers/resolver.js', () => ({
-  PointerResolver: vi.fn().mockImplementation(() => ({
+  PointerResolver: vi.fn(function() {
+    return {
     resolve: vi.fn().mockImplementation(async () => {
       if (mockResolveError) throw mockResolveError;
       return mockResolveResult;
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/logger.js', () => ({
@@ -99,12 +101,14 @@ describe('fetch command', () => {
     });
 
     const resolver = await import('../../../../src/core/pointers/resolver.js');
-    vi.mocked(resolver.PointerResolver).mockImplementation(() => ({
+    vi.mocked(resolver.PointerResolver).mockImplementation(function() {
+      return {
       resolve: vi.fn().mockImplementation(async () => {
         if (mockResolveError) throw mockResolveError;
         return mockResolveResult;
       }),
-    }));
+    };
+    });
   });
 
   describe('createFetchCommand', () => {

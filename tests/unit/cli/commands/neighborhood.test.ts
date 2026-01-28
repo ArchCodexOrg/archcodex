@@ -31,7 +31,8 @@ function createBaseNeighborhood(): Neighborhood {
 
 // Mock dependencies
 vi.mock('../../../../src/core/neighborhood/index.js', () => ({
-  NeighborhoodAnalyzer: vi.fn().mockImplementation(() => ({
+  NeighborhoodAnalyzer: vi.fn(function() {
+    return {
     analyze: vi.fn().mockImplementation(async () => {
       if (mockAnalyzeError) {
         throw mockAnalyzeError;
@@ -39,7 +40,8 @@ vi.mock('../../../../src/core/neighborhood/index.js', () => ({
       return mockNeighborhood;
     }),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/registry/loader.js', () => ({
@@ -96,7 +98,8 @@ describe('neighborhood command', () => {
     mockAnalyzeError = null;
 
     // Reset NeighborhoodAnalyzer mock
-    vi.mocked(NeighborhoodAnalyzer).mockImplementation(() => ({
+    vi.mocked(NeighborhoodAnalyzer).mockImplementation(function() {
+      return {
       analyze: vi.fn().mockImplementation(async () => {
         if (mockAnalyzeError) {
           throw mockAnalyzeError;
@@ -104,7 +107,8 @@ describe('neighborhood command', () => {
         return mockNeighborhood;
       }),
       dispose: vi.fn(),
-    }) as any);
+    } as any;
+    });
 
     // Reset loadConfig mock
     vi.mocked(loadConfig).mockResolvedValue({

@@ -157,7 +157,8 @@ const mockPythonParseFile = vi.fn().mockImplementation((_path: string, content?:
 });
 
 vi.mock('../../../../src/validators/python.js', () => ({
-  PythonValidator: vi.fn().mockImplementation(() => ({
+  PythonValidator: vi.fn(function() {
+    return {
     supportedLanguages: ['python'],
     supportedExtensions: ['.py'],
     capabilities: {
@@ -168,7 +169,8 @@ vi.mock('../../../../src/validators/python.js', () => ({
     },
     parseFile: mockPythonParseFile,
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 // Mock TypeScript validator (needed because engine imports register.ts which registers both)
@@ -207,7 +209,8 @@ const mockTsParseFile = vi.fn().mockImplementation((_path: string, content?: str
 });
 
 vi.mock('../../../../src/validators/typescript.js', () => ({
-  TypeScriptValidator: vi.fn().mockImplementation(() => ({
+  TypeScriptValidator: vi.fn(function() {
+    return {
     supportedLanguages: ['typescript'],
     supportedExtensions: ['.ts', '.tsx'],
     capabilities: {
@@ -218,7 +221,8 @@ vi.mock('../../../../src/validators/typescript.js', () => ({
     },
     parseFile: mockTsParseFile,
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 import { readFile } from '../../../../src/utils/file-system.js';

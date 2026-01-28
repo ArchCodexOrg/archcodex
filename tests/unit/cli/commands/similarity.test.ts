@@ -42,10 +42,12 @@ vi.mock('../../../../src/core/config/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/similarity/index.js', () => ({
-  SimilarityAnalyzer: vi.fn().mockImplementation(() => ({
+  SimilarityAnalyzer: vi.fn(function() {
+    return {
     findInconsistencies: vi.fn().mockImplementation(async () => mockInconsistencies),
     dispose: vi.fn(),
-  })),
+  };
+  }),
   detectDuplicates: vi.fn().mockImplementation(async () => mockDuplicates),
 }));
 

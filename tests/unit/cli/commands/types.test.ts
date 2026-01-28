@@ -10,17 +10,21 @@ import { createTypesCommand } from '../../../../src/cli/commands/types.js';
 
 // Mock dependencies
 vi.mock('../../../../src/core/types/index.js', () => ({
-  TypeExtractor: vi.fn().mockImplementation(() => ({
+  TypeExtractor: vi.fn(function() {
+    return {
     extractFromFiles: vi.fn().mockResolvedValue([]),
     dispose: vi.fn(),
-  })),
-  DuplicateDetector: vi.fn().mockImplementation(() => ({
+  };
+  }),
+  DuplicateDetector: vi.fn(function() {
+    return {
     detectDuplicates: vi.fn().mockReturnValue({
       exactDuplicates: [],
       renamedDuplicates: [],
       similarTypes: [],
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/file-system.js', () => ({

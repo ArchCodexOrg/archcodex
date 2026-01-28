@@ -38,12 +38,14 @@ vi.mock('../../../../../src/core/arch-tag/parser.js', () => ({
 
 // Mock TypeScript validator
 vi.mock('../../../../../src/validators/typescript.js', () => ({
-  TypeScriptValidator: vi.fn().mockImplementation(() => ({
+  TypeScriptValidator: vi.fn(function() {
+    return {
     parseFile: vi.fn().mockResolvedValue({
       functions: [],
       classes: [],
     }),
-  })),
+  };
+  }),
 }));
 
 // Mock logger
@@ -328,9 +330,11 @@ describe('showUsage', () => {
         ],
         classes: [],
       });
-      vi.mocked(TypeScriptValidator).mockImplementation(() => ({
+      vi.mocked(TypeScriptValidator).mockImplementation(function() {
+      return {
         parseFile: mockParseFile,
-      }) as any);
+      } as any;
+    });
 
       const registry = createMockRegistry({ 'cli-output': { description: 'CLI' } });
 
@@ -366,9 +370,11 @@ describe('showUsage', () => {
           },
         ],
       });
-      vi.mocked(TypeScriptValidator).mockImplementation(() => ({
+      vi.mocked(TypeScriptValidator).mockImplementation(function() {
+      return {
         parseFile: mockParseFile,
-      }) as any);
+      } as any;
+    });
 
       const registry = createMockRegistry({ 'admin-only': { description: 'Admin' } });
 
@@ -390,9 +396,11 @@ describe('showUsage', () => {
       });
 
       const mockParseFile = vi.fn().mockRejectedValue(new Error('Parse error'));
-      vi.mocked(TypeScriptValidator).mockImplementation(() => ({
+      vi.mocked(TypeScriptValidator).mockImplementation(function() {
+      return {
         parseFile: mockParseFile,
-      }) as any);
+      } as any;
+    });
 
       const registry = createMockRegistry({ 'admin-only': { description: 'Admin' } });
 

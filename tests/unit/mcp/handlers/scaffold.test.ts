@@ -16,9 +16,11 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/scaffold/index.js', () => ({
-  ScaffoldEngine: vi.fn().mockImplementation(() => ({
+  ScaffoldEngine: vi.fn(function() {
+    return {
     scaffold: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/discovery/index.js', () => ({
@@ -56,9 +58,11 @@ describe('MCP Scaffold Handler', () => {
         content: '/**\n * @arch test.arch\n */\nexport class MyClass {}',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       const result = await handleScaffold(projectRoot, {
         archId: 'test.arch',
@@ -99,9 +103,11 @@ describe('MCP Scaffold Handler', () => {
         content: '',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       await handleScaffold(projectRoot, {
         archId: 'test.arch',
@@ -122,9 +128,11 @@ describe('MCP Scaffold Handler', () => {
         content: '',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       await handleScaffold(projectRoot, {
         archId: 'test.arch',
@@ -145,9 +153,11 @@ describe('MCP Scaffold Handler', () => {
         content: 'Generated content',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       const result = await handleScaffold(projectRoot, {
         archId: 'test.arch',
@@ -171,9 +181,11 @@ describe('MCP Scaffold Handler', () => {
         content: '',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       vi.mocked(suggestIntents).mockReturnValue([
         { name: 'cli-output', reason: 'CLI command file' },
@@ -196,9 +208,11 @@ describe('MCP Scaffold Handler', () => {
         error: 'Template not found',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       const result = await handleScaffold(projectRoot, {
         archId: 'test.arch',
@@ -219,9 +233,11 @@ describe('MCP Scaffold Handler', () => {
         content: '',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       const result = await handleScaffold(projectRoot, {
         archId: 'test.arch',
@@ -241,9 +257,11 @@ describe('MCP Scaffold Handler', () => {
         content: '',
       });
 
-      vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
         scaffold: mockScaffold,
-      } as unknown as ScaffoldEngine));
+      } as unknown as ScaffoldEngine;
+    });
 
       const result = await handleScaffold(projectRoot, {
         archId: 'test.arch',

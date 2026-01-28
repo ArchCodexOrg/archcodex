@@ -24,16 +24,20 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/health/analyzer.js', () => ({
-  HealthAnalyzer: vi.fn().mockImplementation(() => ({
+  HealthAnalyzer: vi.fn(function() {
+    return {
     analyze: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/similarity/index.js', () => ({
-  SimilarityAnalyzer: vi.fn().mockImplementation(() => ({
+  SimilarityAnalyzer: vi.fn(function() {
+    return {
     findInconsistencies: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/discovery/index.js', () => ({
@@ -58,10 +62,12 @@ vi.mock('../../../../src/mcp/utils.js', () => ({
 }));
 
 vi.mock('../../../../src/core/types/duplicate-detector.js', () => ({
-  DuplicateDetector: vi.fn().mockImplementation(() => ({
+  DuplicateDetector: vi.fn(function() {
+    return {
     scanFiles: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 import { loadConfig } from '../../../../src/core/config/loader.js';
@@ -106,9 +112,11 @@ describe('MCP Health Handlers', () => {
         generatedAt: new Date().toISOString(),
       });
 
-      vi.mocked(HealthAnalyzer).mockImplementation(() => ({
+      vi.mocked(HealthAnalyzer).mockImplementation(function() {
+      return {
         analyze: mockAnalyze,
-      } as unknown as HealthAnalyzer));
+      } as unknown as HealthAnalyzer;
+    });
 
       const result = await handleHealth(projectRoot);
 
@@ -147,9 +155,11 @@ describe('MCP Health Handlers', () => {
         generatedAt: new Date().toISOString(),
       });
 
-      vi.mocked(HealthAnalyzer).mockImplementation(() => ({
+      vi.mocked(HealthAnalyzer).mockImplementation(function() {
+      return {
         analyze: mockAnalyze,
-      } as unknown as HealthAnalyzer));
+      } as unknown as HealthAnalyzer;
+    });
 
       await handleHealth(projectRoot, 60);
 
@@ -157,9 +167,11 @@ describe('MCP Health Handlers', () => {
     });
 
     it('should handle analyzer errors gracefully', async () => {
-      vi.mocked(HealthAnalyzer).mockImplementation(() => ({
+      vi.mocked(HealthAnalyzer).mockImplementation(function() {
+      return {
         analyze: vi.fn().mockRejectedValue(new Error('Analysis failed')),
-      } as unknown as HealthAnalyzer));
+      } as unknown as HealthAnalyzer;
+    });
 
       const result = await handleHealth(projectRoot);
 
@@ -260,10 +272,12 @@ describe('MCP Health Handlers', () => {
         },
       ]);
 
-      vi.mocked(SimilarityAnalyzer).mockImplementation(() => ({
+      vi.mocked(SimilarityAnalyzer).mockImplementation(function() {
+      return {
         findInconsistencies: mockFindInconsistencies,
         dispose: vi.fn(),
-      } as unknown as SimilarityAnalyzer));
+      } as unknown as SimilarityAnalyzer;
+    });
 
       const result = await handleConsistency(projectRoot, 'src/a.ts');
 
@@ -278,10 +292,12 @@ describe('MCP Health Handlers', () => {
       vi.mocked(globFiles).mockResolvedValue(['src/a.ts', 'src/b.ts']);
 
       const mockFindInconsistencies = vi.fn().mockResolvedValue([]);
-      vi.mocked(SimilarityAnalyzer).mockImplementation(() => ({
+      vi.mocked(SimilarityAnalyzer).mockImplementation(function() {
+      return {
         findInconsistencies: mockFindInconsistencies,
         dispose: vi.fn(),
-      } as unknown as SimilarityAnalyzer));
+      } as unknown as SimilarityAnalyzer;
+    });
 
       await handleConsistency(projectRoot, 'src/a.ts', { threshold: 0.8 });
 
@@ -296,10 +312,12 @@ describe('MCP Health Handlers', () => {
       vi.mocked(globFiles).mockResolvedValue(['src/a.ts']);
 
       const mockDispose = vi.fn();
-      vi.mocked(SimilarityAnalyzer).mockImplementation(() => ({
+      vi.mocked(SimilarityAnalyzer).mockImplementation(function() {
+      return {
         findInconsistencies: vi.fn().mockResolvedValue([]),
         dispose: mockDispose,
-      } as unknown as SimilarityAnalyzer));
+      } as unknown as SimilarityAnalyzer;
+    });
 
       await handleConsistency(projectRoot, 'src/a.ts');
 
@@ -334,10 +352,12 @@ describe('MCP Health Handlers', () => {
       });
 
       const { DuplicateDetector } = await import('../../../../src/core/types/duplicate-detector.js');
-      vi.mocked(DuplicateDetector).mockImplementation(() => ({
+      vi.mocked(DuplicateDetector).mockImplementation(function() {
+      return {
         scanFiles: mockScanFiles,
         dispose: vi.fn(),
-      } as unknown as InstanceType<typeof DuplicateDetector>));
+      } as unknown as InstanceType<typeof DuplicateDetector>;
+    });
 
       const result = await handleTypes(projectRoot);
 
@@ -368,10 +388,12 @@ describe('MCP Health Handlers', () => {
       });
 
       const { DuplicateDetector } = await import('../../../../src/core/types/duplicate-detector.js');
-      vi.mocked(DuplicateDetector).mockImplementation(() => ({
+      vi.mocked(DuplicateDetector).mockImplementation(function() {
+      return {
         scanFiles: mockScanFiles,
         dispose: vi.fn(),
-      } as unknown as InstanceType<typeof DuplicateDetector>));
+      } as unknown as InstanceType<typeof DuplicateDetector>;
+    });
 
       await handleTypes(projectRoot, { files: ['src/models/**/*.ts'] });
 
@@ -390,10 +412,12 @@ describe('MCP Health Handlers', () => {
       });
 
       const { DuplicateDetector } = await import('../../../../src/core/types/duplicate-detector.js');
-      vi.mocked(DuplicateDetector).mockImplementation(() => ({
+      vi.mocked(DuplicateDetector).mockImplementation(function() {
+      return {
         scanFiles: mockScanFiles,
         dispose: vi.fn(),
-      } as unknown as InstanceType<typeof DuplicateDetector>));
+      } as unknown as InstanceType<typeof DuplicateDetector>;
+    });
 
       await handleTypes(projectRoot, { threshold: 90 });
 

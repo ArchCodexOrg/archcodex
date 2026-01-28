@@ -20,23 +20,29 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/validation/engine.js', () => ({
-  ValidationEngine: vi.fn().mockImplementation(() => ({
+  ValidationEngine: vi.fn(function() {
+    return {
     validateFiles: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/validation/project-validator.js', () => ({
-  ProjectValidator: vi.fn().mockImplementation(() => ({
+  ProjectValidator: vi.fn(function() {
+    return {
     validateProject: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/hydration/engine.js', () => ({
-  HydrationEngine: vi.fn().mockImplementation(() => ({
+  HydrationEngine: vi.fn(function() {
+    return {
     hydrateFile: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/patterns/loader.js', () => ({
@@ -116,10 +122,12 @@ describe('MCP Validation Handlers', () => {
         }],
       });
 
-      vi.mocked(ValidationEngine).mockImplementation(() => ({
+      vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
         validateFiles: mockValidateFiles,
         dispose: vi.fn(),
-      } as unknown as ValidationEngine));
+      } as unknown as ValidationEngine;
+    });
 
       const result = await handleCheck(projectRoot, ['src/test.ts'], {});
 
@@ -140,10 +148,12 @@ describe('MCP Validation Handlers', () => {
         ],
       });
 
-      vi.mocked(ValidationEngine).mockImplementation(() => ({
+      vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
         validateFiles: mockValidateFiles,
         dispose: vi.fn(),
-      } as unknown as ValidationEngine));
+      } as unknown as ValidationEngine;
+    });
 
       await handleCheck(projectRoot, ['src/*.ts'], {});
 
@@ -168,10 +178,12 @@ describe('MCP Validation Handlers', () => {
         }],
       });
 
-      vi.mocked(ProjectValidator).mockImplementation(() => ({
+      vi.mocked(ProjectValidator).mockImplementation(function() {
+      return {
         validateProject: mockValidateProject,
         dispose: vi.fn(),
-      } as unknown as ProjectValidator));
+      } as unknown as ProjectValidator;
+    });
 
       const result = await handleCheck(projectRoot, ['src/test.ts'], { project: true });
 
@@ -193,10 +205,12 @@ describe('MCP Validation Handlers', () => {
         results: [{ file: 'src/valid.ts', archId: 'test.arch', status: 'passed', violations: [], warnings: [] }],
       });
 
-      vi.mocked(ValidationEngine).mockImplementation(() => ({
+      vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
         validateFiles: mockValidateFiles,
         dispose: vi.fn(),
-      } as unknown as ValidationEngine));
+      } as unknown as ValidationEngine;
+    });
 
       await handleCheck(projectRoot, ['src/valid.ts', 'src/ignored.ts'], {});
 
@@ -209,10 +223,12 @@ describe('MCP Validation Handlers', () => {
         results: [{ file: 'src/test.ts', archId: 'test.arch', status: 'passed', violations: [], warnings: [] }],
       });
 
-      vi.mocked(ValidationEngine).mockImplementation(() => ({
+      vi.mocked(ValidationEngine).mockImplementation(function() {
+      return {
         validateFiles: mockValidateFiles,
         dispose: vi.fn(),
-      } as unknown as ValidationEngine));
+      } as unknown as ValidationEngine;
+    });
 
       await handleCheck(projectRoot, ['src/test.ts'], { registryPattern: ['core/**'] });
 
@@ -230,9 +246,11 @@ describe('MCP Validation Handlers', () => {
         truncated: false,
       });
 
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      } as unknown as HydrationEngine));
+      } as unknown as HydrationEngine;
+    });
 
       vi.mocked(findMatchingPatterns).mockReturnValue([]);
       vi.mocked(filterByRelevance).mockReturnValue([]);
@@ -253,9 +271,11 @@ describe('MCP Validation Handlers', () => {
         truncated: false,
       });
 
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      } as unknown as HydrationEngine));
+      } as unknown as HydrationEngine;
+    });
 
       vi.mocked(findMatchingPatterns).mockReturnValue([]);
       vi.mocked(filterByRelevance).mockReturnValue([]);
@@ -278,9 +298,11 @@ describe('MCP Validation Handlers', () => {
         truncated: false,
       });
 
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      } as unknown as HydrationEngine));
+      } as unknown as HydrationEngine;
+    });
 
       vi.mocked(findMatchingPatterns).mockReturnValue([]);
       vi.mocked(filterByRelevance).mockReturnValue([]);
@@ -304,9 +326,11 @@ describe('MCP Validation Handlers', () => {
         truncated: false,
       });
 
-      vi.mocked(HydrationEngine).mockImplementation(() => ({
+      vi.mocked(HydrationEngine).mockImplementation(function() {
+      return {
         hydrateFile: mockHydrateFile,
-      } as unknown as HydrationEngine));
+      } as unknown as HydrationEngine;
+    });
 
       vi.mocked(findMatchingPatterns).mockReturnValue([
         { name: 'logger', pattern: { canonical: 'src/utils/logger.ts', exports: ['logger'], usage: 'Use for logging' }, score: 0.9, matchedKeywords: ['log'] },

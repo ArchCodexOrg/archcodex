@@ -64,12 +64,14 @@ vi.mock('../../../../src/mcp/utils.js', () => ({
 }));
 
 vi.mock('../../../../src/core/imports/analyzer.js', () => ({
-  ProjectAnalyzer: vi.fn().mockImplementation(() => ({
+  ProjectAnalyzer: vi.fn(function() {
+    return {
     buildImportGraph: vi.fn(),
     getImporters: vi.fn(),
     getDependents: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 import { loadConfig } from '../../../../src/core/config/loader.js';
@@ -301,12 +303,14 @@ describe('MCP Context Handlers', () => {
         },
       });
 
-      vi.mocked(ProjectAnalyzer).mockImplementation(() => ({
+      vi.mocked(ProjectAnalyzer).mockImplementation(function() {
+      return {
         buildImportGraph: mockBuildImportGraph,
         getImporters: mockGetImporters,
         getDependents: mockGetDependents,
         dispose: vi.fn(),
-      } as unknown as ProjectAnalyzer));
+      } as unknown as ProjectAnalyzer;
+    });
 
       const result = await handleImpact(projectRoot, { file: 'src/target.ts' });
 
@@ -329,12 +333,14 @@ describe('MCP Context Handlers', () => {
         mockDependents.add(`/test/project/src/file${i}.ts`);
       }
 
-      vi.mocked(ProjectAnalyzer).mockImplementation(() => ({
+      vi.mocked(ProjectAnalyzer).mockImplementation(function() {
+      return {
         buildImportGraph: vi.fn().mockResolvedValue({ graph: { nodes: new Map() } }),
         getImporters: vi.fn().mockReturnValue([]),
         getDependents: vi.fn().mockReturnValue(mockDependents),
         dispose: vi.fn(),
-      } as unknown as ProjectAnalyzer));
+      } as unknown as ProjectAnalyzer;
+    });
 
       const result = await handleImpact(projectRoot, { file: 'src/target.ts' });
 
@@ -345,12 +351,14 @@ describe('MCP Context Handlers', () => {
 
     it('should dispose analyzer after use', async () => {
       const mockDispose = vi.fn();
-      vi.mocked(ProjectAnalyzer).mockImplementation(() => ({
+      vi.mocked(ProjectAnalyzer).mockImplementation(function() {
+      return {
         buildImportGraph: vi.fn().mockResolvedValue({ graph: { nodes: new Map() } }),
         getImporters: vi.fn().mockReturnValue([]),
         getDependents: vi.fn().mockReturnValue(new Set()),
         dispose: mockDispose,
-      } as unknown as ProjectAnalyzer));
+      } as unknown as ProjectAnalyzer;
+    });
 
       await handleImpact(projectRoot, { file: 'src/target.ts' });
 

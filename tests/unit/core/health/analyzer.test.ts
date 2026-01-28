@@ -23,7 +23,8 @@ vi.mock('../../../../src/utils/archignore.js', () => ({
 }));
 
 vi.mock('../../../../src/core/audit/scanner.js', () => ({
-  AuditScanner: vi.fn().mockImplementation(() => ({
+  AuditScanner: vi.fn(function() {
+    return {
     scan: vi.fn().mockResolvedValue({
       files: [
         {
@@ -41,7 +42,8 @@ vi.mock('../../../../src/core/audit/scanner.js', () => ({
         expiringOverrides: 0,
       },
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/registry/loader.js', () => ({

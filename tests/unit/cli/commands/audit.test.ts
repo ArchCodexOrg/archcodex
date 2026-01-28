@@ -49,9 +49,11 @@ vi.mock('../../../../src/core/config/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/audit/index.js', () => ({
-  AuditScanner: vi.fn().mockImplementation(() => ({
+  AuditScanner: vi.fn(function() {
+    return {
     scan: vi.fn().mockImplementation(async () => mockScanResult),
-  })),
+  };
+  }),
   clusterOverrides: vi.fn().mockImplementation(() => mockClusterResult),
 }));
 
@@ -97,9 +99,11 @@ describe('audit command', () => {
     mockClusterResult = [];
 
     // Reset the AuditScanner mock to use the configurable behavior
-    vi.mocked(AuditScanner).mockImplementation(() => ({
+    vi.mocked(AuditScanner).mockImplementation(function() {
+      return {
       scan: vi.fn().mockImplementation(async () => mockScanResult),
-    }) as any);
+    } as any;
+    });
   });
 
   afterEach(() => {
@@ -161,9 +165,11 @@ describe('audit command', () => {
 
     it('should scan with default expiring days', async () => {
       const mockScan = vi.fn().mockResolvedValue(mockScanResult);
-      vi.mocked(AuditScanner).mockImplementation(() => ({
+      vi.mocked(AuditScanner).mockImplementation(function() {
+      return {
         scan: mockScan,
-      }) as any);
+      } as any;
+    });
 
       const command = createAuditCommand();
       await command.parseAsync(['node', 'test']);
@@ -177,9 +183,11 @@ describe('audit command', () => {
 
     it('should pass custom expiring days', async () => {
       const mockScan = vi.fn().mockResolvedValue(mockScanResult);
-      vi.mocked(AuditScanner).mockImplementation(() => ({
+      vi.mocked(AuditScanner).mockImplementation(function() {
+      return {
         scan: mockScan,
-      }) as any);
+      } as any;
+    });
 
       const command = createAuditCommand();
       await command.parseAsync(['node', 'test', '--expiring', '60']);
@@ -191,9 +199,11 @@ describe('audit command', () => {
 
     it('should pass expired only flag', async () => {
       const mockScan = vi.fn().mockResolvedValue(mockScanResult);
-      vi.mocked(AuditScanner).mockImplementation(() => ({
+      vi.mocked(AuditScanner).mockImplementation(function() {
+      return {
         scan: mockScan,
-      }) as any);
+      } as any;
+    });
 
       const command = createAuditCommand();
       await command.parseAsync(['node', 'test', '--expired']);

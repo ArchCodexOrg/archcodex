@@ -34,10 +34,12 @@ vi.mock('../../../../src/core/discovery/index.js', () => ({
 }));
 
 vi.mock('../../../../src/core/scaffold/feature-engine.js', () => ({
-  FeatureEngine: vi.fn().mockImplementation(() => ({
+  FeatureEngine: vi.fn(function() {
+    return {
     previewFeature: vi.fn().mockImplementation(async () => mockPreviewResult),
     scaffoldFeature: vi.fn().mockImplementation(async () => mockScaffoldResult),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/logger.js', () => ({

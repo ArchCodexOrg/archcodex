@@ -88,17 +88,21 @@ vi.mock('../../../../src/core/arch-tag/parser.js', () => ({
 }));
 
 vi.mock('../../../../src/core/garden/detector.js', () => ({
-  PatternDetector: vi.fn().mockImplementation(() => ({
+  PatternDetector: vi.fn(function() {
+    return {
     analyze: vi.fn().mockReturnValue(mockGardenReport),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/types/duplicate-detector.js', () => ({
-  DuplicateDetector: vi.fn().mockImplementation(() => ({
+  DuplicateDetector: vi.fn(function() {
+    return {
     scanFiles: vi.fn().mockResolvedValue({ groups: [] }),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../src/cli/formatters/garden.js', () => ({
@@ -201,10 +205,12 @@ describe('garden command', () => {
     vi.mocked(loadRegistry).mockImplementation(async () => mockRegistryResult as any);
     vi.mocked(globFiles).mockImplementation(async () => mockGlobResult);
     vi.mocked(readFile).mockImplementation(async (path: string) => mockFileContents[path] || '');
-    vi.mocked(PatternDetector).mockImplementation(() => ({
+    vi.mocked(PatternDetector).mockImplementation(function() {
+      return {
       analyze: vi.fn().mockReturnValue(mockGardenReport),
       dispose: vi.fn(),
-    }) as any);
+    } as any;
+    });
     vi.mocked(getAvailableProvider).mockReturnValue({
       name: 'prompt',
       isAvailable: vi.fn().mockReturnValue(false),
@@ -354,10 +360,12 @@ describe('garden command', () => {
       mockFileContents['/project/src/test.ts'] = 'const x = 1;';
 
       const mockDispose = vi.fn();
-      vi.mocked(PatternDetector).mockImplementation(() => ({
+      vi.mocked(PatternDetector).mockImplementation(function() {
+      return {
         analyze: vi.fn().mockReturnValue(mockGardenReport),
         dispose: mockDispose,
-      }) as any);
+      } as any;
+    });
 
       const command = createGardenCommand();
       await command.parseAsync(['node', 'test', '--semantic']);
@@ -626,10 +634,12 @@ describe('garden command', () => {
   describe('options', () => {
     it('should pass options to PatternDetector.analyze', async () => {
       const mockAnalyze = vi.fn().mockReturnValue(mockGardenReport);
-      vi.mocked(PatternDetector).mockImplementation(() => ({
+      vi.mocked(PatternDetector).mockImplementation(function() {
+      return {
         analyze: mockAnalyze,
         dispose: vi.fn(),
-      }) as any);
+      } as any;
+    });
 
       const command = createGardenCommand();
       await command.parseAsync(['node', 'test', '--min-cluster-size', '5', '--max-keyword-usage', '10']);
@@ -650,10 +660,12 @@ describe('garden command', () => {
       mockFileContents['/project/src/test.ts'] = 'const x = 1;';
 
       const mockAnalyze = vi.fn().mockReturnValue(mockGardenReport);
-      vi.mocked(PatternDetector).mockImplementation(() => ({
+      vi.mocked(PatternDetector).mockImplementation(function() {
+      return {
         analyze: mockAnalyze,
         dispose: vi.fn(),
-      }) as any);
+      } as any;
+    });
 
       const command = createGardenCommand();
       await command.parseAsync(['node', 'test', '--semantic']);

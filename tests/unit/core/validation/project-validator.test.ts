@@ -11,7 +11,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock dependencies before imports
 vi.mock('../../../../src/core/imports/analyzer.js', () => ({
-  ProjectAnalyzer: vi.fn().mockImplementation(() => ({
+  ProjectAnalyzer: vi.fn(function() {
+    return {
     buildImportGraph: vi.fn().mockResolvedValue({
       graph: { nodes: new Map() },
       cycles: [],
@@ -20,37 +21,45 @@ vi.mock('../../../../src/core/imports/analyzer.js', () => ({
     getContentCache: vi.fn().mockReturnValue(new Map()),
     getImporters: vi.fn().mockReturnValue([]),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/packages/validator.js', () => ({
-  PackageBoundaryValidator: vi.fn().mockImplementation(() => ({
+  PackageBoundaryValidator: vi.fn(function() {
+    return {
     validate: vi.fn().mockReturnValue({
       passed: true,
       violations: [],
       summary: { filesChecked: 0, importsAnalyzed: 0, violationCount: 0 },
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/layers/validator.js', () => ({
-  LayerBoundaryValidator: vi.fn().mockImplementation(() => ({
+  LayerBoundaryValidator: vi.fn(function() {
+    return {
     validate: vi.fn().mockReturnValue({
       passed: true,
       violations: [],
     }),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/coverage/validator.js', () => ({
-  CoverageValidator: vi.fn().mockImplementation(() => ({
+  CoverageValidator: vi.fn(function() {
+    return {
     validateAll: vi.fn().mockResolvedValue(new Map()),
     setContentCache: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/validation/engine.js', () => ({
-  ValidationEngine: vi.fn().mockImplementation(() => ({
+  ValidationEngine: vi.fn(function() {
+    return {
     validateFiles: vi.fn().mockResolvedValue({
       results: [],
       summary: {
@@ -60,11 +69,13 @@ vi.mock('../../../../src/core/validation/engine.js', () => ({
     }),
     setContentCache: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/similarity/analyzer.js', () => ({
-  SimilarityAnalyzer: vi.fn().mockImplementation(() => ({
+  SimilarityAnalyzer: vi.fn(function() {
+    return {
     extractSignature: vi.fn().mockResolvedValue({
       file: 'test.ts',
       archId: 'test.arch',
@@ -76,7 +87,8 @@ vi.mock('../../../../src/core/similarity/analyzer.js', () => ({
     }),
     findSimilar: vi.fn().mockResolvedValue([]),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 import { ProjectValidator } from '../../../../src/core/validation/project-validator.js';
@@ -205,10 +217,12 @@ describe('ProjectValidator', () => {
           }],
         ])
       );
-      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         validateAll: mockValidateAll,
         setContentCache: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithCoverage);
       const result = await validator.validateProject();
@@ -245,7 +259,8 @@ describe('ProjectValidator', () => {
 
       // Mock CoverageValidator to return stats
       const { CoverageValidator } = await import('../../../../src/core/coverage/validator.js');
-      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         validateAll: vi.fn().mockResolvedValue(
           new Map([
             ['events:*Event', {
@@ -257,7 +272,8 @@ describe('ProjectValidator', () => {
           ])
         ),
         setContentCache: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithCoverage);
       const result = await validator.validateProject();
@@ -298,10 +314,12 @@ describe('ProjectValidator', () => {
 
       const { CoverageValidator } = await import('../../../../src/core/coverage/validator.js');
       const mockValidateAll = vi.fn();
-      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         validateAll: mockValidateAll,
         setContentCache: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithCoverage);
       const result = await validator.validateProject({ skipRules: ['require_coverage'] });
@@ -338,7 +356,8 @@ describe('ProjectValidator', () => {
 
       // Mock CoverageValidator to return gaps
       const { CoverageValidator } = await import('../../../../src/core/coverage/validator.js');
-      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (CoverageValidator as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         validateAll: vi.fn().mockResolvedValue(
           new Map([
             ['events:*Event', {
@@ -353,7 +372,8 @@ describe('ProjectValidator', () => {
           ])
         ),
         setContentCache: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithCoverage);
       const result = await validator.validateProject();
@@ -386,7 +406,8 @@ describe('ProjectValidator', () => {
 
       // Mock SimilarityAnalyzer to return similar files
       const { SimilarityAnalyzer } = await import('../../../../src/core/similarity/analyzer.js');
-      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         extractSignature: vi.fn().mockResolvedValue({
           file: 'test.ts',
           archId: 'service',
@@ -405,11 +426,13 @@ describe('ProjectValidator', () => {
           },
         ]),
         dispose: vi.fn(),
-      }));
+      };
+    });
 
       // Also need to update ProjectAnalyzer mock to return files
       const { ProjectAnalyzer } = await import('../../../../src/core/imports/analyzer.js');
-      (ProjectAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (ProjectAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         buildImportGraph: vi.fn().mockResolvedValue({
           graph: {
             nodes: new Map([
@@ -423,7 +446,8 @@ describe('ProjectValidator', () => {
         getContentCache: vi.fn().mockReturnValue(new Map()),
         getImporters: vi.fn().mockReturnValue([]),
         dispose: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithSimilarity);
       const result = await validator.validateProject();
@@ -458,11 +482,13 @@ describe('ProjectValidator', () => {
 
       const { SimilarityAnalyzer } = await import('../../../../src/core/similarity/analyzer.js');
       const mockFindSimilar = vi.fn();
-      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         extractSignature: vi.fn(),
         findSimilar: mockFindSimilar,
         dispose: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithSimilarity);
       const result = await validator.validateProject({ skipRules: ['max_similarity'] });
@@ -493,7 +519,8 @@ describe('ProjectValidator', () => {
       // Mock SimilarityAnalyzer to return multiple similar file pairs
       const { SimilarityAnalyzer } = await import('../../../../src/core/similarity/analyzer.js');
       let callCount = 0;
-      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         extractSignature: vi.fn().mockImplementation(() => {
           callCount++;
           return Promise.resolve({
@@ -515,11 +542,13 @@ describe('ProjectValidator', () => {
           },
         ]),
         dispose: vi.fn(),
-      }));
+      };
+    });
 
       // Mock ProjectAnalyzer to return 2 files
       const { ProjectAnalyzer } = await import('../../../../src/core/imports/analyzer.js');
-      (ProjectAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (ProjectAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         buildImportGraph: vi.fn().mockResolvedValue({
           graph: {
             nodes: new Map([
@@ -533,7 +562,8 @@ describe('ProjectValidator', () => {
         getContentCache: vi.fn().mockReturnValue(new Map()),
         getImporters: vi.fn().mockReturnValue([]),
         dispose: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithSimilarity);
       const result = await validator.validateProject();
@@ -570,7 +600,8 @@ describe('ProjectValidator', () => {
           matchedAspects: [],
         },
       ]);
-      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (SimilarityAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         extractSignature: vi.fn().mockResolvedValue({
           file: 'test.ts',
           archId: 'service',
@@ -582,11 +613,13 @@ describe('ProjectValidator', () => {
         }),
         findSimilar: mockFindSimilar,
         dispose: vi.fn(),
-      }));
+      };
+    });
 
       // Mock ProjectAnalyzer
       const { ProjectAnalyzer } = await import('../../../../src/core/imports/analyzer.js');
-      (ProjectAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(() => ({
+      (ProjectAnalyzer as unknown as { mockImplementation: (fn: unknown) => void }).mockImplementation(function() {
+      return {
         buildImportGraph: vi.fn().mockResolvedValue({
           graph: {
             nodes: new Map([
@@ -600,7 +633,8 @@ describe('ProjectValidator', () => {
         getContentCache: vi.fn().mockReturnValue(new Map()),
         getImporters: vi.fn().mockReturnValue([]),
         dispose: vi.fn(),
-      }));
+      };
+    });
 
       const validator = new ProjectValidator('/project', mockConfig, registryWithInvalidSimilarity);
       const result = await validator.validateProject();

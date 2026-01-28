@@ -32,10 +32,12 @@ vi.mock('../../../../src/core/patterns/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/neighborhood/analyzer.js', () => ({
-  NeighborhoodAnalyzer: vi.fn().mockImplementation(() => ({
+  NeighborhoodAnalyzer: vi.fn(function() {
+    return {
     analyze: vi.fn(),
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/discovery/index.js', () => ({
@@ -258,10 +260,12 @@ describe('MCP Discovery Handlers', () => {
         importedBy: ['src/other.ts'],
       });
 
-      vi.mocked(NeighborhoodAnalyzer).mockImplementation(() => ({
+      vi.mocked(NeighborhoodAnalyzer).mockImplementation(function() {
+      return {
         analyze: mockAnalyze,
         dispose: vi.fn(),
-      } as unknown as NeighborhoodAnalyzer));
+      } as unknown as NeighborhoodAnalyzer;
+    });
 
       const result = await handleNeighborhood(projectRoot, 'src/test.ts');
 
@@ -274,10 +278,12 @@ describe('MCP Discovery Handlers', () => {
 
     it('should dispose analyzer after use', async () => {
       const mockDispose = vi.fn();
-      vi.mocked(NeighborhoodAnalyzer).mockImplementation(() => ({
+      vi.mocked(NeighborhoodAnalyzer).mockImplementation(function() {
+      return {
         analyze: vi.fn().mockResolvedValue({}),
         dispose: mockDispose,
-      } as unknown as NeighborhoodAnalyzer));
+      } as unknown as NeighborhoodAnalyzer;
+    });
 
       await handleNeighborhood(projectRoot, 'src/test.ts');
 

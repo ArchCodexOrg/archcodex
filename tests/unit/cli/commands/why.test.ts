@@ -70,10 +70,12 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/registry/resolver.js', () => ({
-  resolveArchitecture: vi.fn().mockImplementation(() => ({
+  resolveArchitecture: vi.fn(function() {
+    return {
     architecture: mockResolvedArchitecture,
     conflicts: [],
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/core/arch-tag/parser.js', () => ({

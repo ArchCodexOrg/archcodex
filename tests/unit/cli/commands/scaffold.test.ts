@@ -48,9 +48,11 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 }));
 
 vi.mock('../../../../src/core/scaffold/index.js', () => ({
-  ScaffoldEngine: vi.fn().mockImplementation(() => ({
+  ScaffoldEngine: vi.fn(function() {
+    return {
     scaffold: vi.fn().mockImplementation(async () => mockScaffoldResult),
-  })),
+  };
+  }),
 }));
 
 vi.mock('../../../../src/utils/logger.js', () => ({
@@ -92,9 +94,11 @@ describe('scaffold command', () => {
     mockIntentRegistry = { intents: {} };
 
     // Reset mocks
-    vi.mocked(ScaffoldEngine).mockImplementation(() => ({
+    vi.mocked(ScaffoldEngine).mockImplementation(function() {
+      return {
       scaffold: vi.fn().mockImplementation(async () => mockScaffoldResult),
-    }) as any);
+    } as any;
+    });
 
     vi.mocked(loadIntentRegistry).mockImplementation(async () => mockIntentRegistry);
     vi.mocked(suggestIntents).mockImplementation(() => mockIntentSuggestions);
@@ -503,7 +507,7 @@ describe('scaffold command', () => {
 
   describe('error handling', () => {
     it('should handle unexpected errors', async () => {
-      vi.mocked(ScaffoldEngine).mockImplementation(() => {
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
         throw new Error('Unexpected error');
       });
 
@@ -520,7 +524,7 @@ describe('scaffold command', () => {
     });
 
     it('should handle non-Error exceptions', async () => {
-      vi.mocked(ScaffoldEngine).mockImplementation(() => {
+      vi.mocked(ScaffoldEngine).mockImplementation(function() {
         throw 'string error';
       });
 

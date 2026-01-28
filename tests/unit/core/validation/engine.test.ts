@@ -55,7 +55,8 @@ const mockParseFile = vi.fn().mockImplementation((_path: string, content?: strin
 });
 
 vi.mock('../../../../src/validators/typescript.js', () => ({
-  TypeScriptValidator: vi.fn().mockImplementation(() => ({
+  TypeScriptValidator: vi.fn(function() {
+    return {
     supportedLanguages: ['typescript'],
     supportedExtensions: ['.ts', '.tsx'],
     capabilities: {
@@ -66,7 +67,8 @@ vi.mock('../../../../src/validators/typescript.js', () => ({
     },
     parseFile: mockParseFile,
     dispose: vi.fn(),
-  })),
+  };
+  }),
 }));
 
 import { readFile } from '../../../../src/utils/file-system.js';
