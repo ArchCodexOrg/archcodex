@@ -4,7 +4,7 @@
  * YAML parsing and serialization utilities.
  */
 import { parse, stringify } from 'yaml';
-import type { ZodType, ZodError, ZodTypeDef } from 'zod';
+import { z } from 'zod';
 import { SystemError, ErrorCodes } from './errors.js';
 import { readFile, writeFile } from './file-system.js';
 
@@ -26,10 +26,10 @@ export function parseYaml<T>(content: string): T {
 /**
  * Parse and validate YAML content with a Zod schema.
  */
-export function parseYamlWithSchema<Output, Def extends ZodTypeDef, Input>(
+export function parseYamlWithSchema<T extends z.ZodTypeAny>(
   content: string,
-  schema: ZodType<Output, Def, Input>
-): Output {
+  schema: T
+): z.infer<T> {
   const parsed = parseYaml<unknown>(content);
   const result = schema.safeParse(parsed);
 
@@ -37,7 +37,7 @@ export function parseYamlWithSchema<Output, Def extends ZodTypeDef, Input>(
     throw new SystemError(
       ErrorCodes.INVALID_REGISTRY,
       `YAML validation failed: ${formatZodError(result.error)}`,
-      { errors: result.error.errors }
+      { errors: result.error.issues }
     );
   }
 
@@ -66,10 +66,10 @@ export async function loadYaml<T>(filePath: string): Promise<T> {
 /**
  * Load and validate a YAML file with a Zod schema.
  */
-export async function loadYamlWithSchema<Output, Def extends ZodTypeDef, Input>(
+export async function loadYamlWithSchema<T extends z.ZodTypeAny>(
   filePath: string,
-  schema: ZodType<Output, Def, Input>
-): Promise<Output> {
+  schema: T
+): Promise<z.infer<T>> {
   try {
     const content = await readFile(filePath);
     return parseYamlWithSchema(content, schema);
@@ -111,8 +111,8 @@ export async function writeYaml(filePath: string, data: unknown): Promise<void> 
 /**
  * Format Zod errors into a readable string.
  */
-function formatZodError(error: ZodError): string {
-  return error.errors
+function formatZodError(error: z.ZodError): string {
+  return error.issues
     .map((e) => {
       const path = e.path.join('.');
       return path ? `${path}: ${e.message}` : e.message;

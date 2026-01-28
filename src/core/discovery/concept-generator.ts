@@ -5,7 +5,7 @@
  * LLM-based concept generation for semantic discovery.
  */
 import * as path from 'node:path';
-import { loadConcepts, validateConcepts, type ConceptRegistry, type ConceptValidationResult } from './concepts.js';
+import { loadConcepts, validateConcepts, conceptValues, type ConceptRegistry, type ConceptValidationResult } from './concepts.js';
 import { writeFile } from '../../utils/file-system.js';
 import { stringifyYaml, parseYaml } from '../../utils/yaml.js';
 import type { Registry } from '../registry/schema.js';
@@ -72,7 +72,7 @@ export async function generateConcepts(
 
     // Calculate coverage
     const coveredArchs = new Set<string>();
-    for (const concept of Object.values(newConcepts.concepts || {})) {
+    for (const concept of conceptValues(newConcepts)) {
       for (const archId of concept.architectures) {
         coveredArchs.add(archId);
       }

@@ -24,11 +24,29 @@ const ConceptSchema = z.object({
  * Schema for the entire concepts registry.
  */
 const ConceptRegistrySchema = z.object({
-  concepts: z.record(ConceptSchema),
+  concepts: z.record(z.string(), ConceptSchema),
 });
 
 export type Concept = z.infer<typeof ConceptSchema>;
 export type ConceptRegistry = z.infer<typeof ConceptRegistrySchema>;
+
+/**
+ * Typed iteration over concept entries.
+ * Workaround for Zod 4's z.record() not flowing types through Object.entries().
+ */
+export function conceptEntries(
+  registry: ConceptRegistry
+): Array<[string, Concept]> {
+  return Object.entries(registry.concepts) as Array<[string, Concept]>;
+}
+
+/**
+ * Typed iteration over concept values.
+ * Workaround for Zod 4's z.record() not flowing types through Object.values().
+ */
+export function conceptValues(registry: ConceptRegistry): Concept[] {
+  return Object.values(registry.concepts) as Concept[];
+}
 
 /**
  * Load the concept registry from the .arch directory.
@@ -69,7 +87,7 @@ export function matchConcepts(
   const lowerQuery = query.toLowerCase();
   const matches: ConceptMatch[] = [];
 
-  for (const [name, concept] of Object.entries(concepts.concepts)) {
+  for (const [name, concept] of conceptEntries(concepts)) {
     const matchedAliases: string[] = [];
 
     for (const alias of concept.aliases) {
@@ -142,7 +160,7 @@ export function validateConcepts(
   const invalidReferences: Array<{ conceptName: string; archId: string }> = [];
   const orphanedConcepts: string[] = [];
 
-  for (const [name, concept] of Object.entries(concepts.concepts)) {
+  for (const [name, concept] of conceptEntries(concepts)) {
     let hasValidArch = false;
 
     for (const archId of concept.architectures) {

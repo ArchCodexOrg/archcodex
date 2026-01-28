@@ -2,7 +2,7 @@
  * @arch archcodex.core.domain
  */
 import type { Index, IndexEntry } from './schema.js';
-import type { ConceptRegistry } from './concepts.js';
+import { conceptEntries, type ConceptRegistry } from './concepts.js';
 
 /**
  * Result of a discovery match.
@@ -136,7 +136,7 @@ function matchQueryByConcepts(
   const results: MatchResult[] = [];
 
   // Find matching concepts
-  for (const [conceptName, concept] of Object.entries(concepts.concepts)) {
+  for (const [conceptName, concept] of conceptEntries(concepts)) {
     const matchedAliases: string[] = [];
 
     for (const alias of concept.aliases) {

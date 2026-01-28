@@ -118,7 +118,7 @@ async function migrateRegistry(projectRoot: string, options: MigrateOptions, sou
     const validationResult = RegistrySchema.safeParse(registryToValidate);
     if (!validationResult.success) {
       console.log('❌ Registry validation failed:\n');
-      for (const error of validationResult.error.errors) {
+      for (const error of validationResult.error.issues) {
         const pathStr = error.path.join('.');
         console.log(`  • ${pathStr}: ${error.message}`);
       }

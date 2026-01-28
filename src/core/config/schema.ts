@@ -3,6 +3,16 @@
  */
 import { z } from 'zod';
 
+/**
+ * Helper to create an optional field with schema defaults.
+ * In Zod 4, .default({}) doesn't work for objects with inner defaults.
+ * This helper makes the field optional and applies schema defaults when undefined.
+ * Note: Both undefined and null are treated as "missing" and converted to {}.
+ */
+function withDefaults<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((val) => val ?? {}, schema);
+}
+
 /** Policy for handling untagged files. */
 export const UntaggedPolicySchema = z.enum(['allow', 'warn', 'deny']);
 
@@ -28,17 +38,18 @@ export const FileScanPatternsSchema = z.object({
   ]),
 });
 
+/** Untagged file handling configuration. */
+const UntaggedConfigSchema = z.object({
+  policy: UntaggedPolicySchema.default('warn'),
+  require_in: z.array(z.string()).default([]),
+  exempt: z.array(z.string()).default([]),
+});
+
 /** File policies configuration. */
 export const FilePoliciesSchema = z.object({
   /** File scanning patterns for check/health commands */
-  scan: FileScanPatternsSchema.default({}),
-  untagged: z
-    .object({
-      policy: UntaggedPolicySchema.default('warn'),
-      require_in: z.array(z.string()).default([]),
-      exempt: z.array(z.string()).default([]),
-    })
-    .default({}),
+  scan: withDefaults(FileScanPatternsSchema),
+  untagged: withDefaults(UntaggedConfigSchema),
 });
 
 /** Exit codes configuration. */
@@ -56,7 +67,7 @@ export const ValidationSettingsSchema = z.object({
   fail_on_warning: z.boolean().default(false),
   max_overrides_per_file: z.number().min(0).default(3),
   fail_on_expired_override: z.boolean().default(true),
-  exit_codes: ExitCodesSchema.default({}),
+  exit_codes: withDefaults(ExitCodesSchema),
   precommit: z.lazy(() => PrecommitSettingsSchema).optional(),
   /** Concurrency for parallel file validation (default: 75% of CPUs, min 2, max 16) */
   concurrency: z.number().min(1).max(64).optional(),
@@ -84,7 +95,7 @@ export const PointerBasePathsSchema = z.object({
 
 /** Pointer settings. */
 export const PointerSettingsSchema = z.object({
-  base_paths: PointerBasePathsSchema.default({}),
+  base_paths: withDefaults(PointerBasePathsSchema),
   default_extension: z.string().default('.md'),
 });
 
@@ -159,13 +170,24 @@ export const LanguageSettingsSchema = z.object({
   validator_package: z.string().optional(),
 });
 
+/**
+ * Helper for language settings with configurable default enabled state.
+ * Handles non-object input gracefully by ignoring it.
+ */
+function withLanguageDefaults(defaultEnabled: boolean) {
+  return z.preprocess((val) => {
+    const base = typeof val === 'object' && val !== null ? val : {};
+    return defaultEnabled ? base : { enabled: false, ...base };
+  }, LanguageSettingsSchema);
+}
+
 /** Languages configuration section. */
 export const LanguagesConfigSchema = z.object({
-  typescript: LanguageSettingsSchema.default({}),
-  javascript: LanguageSettingsSchema.default({}),
-  python: LanguageSettingsSchema.default({ enabled: false }),
-  go: LanguageSettingsSchema.default({ enabled: false }),
-  java: LanguageSettingsSchema.default({ enabled: false }),
+  typescript: withLanguageDefaults(true),
+  javascript: withLanguageDefaults(true),
+  python: withLanguageDefaults(false),
+  go: withLanguageDefaults(false),
+  java: withLanguageDefaults(false),
 });
 
 /** Individual package definition for monorepo boundaries. */
@@ -264,20 +286,20 @@ export const HealthConfigSchema = z.object({
 export const ConfigSchema = z.object({
   version: z.string().default('1.0'),
   registry: z.string().optional(), // Auto-detects .arch/registry/ or .arch/registry.yaml
-  files: FilePoliciesSchema.default({}),
-  validation: ValidationSettingsSchema.default({}),
-  hydration: HydrationSettingsSchema.default({}),
-  pointers: PointerSettingsSchema.default({}),
-  overrides: OverrideSettingsSchema.default({}),
-  llm: LLMSettingsSchema.default({}),
-  languages: LanguagesConfigSchema.default({}),
-  packages: PackagesConfigSchema.default([]),
-  layers: LayersConfigSchema.default([]),
-  inference: InferenceSettingsSchema.default({}),
-  intents: IntentSettingsSchema.default({}),
-  discovery: DiscoverySettingsSchema.default({}),
-  table_detection: TableDetectionSettingsSchema.default({}),
-  health: HealthConfigSchema.default({}),
+  files: withDefaults(FilePoliciesSchema),
+  validation: withDefaults(ValidationSettingsSchema),
+  hydration: withDefaults(HydrationSettingsSchema),
+  pointers: withDefaults(PointerSettingsSchema),
+  overrides: withDefaults(OverrideSettingsSchema),
+  llm: withDefaults(LLMSettingsSchema),
+  languages: withDefaults(LanguagesConfigSchema),
+  packages: z.preprocess((val) => val ?? [], PackagesConfigSchema),
+  layers: z.preprocess((val) => val ?? [], LayersConfigSchema),
+  inference: withDefaults(InferenceSettingsSchema),
+  intents: withDefaults(IntentSettingsSchema),
+  discovery: withDefaults(DiscoverySettingsSchema),
+  table_detection: withDefaults(TableDetectionSettingsSchema),
+  health: withDefaults(HealthConfigSchema),
 });
 
 // Type exports (inferred from schemas)

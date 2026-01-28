@@ -200,8 +200,8 @@ async function loadRegistryFromDirectory(dirPath: string): Promise<Registry> {
   if (!result.success) {
     throw new RegistryError(
       ErrorCodes.INVALID_REGISTRY,
-      `Merged registry validation failed: ${result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')}`,
-      { errors: result.error.errors }
+      `Merged registry validation failed: ${result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ')}`,
+      { errors: result.error.issues }
     );
   }
 
@@ -541,8 +541,8 @@ export async function loadRegistryFromFiles(
   if (!result.success) {
     throw new RegistryError(
       ErrorCodes.INVALID_REGISTRY,
-      `Registry validation failed: ${result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ')}`,
-      { errors: result.error.errors }
+      `Registry validation failed: ${result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ')}`,
+      { errors: result.error.issues }
     );
   }
 
