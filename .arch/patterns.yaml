@@ -93,11 +93,79 @@ patterns:
     usage: "Use TypeScriptValidator for AST-based analysis of TypeScript/JavaScript files."
     keywords: [typescript, ast, parse, analyze, ts-morph, source, code]
 
+  python_ast:
+    canonical: src/validators/python.ts
+    exports: [PythonValidator]
+    usage: "Use PythonValidator for tree-sitter AST-based analysis of Python files."
+    keywords: [python, ast, parse, analyze, tree-sitter, py, source]
+    example: |
+      import { PythonValidator } from '../validators/python.js';
+      const validator = new PythonValidator();
+      const model = await validator.parseFile('module.py');
+
+  go_ast:
+    canonical: src/validators/go.ts
+    exports: [GoValidator]
+    usage: "Use GoValidator for tree-sitter AST-based analysis of Go files."
+    keywords: [go, golang, ast, parse, analyze, tree-sitter, source]
+    example: |
+      import { GoValidator } from '../validators/go.js';
+      const validator = new GoValidator();
+      const model = await validator.parseFile('main.go');
+
+  tree_sitter_utils:
+    canonical: src/validators/tree-sitter/TreeSitterUtils.ts
+    exports: [TreeSitterContext, traverseTree, findNodesByType]
+    usage: "Use tree-sitter utilities for AST traversal and extraction. Shared by Python and Go validators."
+    keywords: [tree-sitter, ast, traverse, node, context, extraction]
+
   semantic_model:
     canonical: src/validators/semantic.types.ts
     exports: [SemanticModel, MethodInfo, ClassInfo, ImportInfo]
     usage: "Use semantic model types for language-agnostic code representation."
     keywords: [semantic, model, method, class, import, export, function]
+
+  # ---------------------------------------------------------------------------
+  # Multi-Language Support Patterns
+  # ---------------------------------------------------------------------------
+
+  arch_tag_insertion:
+    canonical: src/utils/arch-tag.ts
+    exports: [insertArchTag, replaceArchTag, detectLanguageFromExtension, hasArchTag, extractArchId]
+    usage: "Use arch-tag utilities for language-aware @arch tag insertion. Supports TypeScript, JavaScript, Python, and Go comment syntax."
+    keywords: [arch, tag, insert, replace, language, comment, python, go, typescript]
+    example: |
+      import { insertArchTag, detectLanguageFromExtension } from '../utils/arch-tag.js';
+      const lang = detectLanguageFromExtension('file.py');  // 'python'
+      const content = insertArchTag(originalContent, 'my.arch', 'file.py');
+      // Python: # @arch my.arch
+      // Go: // @arch my.arch
+      // TypeScript: /** @arch my.arch */
+
+  scaffold_multi_language:
+    canonical: src/core/scaffold/engine.ts
+    exports: [ScaffoldEngine]
+    usage: "Use ScaffoldEngine with language option for multi-language file scaffolding. Generates language-appropriate templates and comment syntax."
+    keywords: [scaffold, generate, template, language, python, go, typescript, create]
+    example: |
+      import { ScaffoldEngine } from '../core/scaffold/index.js';
+      const engine = new ScaffoldEngine(projectRoot);
+      const result = await engine.scaffold({
+        archId: 'api.handler',
+        name: 'RequestHandler',
+        language: 'python',  // or 'go', 'typescript'
+        outputPath: 'src/handlers',
+      });
+
+  inference_rules:
+    canonical: src/core/infer/rules.ts
+    exports: [inferArchitecture, DEFAULT_RULES, buildRulesFromSettings, parseConfigRules]
+    usage: "Use inference engine to auto-detect architecture from file patterns and content. Includes rules for Python, Go, React, Convex, and more."
+    keywords: [infer, detect, architecture, pattern, rule, bootstrap, auto-tag, python, go]
+    example: |
+      import { inferArchitecture, DEFAULT_RULES } from '../core/infer/rules.js';
+      const result = inferArchitecture('test_auth.py', content, DEFAULT_RULES);
+      // result.archId: 'base.test', result.confidence: 'high'
 
   # ---------------------------------------------------------------------------
   # CLI Patterns

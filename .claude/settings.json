@@ -1,5 +1,15 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/archcodex-session-start.sh"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Write",
@@ -7,10 +17,33 @@
           {
             "type": "command",
             "command": ".claude/hooks/archcodex-pre-write.sh"
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
           {
             "type": "command",
             "command": ".claude/hooks/archcodex-reminder.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/archcodex-pre-read.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/archcodex-plan-mode.sh"
           }
         ]
       }

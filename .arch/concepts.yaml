@@ -237,9 +237,68 @@ concepts:
       - "ast"
       - "syntax tree"
       - "ts-morph"
+      - "tree-sitter"
       - "code analysis"
       - "static analysis"
       - "source code parsing"
     architectures:
       - archcodex.infra.validator
+      - archcodex.infra.validator-support
       - archcodex.core.domain.constraint
+
+  # Multi-Language Support
+  multi_language:
+    description: "Multi-language support for Python, Go, and TypeScript"
+    aliases:
+      - "python support"
+      - "go support"
+      - "golang"
+      - "multi-language"
+      - "language detection"
+      - "polyglot"
+      - "new language"
+    architectures:
+      - archcodex.infra.validator
+      - archcodex.infra.validator-support
+      - archcodex.util
+
+  # Scaffolding and Code Generation
+  scaffolding:
+    description: "File scaffolding and code generation"
+    aliases:
+      - "scaffold"
+      - "generate"
+      - "template"
+      - "create file"
+      - "new file"
+      - "code generation"
+      - "boilerplate"
+    architectures:
+      - archcodex.core.engine
+
+  # Architecture Inference
+  inference:
+    description: "Auto-detection and inference of architectures from code patterns"
+    aliases:
+      - "infer"
+      - "detect architecture"
+      - "auto-tag"
+      - "bootstrap"
+      - "pattern matching"
+      - "file pattern"
+    architectures:
+      - archcodex.core.domain
+
+  # Arch Tag Management
+  arch_tags:
+    description: "@arch tag parsing, insertion, and management"
+    aliases:
+      - "arch tag"
+      - "@arch"
+      - "tag insertion"
+      - "docblock"
+      - "annotation"
+      - "comment tag"
+    architectures:
+      - archcodex.core.domain.parser
+      - archcodex.util
