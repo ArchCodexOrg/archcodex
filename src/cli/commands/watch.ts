@@ -99,7 +99,7 @@ async function runWatch(patterns: string[] | undefined, options: WatchOptions): 
   const isMatchingFile = (filePath: string): boolean => {
     // Check extension first (most common filter)
     const ext = path.extname(filePath);
-    if (!['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return false;
+    if (!['.ts', '.tsx', '.js', '.jsx', '.py', '.go'].includes(ext)) return false;
     if (filePath.endsWith('.d.ts')) return false;
 
     // Check if file should be ignored

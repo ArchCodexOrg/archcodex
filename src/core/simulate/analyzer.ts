@@ -53,7 +53,7 @@ export class SimulationAnalyzer {
     );
 
     // Step 2: Find all files with @arch tags
-    const patterns = options.filePatterns || ['src/**/*.ts', 'src/**/*.tsx'];
+    const patterns = options.filePatterns || ['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.py', 'src/**/*.go'];
     const files = await globFiles(patterns, {
       cwd: this.projectRoot,
       absolute: false,

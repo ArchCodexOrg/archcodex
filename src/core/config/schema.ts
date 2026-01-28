@@ -9,7 +9,7 @@ export const UntaggedPolicySchema = z.enum(['allow', 'warn', 'deny']);
 /** File scanning patterns configuration. */
 export const FileScanPatternsSchema = z.object({
   /** Glob patterns for files to include */
-  include: z.array(z.string()).default(['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx']),
+  include: z.array(z.string()).default(['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.go']),
   /** Glob patterns for files to exclude */
   exclude: z.array(z.string()).default([
     '**/node_modules/**',
@@ -22,6 +22,9 @@ export const FileScanPatternsSchema = z.object({
     '**/*.spec.tsx',
     '**/*.test.js',
     '**/*.spec.js',
+    '**/*_test.py',
+    '**/test_*.py',
+    '**/*_test.go',
   ]),
 });
 
