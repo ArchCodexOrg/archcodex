@@ -8,7 +8,7 @@ import { loadConfig } from '../../core/config/loader.js';
 import { HealthAnalyzer } from '../../core/health/index.js';
 import type { HealthReport, IndexStatus } from '../../core/health/types.js';
 import { checkIndexStaleness } from '../../core/discovery/staleness.js';
-import { printLayerCoverage, printRecommendation } from './health-output.js';
+import { printLayerCoverage, printRecommendation, printTypeDuplicates } from './health-output.js';
 import { logger as log } from '../../utils/logger.js';
 
 interface HealthOptions {
@@ -19,6 +19,7 @@ interface HealthOptions {
   byArch?: boolean;
   cache?: boolean; // Caching enabled by default
   layers?: boolean; // Layer analysis enabled by default
+  detectTypeDuplicates?: boolean;
 }
 
 /**
@@ -34,6 +35,7 @@ export function createHealthCommand(): Command {
     .option('--by-arch', 'Show file counts per architecture')
     .option('--no-cache', 'Bypass health cache (slower but ensures accuracy)')
     .option('--no-layers', 'Skip layer coverage analysis (faster)')
+    .option('--detect-type-duplicates', 'Find duplicate/similar type definitions across files', false)
     .action(async (options: HealthOptions) => {
       try {
         await runHealth(options);
@@ -64,6 +66,8 @@ async function runHealth(options: HealthOptions): Promise<void> {
     useCache: options.cache !== false,
     // Skip layer analysis when --no-layers is set
     skipLayers,
+    // Detect type duplicates when flag is set
+    detectTypeDuplicates: options.detectTypeDuplicates,
   });
   const elapsed = Date.now() - startTime;
 
@@ -303,6 +307,11 @@ function printHealthReport(report: HealthReport, verbose: boolean = false, byArc
     printLayerCoverage(report.layerHealth, verbose);
   }
 
+  // Type Duplicates
+  if (report.typeDuplicates && report.typeDuplicates.length > 0) {
+    printTypeDuplicates(report.typeDuplicates);
+  }
+
   // Discovery Index Status
   if (report.indexStatus) {
     console.log();
@@ -419,4 +428,5 @@ function printHealthReport(report: HealthReport, verbose: boolean = false, byArc
 
   console.log();
 }
+
 

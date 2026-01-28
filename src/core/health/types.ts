@@ -271,6 +271,22 @@ export interface LayerCoverageHealth {
 }
 
 /**
+ * Type duplicate found during health analysis.
+ */
+export interface TypeDuplicateReport {
+  /** Canonical type name */
+  name: string;
+  /** Type of match */
+  matchType: 'exact' | 'renamed' | 'similar';
+  /** Similarity percentage (for similar types) */
+  similarity?: number;
+  /** Locations where this type is defined */
+  locations: Array<{ file: string; line: number; name: string }>;
+  /** Suggestion for resolution */
+  suggestion: string;
+}
+
+/**
  * Complete health report.
  */
 export interface HealthReport {
@@ -292,6 +308,8 @@ export interface HealthReport {
   intentHealth?: IntentHealth;
   /** Layer coverage health */
   layerHealth?: LayerCoverageHealth;
+  /** Type duplicate analysis */
+  typeDuplicates?: TypeDuplicateReport[];
   /** Actionable recommendations */
   recommendations: HealthRecommendation[];
   /** Report generation timestamp */
@@ -318,4 +336,6 @@ export interface HealthOptions {
   useCache?: boolean;
   /** Skip layer coverage analysis (faster) */
   skipLayers?: boolean;
+  /** Detect duplicate type definitions across files */
+  detectTypeDuplicates?: boolean;
 }

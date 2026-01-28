@@ -18,6 +18,8 @@ import {
   findFilesWithMultipleOverrides,
 } from './audit-stats.js';
 import { analyzeLayerHealth } from './layer-health.js';
+import { DuplicateDetector } from '../types/duplicate-detector.js';
+import type { DuplicateGroup } from '../types/types.js';
 import type {
   HealthReport,
   HealthOptions,
@@ -31,6 +33,7 @@ import type {
   FileOverrideStats,
   IntentHealth,
   LayerCoverageHealth,
+  TypeDuplicateReport,
 } from './types.js';
 
 /**
@@ -44,6 +47,7 @@ const DEFAULT_OPTIONS: Omit<Required<HealthOptions>, 'include' | 'exclude'> = {
   lowUsageThreshold: 2,
   useCache: true,
   skipLayers: false,
+  detectTypeDuplicates: false,
 };
 
 /**
@@ -146,6 +150,21 @@ export class HealthAnalyzer {
     // Find files with multiple overrides
     const filesWithMultipleOverrides = findFilesWithMultipleOverrides(auditReport);
 
+    // Run type duplicate detection if enabled
+    let typeDuplicates: TypeDuplicateReport[] | undefined;
+    if (options.detectTypeDuplicates) {
+      const allFiles = Array.from(scanResult.files.keys());
+      const tsFiles = allFiles.filter(f => f.endsWith('.ts') || f.endsWith('.tsx'));
+      if (tsFiles.length > 0) {
+        const duplicateDetector = new DuplicateDetector(this.projectRoot, {
+          skipImplementations: true,
+        });
+        const duplicateReport = await duplicateDetector.scanFiles(tsFiles);
+        typeDuplicates = this.convertToTypeDuplicateReports(duplicateReport.groups);
+        duplicateDetector.dispose();
+      }
+    }
+
     // Generate recommendations
     const recommendations = this.generateRecommendations(
       overrideDebt,
@@ -155,7 +174,8 @@ export class HealthAnalyzer {
       topOverriddenArchs,
       filesWithMultipleOverrides,
       intentHealth,
-      layerHealth
+      layerHealth,
+      typeDuplicates
     );
 
     return {
@@ -167,6 +187,7 @@ export class HealthAnalyzer {
       filesWithMultipleOverrides,
       intentHealth,
       layerHealth,
+      typeDuplicates,
       recommendations,
       generatedAt: new Date().toISOString(),
     };
@@ -286,6 +307,41 @@ export class HealthAnalyzer {
 
 
   /**
+   * Convert DuplicateGroup[] to TypeDuplicateReport[] for health report.
+   */
+  private convertToTypeDuplicateReports(groups: DuplicateGroup[]): TypeDuplicateReport[] {
+    return groups.map(group => {
+      const locations = [
+        { file: group.canonical.file, line: group.canonical.line, name: group.canonical.name },
+        ...group.duplicates.map(d => ({
+          file: d.type.file,
+          line: d.type.line,
+          name: d.type.name,
+        })),
+      ];
+
+      let matchType: 'exact' | 'renamed' | 'similar' = 'exact';
+      let minSimilarity = 1;
+      for (const dup of group.duplicates) {
+        if (dup.matchType === 'similar') {
+          matchType = 'similar';
+          minSimilarity = Math.min(minSimilarity, dup.similarity);
+        } else if (dup.matchType === 'renamed' && matchType !== 'similar') {
+          matchType = 'renamed';
+        }
+      }
+
+      return {
+        name: group.canonical.name,
+        matchType,
+        similarity: matchType === 'similar' ? minSimilarity : undefined,
+        locations,
+        suggestion: group.suggestion,
+      };
+    });
+  }
+
+  /**
    * Generate actionable recommendations.
    */
   private generateRecommendations(
@@ -296,7 +352,8 @@ export class HealthAnalyzer {
     topOverriddenArchs: ArchOverrideStats[],
     filesWithMultipleOverrides: FileOverrideStats[],
     intentHealth: IntentHealth,
-    layerHealth?: LayerCoverageHealth
+    layerHealth?: LayerCoverageHealth,
+    typeDuplicates?: TypeDuplicateReport[]
   ): HealthRecommendation[] {
     const recommendations: HealthRecommendation[] = [];
 
@@ -542,6 +599,23 @@ export class HealthAnalyzer {
           message: `${layerHealth.staleExclusions.length} exclusion pattern(s) are stale — matched files already have @arch tags.`,
         });
       }
+    }
+
+    // Type duplicates
+    if (typeDuplicates && typeDuplicates.length > 0) {
+      const exact = typeDuplicates.filter(d => d.matchType === 'exact').length;
+      const renamed = typeDuplicates.filter(d => d.matchType === 'renamed').length;
+      const similar = typeDuplicates.filter(d => d.matchType === 'similar').length;
+      const parts: string[] = [];
+      if (exact > 0) parts.push(`${exact} exact`);
+      if (renamed > 0) parts.push(`${renamed} renamed`);
+      if (similar > 0) parts.push(`${similar} similar`);
+      recommendations.push({
+        type: exact > 0 ? 'warning' : 'info',
+        title: 'Type duplicates detected',
+        message: `${typeDuplicates.length} duplicate type(s) found (${parts.join(', ')}). Consider consolidating to reduce maintenance burden.`,
+        command: 'archcodex health --detect-type-duplicates --json | jq .typeDuplicates',
+      });
     }
 
     // All clear

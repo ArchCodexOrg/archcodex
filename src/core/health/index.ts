@@ -12,4 +12,5 @@ export type {
   LayerCoverageHealth,
   PhantomLayerPath,
   StaleExclusion,
+  TypeDuplicateReport,
 } from './types.js';

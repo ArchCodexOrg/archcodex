@@ -138,20 +138,11 @@ export interface KeywordCleanupSuggestion {
 }
 
 /**
- * Type duplicate found during garden analysis.
+ * Type duplicate report.
+ * @deprecated Moved to health module. Import from '../health/types.js' instead.
  */
-export interface TypeDuplicateReport {
-  /** Canonical type name */
-  name: string;
-  /** Type of match */
-  matchType: 'exact' | 'renamed' | 'similar';
-  /** Similarity percentage (for similar types) */
-  similarity?: number;
-  /** Locations where this type is defined */
-  locations: Array<{ file: string; line: number; name: string }>;
-  /** Suggestion for resolution */
-  suggestion: string;
-}
+import type { TypeDuplicateReport } from '../health/types.js';
+export type { TypeDuplicateReport };
 
 /**
  * Complete garden analysis report.

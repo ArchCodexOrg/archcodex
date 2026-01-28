@@ -435,7 +435,7 @@ archcodex garden --suggest-keywords
 # Analyze existing keywords and suggest removals
 archcodex garden --cleanup-keywords
 
-# Detect duplicate/similar type definitions (off by default, slower)
+# Detect duplicate/similar type definitions (deprecated — use health --detect-type-duplicates)
 archcodex garden --detect-type-duplicates
 
 # Add suggested keywords to .arch/index.yaml
@@ -460,7 +460,7 @@ archcodex garden --json
 - **Inconsistencies**: Same naming pattern, different @arch tags
 - **Missing keywords**: High-quality terms that should be in the discovery index
 - **Low-quality keywords**: Terms that should be removed from the index
-- **Type duplicates**: Similar or identical type definitions across files (with `--detect-type-duplicates`)
+- **Type duplicates**: Similar or identical type definitions across files (deprecated — use `archcodex health --detect-type-duplicates`)
 
 ### Keyword Quality Filters
 

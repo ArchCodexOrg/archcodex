@@ -202,6 +202,9 @@ archcodex health --expiring-days 60
 
 # Include file counts per architecture
 archcodex health --by-arch
+
+# Detect duplicate/similar type definitions across files
+archcodex health --detect-type-duplicates
 ```
 
 ### Options
@@ -215,6 +218,7 @@ archcodex health --by-arch
 | `--low-usage-threshold <n>` | Threshold for low usage warnings (default: 2) |
 | `--no-cache` | Bypass progressive cache (slower but ensures fresh results) |
 | `--no-layers` | Skip layer coverage analysis (faster on large codebases) |
+| `--detect-type-duplicates` | Find duplicate/similar type definitions across files |
 
 ### Bloat Detection
 
@@ -274,6 +278,13 @@ Layer Coverage
     src/standalone/tool.ts
     ... and 8 more (use --verbose to see all)
 
+Type Duplicates
+────────────────────────────────────────
+  ⚠ UserConfig [exact]
+    → src/api/types.ts:12
+    → src/web/types.ts:45
+    Suggestion: Consolidate into a shared types file
+
 Top Overridden Constraints
 ────────────────────────────────────────
   12 overrides: forbid_import:console
@@ -295,6 +306,10 @@ Recommendations
   ⚠ Similar architectures detected
     'api.handler' and 'api.controller' are 95% similar.
     Consider consolidating with mixins.
+
+  ⚠ Type duplicates detected
+    1 duplicate type(s) found (1 exact).
+    Run: archcodex health --detect-type-duplicates --json | jq .typeDuplicates
 ```
 
 ### Preventing Architecture Bloat

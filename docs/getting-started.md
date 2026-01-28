@@ -467,9 +467,12 @@ archcodex health
 
 # See file counts per architecture
 archcodex health --by-arch
+
+# Find duplicate type definitions across files
+archcodex health --detect-type-duplicates
 ```
 
-The health report shows override debt, coverage gaps, registry quality, and layer health.
+The health report shows override debt, coverage gaps, registry quality, layer health, and type duplicates.
 
 ### Assessing Change Impact
 

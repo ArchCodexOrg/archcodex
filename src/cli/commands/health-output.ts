@@ -5,7 +5,7 @@
  * Print helpers for the health dashboard command.
  */
 import chalk from 'chalk';
-import type { HealthRecommendation, LayerCoverageHealth } from '../../core/health/types.js';
+import type { HealthRecommendation, LayerCoverageHealth, TypeDuplicateReport } from '../../core/health/types.js';
 
 export function printLayerCoverage(layerHealth: LayerCoverageHealth, verbose: boolean): void {
   console.log();
@@ -44,6 +44,29 @@ export function printLayerCoverage(layerHealth: LayerCoverageHealth, verbose: bo
 
   if (layerHealth.orphanFiles.length === 0 && layerHealth.phantomPaths.length === 0 && layerHealth.staleExclusions.length === 0) {
     console.log(chalk.green('  ✓ All files are covered by layers'));
+  }
+}
+
+const MATCH_TYPE_LABELS: Record<string, string> = {
+  exact: 'exact',
+  renamed: 'renamed',
+  similar: 'similar',
+};
+
+export function printTypeDuplicates(duplicates: TypeDuplicateReport[]): void {
+  console.log();
+  console.log(chalk.bold('Type Duplicates'));
+  console.log(chalk.dim('─'.repeat(40)));
+
+  for (const dup of duplicates) {
+    const matchLabel = MATCH_TYPE_LABELS[dup.matchType] || dup.matchType;
+    const similarity = dup.similarity ? ` (${Math.round(dup.similarity * 100)}%)` : '';
+    console.log(chalk.magenta(`  ⚠ ${dup.name}`) + chalk.dim(` [${matchLabel}${similarity}]`));
+    for (const loc of dup.locations) {
+      const nameLabel = loc.name !== dup.name ? chalk.dim(` as ${loc.name}`) : '';
+      console.log(chalk.dim(`    → ${loc.file}:${loc.line}${nameLabel}`));
+    }
+    console.log(chalk.dim(`    Suggestion: ${dup.suggestion}`));
   }
 }
 

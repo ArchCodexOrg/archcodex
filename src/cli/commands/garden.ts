@@ -133,16 +133,18 @@ async function runGarden(options: GardenCommandOptions): Promise<void> {
     }
   }
 
-  // Run type duplicate detection if enabled
+  // Run type duplicate detection if enabled (deprecated — use health --detect-type-duplicates)
   let typeDuplicates: TypeDuplicateReport[] = [];
   if (options.detectTypeDuplicates) {
+    console.log(chalk.yellow('⚠ --detect-type-duplicates in garden is deprecated. Use: archcodex health --detect-type-duplicates'));
     const tsFiles = files.filter(f => f.endsWith('.ts') || f.endsWith('.tsx'));
     if (tsFiles.length > 0) {
       const duplicateDetector = new DuplicateDetector(projectRoot, {
         skipImplementations: true,
       });
       const duplicateReport = await duplicateDetector.scanFiles(tsFiles);
-      typeDuplicates = convertToTypeDuplicateReports(duplicateReport.groups, projectRoot);
+      typeDuplicates = convertToTypeDuplicateReports(duplicateReport.groups);
+      duplicateDetector.dispose();
     }
   }
 
@@ -412,8 +414,9 @@ async function applyKeywordCleanups(
 
 /**
  * Convert DuplicateGroup[] to TypeDuplicateReport[] for garden report.
+ * @deprecated Use HealthAnalyzer.analyze({ detectTypeDuplicates: true }) instead.
  */
-function convertToTypeDuplicateReports(groups: DuplicateGroup[], _projectRoot: string): TypeDuplicateReport[] {
+function convertToTypeDuplicateReports(groups: DuplicateGroup[]): TypeDuplicateReport[] {
   return groups.map(group => {
     const locations = [
       { file: group.canonical.file, line: group.canonical.line, name: group.canonical.name },
@@ -445,5 +448,3 @@ function convertToTypeDuplicateReports(groups: DuplicateGroup[], _projectRoot: s
     };
   });
 }
-
-

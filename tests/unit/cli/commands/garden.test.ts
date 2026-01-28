@@ -97,6 +97,7 @@ vi.mock('../../../../src/core/garden/detector.js', () => ({
 vi.mock('../../../../src/core/types/duplicate-detector.js', () => ({
   DuplicateDetector: vi.fn().mockImplementation(() => ({
     scanFiles: vi.fn().mockResolvedValue({ groups: [] }),
+    dispose: vi.fn(),
   })),
 }));
 
