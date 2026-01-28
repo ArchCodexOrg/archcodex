@@ -301,7 +301,7 @@ src/
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 20+
 - TypeScript/JavaScript projects (ts-morph AST parsing)
 - Python and Go support (experimental, tree-sitter AST parsing)
 - Java support planned

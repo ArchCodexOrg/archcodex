@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ArchCodex! This document provides
 
 ### Prerequisites
 
-- Node.js 18 or higher
+- Node.js 20 or higher
 - npm 9 or higher
 - Git
 
