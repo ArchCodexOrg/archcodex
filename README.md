@@ -31,12 +31,19 @@ ArchCodex solves this by:
 
 ## Installation
 
-```bash
-# Install globally
-npm install -g archcodex
+> **Note:** ArchCodex is not yet published to npm. Install from source:
 
-# Or as a dev dependency
-npm install --save-dev archcodex
+```bash
+# Clone the repository
+git clone https://github.com/ArchCodexOrg/archcodex.git
+cd archcodex
+
+# Install dependencies and build
+npm install
+npm run build
+
+# Link globally (optional)
+npm link
 ```
 
 ## Quick Start
@@ -242,12 +249,11 @@ See [AI Integration Guide](docs/ai-integration.md) for setup.
 ## Pre-Commit Integration
 
 ```bash
-# Husky
-npm run build && archcodex check --staged --format compact --max-errors 0
-
-# GitHub Actions
-- run: npx archcodex check --format compact --max-errors 0
+# Husky (after linking archcodex globally with npm link)
+archcodex check --staged --format compact --max-errors 0
 ```
+
+> **Note:** CI integration examples assume `archcodex` is available in PATH (via `npm link` or added to project).
 
 See [CI Integration Guide](docs/ci-integration.md) for full setup.
 
@@ -296,8 +302,8 @@ src/
 ## Requirements
 
 - Node.js 18+
-- TypeScript/JavaScript projects
-- Python and Go support (experimental, regex-based parsing)
+- TypeScript/JavaScript projects (ts-morph AST parsing)
+- Python and Go support (experimental, tree-sitter AST parsing)
 - Java support planned
 
 ## Community & Support

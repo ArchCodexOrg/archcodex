@@ -50,3 +50,25 @@ archcodex.test.unit:
     - Test one behavior per test case
     - Keep tests fast (no I/O, no external services)
     - Use factories or builders for test data
+
+archcodex.test.integration:
+  inherits: archcodex.test
+  description: Integration tests - test multiple components together
+  rationale: |
+    Integration tests that exercise multiple components working together.
+    May involve real file system operations in temp directories.
+
+    Use for: tests/integration/**/*.test.ts
+    Don't use for: Unit tests with mocked dependencies
+  file_pattern: ${name}.test.ts
+  default_path: tests/integration
+  constraints:
+    - rule: location_pattern
+      value: tests/integration/
+      severity: warning
+      why: Integration tests should be in tests/integration/ directory
+  hints:
+    - Use temp directories for file operations
+    - Clean up after tests (use beforeEach/afterEach)
+    - Test realistic workflows end-to-end
+    - May be slower than unit tests - that's OK

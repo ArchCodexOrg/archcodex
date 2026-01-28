@@ -79,7 +79,9 @@ async function runBootstrap(pattern: string | undefined, options: BootstrapOptio
   }
 
   // Get file patterns from config or use provided pattern
-  const includePatterns = pattern ? [pattern] : (config.files?.scan?.include ?? ['**/*.ts', '**/*.tsx']);
+  // Default patterns include TypeScript, JavaScript, Python, and Go files
+  const defaultPatterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py', '**/*.go'];
+  const includePatterns = pattern ? [pattern] : (config.files?.scan?.include ?? defaultPatterns);
   const excludePatterns = config.files?.scan?.exclude ?? [
     '**/node_modules/**', '**/dist/**', '**/build/**', '**/*.d.ts',
   ];
@@ -156,9 +158,9 @@ async function runBootstrap(pattern: string | undefined, options: BootstrapOptio
       continue;
     }
 
-    // Tag the file
+    // Tag the file (pass file path for language-aware comment syntax)
     if (!options.dryRun) {
-      const newContent = insertArchTag(content, inference.archId);
+      const newContent = insertArchTag(content, inference.archId, file);
       await writeFile(fullPath, newContent);
     }
 

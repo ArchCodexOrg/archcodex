@@ -1876,7 +1876,7 @@ describe('GoValidator', () => {
   });
 
   describe('known limitations', () => {
-    it('does not parse generic type parameters', async () => {
+    it('parses generic type parameters with tree-sitter', async () => {
       const content = [
         'package main',
         '',
@@ -1885,11 +1885,12 @@ describe('GoValidator', () => {
         '}',
       ].join('\n');
       const model = await parse(content);
-      // Generic syntax is not supported; the struct is not detected
-      expect(model.classes).toHaveLength(0);
+      // Tree-sitter AST parsing supports generics
+      expect(model.classes).toHaveLength(1);
+      expect(model.classes[0].name).toBe('Container');
     });
 
-    it('does not parse grouped type declarations', async () => {
+    it('parses grouped type declarations with tree-sitter', async () => {
       const content = [
         'package main',
         '',
@@ -1901,11 +1902,13 @@ describe('GoValidator', () => {
         ')',
       ].join('\n');
       const model = await parse(content);
-      // Grouped type blocks are not supported
-      expect(model.classes).toHaveLength(0);
+      // Tree-sitter AST parsing supports grouped type blocks
+      expect(model.classes).toHaveLength(2);
+      expect(model.classes[0].name).toBe('Foo');
+      expect(model.classes[1].name).toBe('Bar');
     });
 
-    it('does not parse multi-line function signatures', async () => {
+    it('parses multi-line function signatures with tree-sitter', async () => {
       const content = [
         'package main',
         '',
@@ -1917,8 +1920,190 @@ describe('GoValidator', () => {
         '}',
       ].join('\n');
       const model = await parse(content);
-      // Multi-line signatures are not supported; the function is not detected
-      expect(model.functions).toHaveLength(0);
+      // Tree-sitter AST parsing supports multi-line signatures
+      expect(model.functions).toHaveLength(1);
+      expect(model.functions[0].name).toBe('MultiLine');
+      expect(model.functions[0].parameterCount).toBe(2);
+    });
+  });
+
+  describe('advanced patterns fixture', () => {
+    // Tests that parse the comprehensive tests/fixtures/go/advanced_patterns.go file
+    // to verify tree-sitter handles real-world advanced Go patterns
+
+    it('parses the advanced_patterns.go fixture file', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Basic validation that the file was parsed
+      expect(model.lineCount).toBeGreaterThan(700);
+      expect(model.language).toBe('go');
+    });
+
+    it('extracts generic types from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Verify generic types are parsed: Result[T], Cache[K, V], Container[T]
+      const result = model.classes.find(c => c.name === 'Result');
+      const cache = model.classes.find(c => c.name === 'Cache');
+      const container = model.classes.find(c => c.name === 'Container');
+
+      expect(result).toBeDefined();
+      expect(cache).toBeDefined();
+      expect(container).toBeDefined();
+    });
+
+    it('extracts interfaces with composition from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Verify interface composition: ReadWriter embeds Reader and Writer
+      const readWriter = model.interfaces.find(i => i.name === 'ReadWriter');
+      expect(readWriter).toBeDefined();
+      expect(readWriter!.extends).toContain('Reader');
+      expect(readWriter!.extends).toContain('Writer');
+
+      // ReadWriteCloser embeds Reader, Writer, Closer
+      const readWriteCloser = model.interfaces.find(i => i.name === 'ReadWriteCloser');
+      expect(readWriteCloser).toBeDefined();
+      expect(readWriteCloser!.extends).toHaveLength(3);
+    });
+
+    it('extracts struct embedding patterns from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // User struct embeds BaseEntity, Auditable, SoftDeletable
+      const user = model.classes.find(c => c.name === 'User');
+      expect(user).toBeDefined();
+      expect(user!.extends).toBe('BaseEntity');
+      expect(user!.implements).toContain('Auditable');
+      expect(user!.implements).toContain('SoftDeletable');
+    });
+
+    it('extracts functional options pattern functions', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Verify functional options: WithHost, WithPort, WithTimeout, etc.
+      const withHost = model.functions.find(f => f.name === 'WithHost');
+      const withPort = model.functions.find(f => f.name === 'WithPort');
+      const withTimeout = model.functions.find(f => f.name === 'WithTimeout');
+      const newServer = model.functions.find(f => f.name === 'NewServer');
+
+      expect(withHost).toBeDefined();
+      expect(withHost!.isExported).toBe(true);
+      expect(withPort).toBeDefined();
+      expect(withTimeout).toBeDefined();
+      expect(newServer).toBeDefined();
+    });
+
+    it('extracts builder pattern methods from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // QueryBuilder has method chaining: Select, Where, OrderBy, Limit, Offset, Build
+      const queryBuilder = model.classes.find(c => c.name === 'QueryBuilder');
+      expect(queryBuilder).toBeDefined();
+
+      const methodNames = queryBuilder!.methods.map(m => m.name);
+      expect(methodNames).toContain('Select');
+      expect(methodNames).toContain('Where');
+      expect(methodNames).toContain('OrderBy');
+      expect(methodNames).toContain('Limit');
+      expect(methodNames).toContain('Build');
+    });
+
+    it('extracts multi-line function signatures from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // ProcessBatch and CreateUserWithOptions have multi-line signatures
+      const processBatch = model.functions.find(f => f.name === 'ProcessBatch');
+      const createUserWithOptions = model.functions.find(f => f.name === 'CreateUserWithOptions');
+
+      expect(processBatch).toBeDefined();
+      expect(processBatch!.parameterCount).toBeGreaterThanOrEqual(5);
+
+      expect(createUserWithOptions).toBeDefined();
+      expect(createUserWithOptions!.parameterCount).toBeGreaterThanOrEqual(4);
+    });
+
+    it('extracts worker pool generic struct from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // WorkerPool[T, R] is a generic struct
+      const workerPool = model.classes.find(c => c.name === 'WorkerPool');
+      expect(workerPool).toBeDefined();
+      expect(workerPool!.isExported).toBe(true);
+
+      // Note: Methods on generic receivers (like *WorkerPool[T, R]) may not be
+      // attached due to the generic type parameters in the receiver
+      // This is a known limitation that could be addressed in future
+    });
+
+    it('extracts sentinel errors as exported variables', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // ErrNotFound, ErrInvalidInput, ErrTimeout are exported
+      const errNotFound = model.exports.find(e => e.name === 'ErrNotFound');
+      const errInvalidInput = model.exports.find(e => e.name === 'ErrInvalidInput');
+      const errTimeout = model.exports.find(e => e.name === 'ErrTimeout');
+
+      expect(errNotFound).toBeDefined();
+      expect(errInvalidInput).toBeDefined();
+      expect(errTimeout).toBeDefined();
+
+      // errInternal is unexported, should not be in exports
+      const errInternal = model.exports.find(e => e.name === 'errInternal');
+      expect(errInternal).toBeUndefined();
+    });
+
+    it('extracts middleware pattern functions', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/go/advanced_patterns.go');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Chain, LoggingMiddleware, TimeoutMiddleware are middleware functions
+      const chain = model.functions.find(f => f.name === 'Chain');
+      const loggingMiddleware = model.functions.find(f => f.name === 'LoggingMiddleware');
+      const timeoutMiddleware = model.functions.find(f => f.name === 'TimeoutMiddleware');
+
+      expect(chain).toBeDefined();
+      expect(loggingMiddleware).toBeDefined();
+      expect(timeoutMiddleware).toBeDefined();
     });
   });
 });

@@ -7,7 +7,28 @@ import chalk from 'chalk';
 import { loadIndex } from '../../core/discovery/index.js';
 import { loadRegistry, loadIntentRegistry, suggestIntents } from '../../core/registry/loader.js';
 import { ScaffoldEngine } from '../../core/scaffold/index.js';
+import type { ScaffoldLanguage } from '../../core/scaffold/index.js';
 import { logger as log } from '../../utils/logger.js';
+
+/** Valid language options */
+const VALID_LANGUAGES = ['typescript', 'python', 'go', 'ts', 'py'];
+
+/**
+ * Normalize language option to ScaffoldLanguage.
+ */
+function normalizeLanguage(lang: string): ScaffoldLanguage {
+  switch (lang.toLowerCase()) {
+    case 'python':
+    case 'py':
+      return 'python';
+    case 'go':
+      return 'go';
+    case 'typescript':
+    case 'ts':
+    default:
+      return 'typescript';
+  }
+}
 
 /**
  * Create the scaffold command.
@@ -19,6 +40,7 @@ export function createScaffoldCommand(): Command {
     .option('-n, --name <name>', 'Name for the generated class/component')
     .option('-o, --output <path>', 'Output directory')
     .option('-t, --template <template>', 'Template file to use')
+    .option('-l, --lang <language>', 'Target language: typescript (default), python, go')
     .option('--overwrite', 'Overwrite existing files')
     .option('--dry-run', 'Show what would be generated without writing')
     .action(async (archId: string, options: ScaffoldOptions) => {
@@ -35,6 +57,7 @@ interface ScaffoldOptions {
   name?: string;
   output?: string;
   template?: string;
+  lang?: string;
   overwrite?: boolean;
   dryRun?: boolean;
 }
@@ -47,6 +70,14 @@ async function runScaffold(archId: string, options: ScaffoldOptions): Promise<vo
     log.error('--name is required. Example: archcodex scaffold domain.service --name UserService');
     process.exit(1);
   }
+
+  // Validate language option
+  if (options.lang && !VALID_LANGUAGES.includes(options.lang.toLowerCase())) {
+    log.error(`Invalid language: ${options.lang}. Valid options: typescript, python, go`);
+    process.exit(1);
+  }
+
+  const language = options.lang ? normalizeLanguage(options.lang) : undefined;
 
   // Load index for suggested path and template
   const index = await loadIndex(projectRoot);
@@ -78,6 +109,7 @@ async function runScaffold(archId: string, options: ScaffoldOptions): Promise<vo
       outputPath: options.output,
       template: options.template,
       overwrite: options.overwrite,
+      language,
     },
     index
   );

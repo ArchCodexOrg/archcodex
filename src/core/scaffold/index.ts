@@ -8,4 +8,5 @@ export type {
   TemplateVariables,
   ScaffoldOptions,
   ScaffoldResult,
+  ScaffoldLanguage,
 } from './types.js';

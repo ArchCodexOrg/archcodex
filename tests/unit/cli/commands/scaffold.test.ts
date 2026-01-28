@@ -134,6 +134,7 @@ describe('scaffold command', () => {
       expect(optionNames).toContain('--name');
       expect(optionNames).toContain('--output');
       expect(optionNames).toContain('--template');
+      expect(optionNames).toContain('--lang');
       expect(optionNames).toContain('--overwrite');
       expect(optionNames).toContain('--dry-run');
     });
@@ -408,6 +409,73 @@ describe('scaffold command', () => {
         }),
         expect.any(Object)
       );
+    });
+
+    it('should pass language option to scaffold engine (python)', async () => {
+      const command = createScaffoldCommand();
+      await command.parseAsync(['node', 'test', 'domain.service', '--name', 'Test', '--lang', 'python']);
+
+      const engineInstance = vi.mocked(ScaffoldEngine).mock.results[0].value;
+      expect(engineInstance.scaffold).toHaveBeenCalledWith(
+        expect.objectContaining({
+          language: 'python',
+        }),
+        expect.any(Object)
+      );
+    });
+
+    it('should pass language option to scaffold engine (go)', async () => {
+      const command = createScaffoldCommand();
+      await command.parseAsync(['node', 'test', 'domain.service', '--name', 'Test', '--lang', 'go']);
+
+      const engineInstance = vi.mocked(ScaffoldEngine).mock.results[0].value;
+      expect(engineInstance.scaffold).toHaveBeenCalledWith(
+        expect.objectContaining({
+          language: 'go',
+        }),
+        expect.any(Object)
+      );
+    });
+
+    it('should normalize language alias (py -> python)', async () => {
+      const command = createScaffoldCommand();
+      await command.parseAsync(['node', 'test', 'domain.service', '--name', 'Test', '--lang', 'py']);
+
+      const engineInstance = vi.mocked(ScaffoldEngine).mock.results[0].value;
+      expect(engineInstance.scaffold).toHaveBeenCalledWith(
+        expect.objectContaining({
+          language: 'python',
+        }),
+        expect.any(Object)
+      );
+    });
+
+    it('should normalize language alias (ts -> typescript)', async () => {
+      const command = createScaffoldCommand();
+      await command.parseAsync(['node', 'test', 'domain.service', '--name', 'Test', '--lang', 'ts']);
+
+      const engineInstance = vi.mocked(ScaffoldEngine).mock.results[0].value;
+      expect(engineInstance.scaffold).toHaveBeenCalledWith(
+        expect.objectContaining({
+          language: 'typescript',
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  describe('language validation', () => {
+    it('should error on invalid language', async () => {
+      const command = createScaffoldCommand();
+
+      try {
+        await command.parseAsync(['node', 'test', 'domain.service', '--name', 'Test', '--lang', 'ruby']);
+      } catch {
+        // Expected
+      }
+
+      expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Invalid language'));
+      expect(processExitSpy).toHaveBeenCalledWith(1);
     });
   });
 

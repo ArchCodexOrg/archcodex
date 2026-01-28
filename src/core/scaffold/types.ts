@@ -4,6 +4,9 @@
  * Scaffold type definitions.
  */
 
+/** Supported scaffold languages */
+export type ScaffoldLanguage = 'typescript' | 'python' | 'go';
+
 /**
  * Variables available for template substitution.
  */
@@ -22,8 +25,10 @@ export interface TemplateVariables {
   DATE: string;
   /** Current timestamp */
   TIMESTAMP: string;
+  /** The target language */
+  LANGUAGE: ScaffoldLanguage;
   /** Custom variables */
-  [key: string]: string;
+  [key: string]: string | ScaffoldLanguage;
 }
 
 /**
@@ -42,6 +47,8 @@ export interface ScaffoldOptions {
   variables?: Record<string, string>;
   /** Whether to overwrite existing files */
   overwrite?: boolean;
+  /** Target language (typescript, python, go). Inferred from outputPath extension if not specified. */
+  language?: ScaffoldLanguage;
 }
 
 /**

@@ -44,10 +44,10 @@ ArchCodex uses a language-agnostic semantic model, enabling support for multiple
 
 | Language | Status | Parser |
 |----------|--------|--------|
-| TypeScript | Full support | ts-morph |
-| JavaScript | Full support | ts-morph |
-| Python | Experimental | regex-based (line-by-line) |
-| Go | Experimental | regex-based (line-by-line) |
+| TypeScript | Full support | ts-morph (AST) |
+| JavaScript | Full support | ts-morph (AST) |
+| Python | Experimental | tree-sitter (AST) |
+| Go | Experimental | tree-sitter (AST) |
 | Java | Planned | — |
 
 ### Architecture Diagram
@@ -67,12 +67,28 @@ ArchCodex uses a language-agnostic semantic model, enabling support for multiple
 └─────────────────────────────────┬───────────────────────────┘
                                   │
          ┌────────────────────────┼────────────────────┐
-         ▼                       ▼                    ▼
+         ▼                        ▼                    ▼
 ┌─────────────────────┐ ┌────────────────┐ ┌────────────────┐
 │ TypeScriptValidator │ │ PythonValidator│ │  GoValidator   │
-│ (ts-morph)          │ │ (regex-based)  │ │ (regex-based)  │
+│ (ts-morph)          │ │ (tree-sitter)  │ │ (tree-sitter)  │
 └─────────────────────┘ └────────────────┘ └────────────────┘
 ```
+
+### Tree-Sitter Integration
+
+Python and Go validators use [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for accurate AST parsing. This enables support for complex patterns that regex-based parsing cannot handle:
+
+**Go:**
+- Generic types (`Container[T any]`, `Cache[K, V]`)
+- Grouped type declarations (`type ( ... )`)
+- Interface composition
+- Multi-line function signatures
+
+**Python:**
+- Protocols and ABCs
+- Dataclasses with complex fields
+- Async/await patterns
+- Nested classes and decorators
 
 ### SemanticModel
 
@@ -104,11 +120,11 @@ languages:
   javascript:
     enabled: true
   python:
-    enabled: true   # Experimental — regex-based parsing
+    enabled: true   # Experimental — tree-sitter AST parsing
     skip_constraints: [require_decorator]  # Skip non-applicable constraints
     non_applicable_constraints: skip  # skip | warn
   go:
-    enabled: true   # Experimental — regex-based parsing
+    enabled: true   # Experimental — tree-sitter AST parsing
     skip_constraints: [require_decorator]
     non_applicable_constraints: skip
 ```
@@ -155,9 +171,14 @@ src/
     ├── capabilities.ts      # Language capability definitions
     ├── validator-registry.ts # Plugin registry for validators
     ├── interface.ts         # ILanguageValidator interface
-    ├── typescript.ts        # TypeScript/JavaScript validator
-    ├── python.ts            # Python validator (experimental)
-    └── go.ts                # Go validator (experimental)
+    ├── typescript.ts        # TypeScript/JavaScript validator (ts-morph)
+    ├── python.ts            # Python validator (experimental, tree-sitter)
+    ├── go.ts                # Go validator (experimental, tree-sitter)
+    └── tree-sitter/         # Shared tree-sitter AST extraction
+        ├── index.ts         # Barrel exports
+        ├── TreeSitterUtils.ts # Shared utilities
+        ├── python-ast.ts    # Python AST extraction
+        └── go-ast.ts        # Go AST extraction
 ```
 
 ---

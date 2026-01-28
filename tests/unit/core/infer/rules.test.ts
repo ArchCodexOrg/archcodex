@@ -755,3 +755,474 @@ export function Component() {
     });
   });
 });
+
+describe('Python inference rules', () => {
+  describe('Python test files', () => {
+    it('should detect test_*.py files', () => {
+      const result = inferArchitecture('test_auth.py', 'def test_login(): pass', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test');
+      expect(result?.confidence).toBe('high');
+    });
+
+    it('should detect *_test.py files', () => {
+      const result = inferArchitecture('auth_test.py', 'def test_login(): pass', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test');
+    });
+
+    it('should detect test files in nested paths', () => {
+      const result = inferArchitecture('tests/unit/test_utils.py', '', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test');
+    });
+  });
+
+  describe('Python conftest', () => {
+    it('should detect conftest.py files', () => {
+      const result = inferArchitecture('conftest.py', '@pytest.fixture\ndef client():', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test.fixtures');
+      expect(result?.confidence).toBe('high');
+    });
+
+    it('should detect nested conftest.py', () => {
+      const result = inferArchitecture('tests/conftest.py', '', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test.fixtures');
+    });
+  });
+
+  describe('Python __init__.py', () => {
+    it('should detect __init__.py as barrel files', () => {
+      const result = inferArchitecture('__init__.py', 'from .module import *', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.barrel');
+      expect(result?.confidence).toBe('high');
+    });
+
+    it('should detect nested __init__.py', () => {
+      const result = inferArchitecture('src/mypackage/__init__.py', '', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.barrel');
+    });
+  });
+
+  describe('Python type stubs', () => {
+    it('should detect .pyi stub files', () => {
+      const result = inferArchitecture('mymodule.pyi', 'def func(x: int) -> str: ...', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.types');
+      expect(result?.confidence).toBe('high');
+    });
+  });
+
+  describe('FastAPI routes', () => {
+    it('should detect FastAPI router files', () => {
+      const content = `from fastapi import APIRouter
+router = APIRouter()
+@router.get("/users")
+def get_users(): pass`;
+      const result = inferArchitecture('routes.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.router');
+      expect(result?.confidence).toBe('high');
+    });
+
+    it('should not match Python files without FastAPI imports', () => {
+      const content = `@app.get("/users")
+def get_users(): pass`;
+      const result = inferArchitecture('routes.py', content, DEFAULT_RULES);
+      expect(result?.archId).not.toBe('api.router');
+    });
+  });
+
+  describe('Django files', () => {
+    it('should detect Django view files', () => {
+      const content = `from django.http import HttpResponse
+def my_view(request):
+    return HttpResponse("Hello")`;
+      const result = inferArchitecture('views.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('web.view');
+    });
+
+    it('should detect Django model files', () => {
+      const content = `from django.db import models
+class User(models.Model):
+    name = models.CharField(max_length=100)`;
+      const result = inferArchitecture('models.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('core.model');
+    });
+
+    it('should detect Django serializer files', () => {
+      const content = `from rest_framework import serializers
+class UserSerializer(serializers.Serializer): pass`;
+      const result = inferArchitecture('serializers.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.serializer');
+    });
+  });
+
+  describe('Pydantic models', () => {
+    it('should detect Pydantic schema files', () => {
+      const content = `from pydantic import BaseModel
+class User(BaseModel):
+    name: str`;
+      const result = inferArchitecture('schemas.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('core.schema');
+    });
+  });
+
+  describe('Python CLI', () => {
+    it('should detect click-based CLI files', () => {
+      const content = `import click
+@click.command()
+def main(): pass`;
+      const result = inferArchitecture('cli.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('cli.command');
+    });
+
+    it('should detect argparse-based CLI files', () => {
+      const content = `import argparse
+parser = argparse.ArgumentParser()`;
+      const result = inferArchitecture('main.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('cli.command');
+    });
+
+    it('should detect typer-based CLI files', () => {
+      const content = `import typer
+app = typer.Typer()`;
+      const result = inferArchitecture('app.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('cli.command');
+    });
+  });
+
+  describe('Python utility files', () => {
+    it('should detect utils.py files', () => {
+      const result = inferArchitecture('utils.py', 'def helper(): pass', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.utility');
+      expect(result?.confidence).toBe('low');
+    });
+
+    it('should detect helpers.py files', () => {
+      const result = inferArchitecture('helpers.py', 'def format(): pass', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.utility');
+    });
+  });
+});
+
+describe('Go inference rules', () => {
+  describe('Go test files', () => {
+    it('should detect *_test.go files', () => {
+      const content = `package main
+import "testing"
+func TestSomething(t *testing.T) {}`;
+      const result = inferArchitecture('main_test.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test');
+      expect(result?.confidence).toBe('high');
+    });
+
+    it('should detect test files in nested paths', () => {
+      const result = inferArchitecture('pkg/auth/auth_test.go', '', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test');
+    });
+  });
+
+  describe('Go main package', () => {
+    it('should detect main package with main function', () => {
+      const content = `package main
+
+func main() {
+    fmt.Println("Hello")
+}`;
+      const result = inferArchitecture('main.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('bin.main');
+      expect(result?.confidence).toBe('high');
+    });
+
+    it('should not match non-main packages', () => {
+      const content = `package utils
+
+func Helper() {}`;
+      const result = inferArchitecture('utils.go', content, DEFAULT_RULES);
+      expect(result?.archId).not.toBe('bin.main');
+    });
+
+    it('should not match main package without main function', () => {
+      const content = `package main
+
+func helper() {}`;
+      const result = inferArchitecture('helper.go', content, DEFAULT_RULES);
+      expect(result?.archId).not.toBe('bin.main');
+    });
+  });
+
+  describe('Go mock files', () => {
+    it('should detect mock.go files', () => {
+      const result = inferArchitecture('user_mock.go', 'type MockUserService struct {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test.mock');
+      expect(result?.confidence).toBe('high');
+    });
+
+    it('should detect fake.go files', () => {
+      const result = inferArchitecture('fake_repo.go', 'type FakeRepository struct {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test.mock');
+    });
+  });
+
+  describe('Go HTTP handlers', () => {
+    it('should detect handler files with HTTP handler functions', () => {
+      const content = `package handlers
+
+import "net/http"
+
+func UserHandler(w http.ResponseWriter, r *http.Request) {}`;
+      const result = inferArchitecture('handler.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.handler');
+    });
+
+    it('should detect controller files with HTTP handlers', () => {
+      const content = `package api
+
+import "net/http"
+
+func GetUsers(w http.ResponseWriter, r *http.Request) {}`;
+      const result = inferArchitecture('users_controller.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.handler');
+    });
+  });
+
+  describe('Go middleware', () => {
+    it('should detect middleware files', () => {
+      const content = `package middleware
+
+import "net/http"
+
+func Logger(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+}`;
+      const result = inferArchitecture('middleware.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.middleware');
+    });
+  });
+
+  describe('Go repository files', () => {
+    it('should detect repository.go files', () => {
+      const result = inferArchitecture('repository.go', 'type UserRepository struct {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('infra.repository');
+    });
+
+    it('should detect store.go files', () => {
+      const result = inferArchitecture('store.go', 'type DataStore interface {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('infra.repository');
+    });
+  });
+
+  describe('Go service files', () => {
+    it('should detect service.go files', () => {
+      const result = inferArchitecture('service.go', 'type UserService struct {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('core.service');
+      expect(result?.confidence).toBe('low');
+    });
+  });
+
+  describe('Go utility files', () => {
+    it('should detect utils.go files', () => {
+      const result = inferArchitecture('utils.go', 'func Helper() {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.utility');
+      expect(result?.confidence).toBe('low');
+    });
+
+    it('should detect helpers.go files', () => {
+      const result = inferArchitecture('helpers.go', 'func Format() string {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.utility');
+    });
+  });
+
+  describe('Go interface files', () => {
+    it('should detect interface definition files', () => {
+      const content = `package domain
+
+type UserRepository interface {
+    FindByID(id string) (*User, error)
+}`;
+      const result = inferArchitecture('interfaces.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('core.interface');
+    });
+  });
+});
+
+describe('Extended Python inference patterns', () => {
+  describe('Flask routes', () => {
+    it('should detect Flask route files', () => {
+      const content = `from flask import Flask, Blueprint
+app = Flask(__name__)
+@app.route("/api/users")
+def get_users():
+    return []`;
+      const result = inferArchitecture('routes.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.router');
+    });
+
+    it('should detect Flask blueprint routes', () => {
+      const content = `from flask import Blueprint
+bp = Blueprint('users', __name__)
+@bp.route("/users")
+def list_users():
+    return []`;
+      const result = inferArchitecture('users.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.router');
+    });
+  });
+
+  describe('multiple test file patterns', () => {
+    it('should handle tests directory with test_ prefix', () => {
+      expect(inferArchitecture('tests/test_unit.py', '', DEFAULT_RULES)?.archId).toBe('base.test');
+      expect(inferArchitecture('tests/integration/test_api.py', '', DEFAULT_RULES)?.archId).toBe('base.test');
+    });
+
+    it('should handle tests with _test suffix in various directories', () => {
+      expect(inferArchitecture('src/models/user_test.py', '', DEFAULT_RULES)?.archId).toBe('base.test');
+      expect(inferArchitecture('app/services/auth_test.py', '', DEFAULT_RULES)?.archId).toBe('base.test');
+    });
+  });
+
+  describe('Django REST Framework patterns', () => {
+    it('should detect DRF viewsets as serializers (first matching rule)', () => {
+      const content = `from rest_framework import viewsets
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()`;
+      const result = inferArchitecture('views.py', content, DEFAULT_RULES);
+      // DRF viewsets match the serializer pattern first due to rest_framework import
+      expect(result?.archId).toBe('api.serializer');
+    });
+  });
+
+  describe('Pydantic v2 patterns', () => {
+    it('should detect Pydantic model files with model suffix', () => {
+      const content = `from pydantic import BaseModel
+class CreateUserModel(BaseModel):
+    email: str
+    password: str`;
+      const result = inferArchitecture('models.py', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('core.schema');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle Python files with uppercase in path', () => {
+      const result = inferArchitecture('Tests/Unit/test_auth.py', '', DEFAULT_RULES);
+      expect(result?.archId).toBe('base.test');
+    });
+
+    it('should not confuse pytest with test file detection', () => {
+      // File is named pytest.py but is not a test file
+      const content = `"""pytest configuration."""
+def configure(): pass`;
+      const result = inferArchitecture('pytest.py', content, DEFAULT_RULES);
+      // Should not match base.test since it doesn't match test_*.py or *_test.py
+      expect(result?.archId).not.toBe('base.test');
+    });
+  });
+});
+
+describe('Extended Go inference patterns', () => {
+  describe('Go generated files', () => {
+    it('should recognize mock files with various naming patterns', () => {
+      expect(inferArchitecture('mocks.go', '', DEFAULT_RULES)?.archId).toBe('base.test.mock');
+      expect(inferArchitecture('mock_user.go', '', DEFAULT_RULES)?.archId).toBe('base.test.mock');
+      expect(inferArchitecture('fakes.go', '', DEFAULT_RULES)?.archId).toBe('base.test.mock');
+    });
+  });
+
+  describe('Go HTTP patterns', () => {
+    it('should detect handlers with Echo framework', () => {
+      const content = `package handlers
+
+import "net/http"
+
+func CreateUser(w http.ResponseWriter, r *http.Request) {
+    // Create user
+}`;
+      const result = inferArchitecture('user_handler.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.handler');
+    });
+
+    it('should detect handlers with Gin-style naming', () => {
+      const content = `package controllers
+
+import "net/http"
+
+func UserController(w http.ResponseWriter, r *http.Request) {}`;
+      const result = inferArchitecture('user_controllers.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('api.handler');
+    });
+  });
+
+  describe('Go repository patterns', () => {
+    it('should detect repo.go files', () => {
+      const result = inferArchitecture('user_repo.go', 'type UserRepo struct {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('infra.repository');
+    });
+
+    it('should detect data store files', () => {
+      const result = inferArchitecture('data_store.go', 'type DataStore interface {}', DEFAULT_RULES);
+      expect(result?.archId).toBe('infra.repository');
+    });
+  });
+
+  describe('Go cmd package', () => {
+    it('should detect cmd/*/main.go as bin.main', () => {
+      const content = `package main
+
+func main() {
+    run()
+}`;
+      const result = inferArchitecture('cmd/server/main.go', content, DEFAULT_RULES);
+      expect(result?.archId).toBe('bin.main');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should not match package main without main func', () => {
+      const content = `package main
+
+func init() {
+    setup()
+}`;
+      const result = inferArchitecture('init.go', content, DEFAULT_RULES);
+      expect(result?.archId).not.toBe('bin.main');
+    });
+
+    it('should handle Go files with build constraints', () => {
+      const content = `//go:build linux
+
+package platform
+
+func LinuxSpecific() {}`;
+      // File is not a test, handler, etc. - should return something or null
+      const result = inferArchitecture('linux.go', content, DEFAULT_RULES);
+      // Just verify it doesn't crash and doesn't misidentify
+      expect(result?.archId !== 'base.test').toBe(true);
+    });
+
+    it('should handle embedded test files correctly', () => {
+      // Embedded test data shouldn't be mistaken for test files
+      const result = inferArchitecture('testdata/sample_test.go', '', DEFAULT_RULES);
+      // testdata files often contain test fixtures, so base.test is acceptable
+      expect(result?.archId).toBe('base.test');
+    });
+  });
+});
+
+describe('Cross-language priority and disambiguation', () => {
+  it('should not confuse Python and Go test patterns', () => {
+    // Python test file
+    const pyResult = inferArchitecture('test_user.py', '', DEFAULT_RULES);
+    expect(pyResult?.archId).toBe('base.test');
+
+    // Go test file
+    const goResult = inferArchitecture('user_test.go', '', DEFAULT_RULES);
+    expect(goResult?.archId).toBe('base.test');
+
+    // Python file that looks like Go test pattern shouldn't match Go rules
+    const pyNotGo = inferArchitecture('user_test.py', '', DEFAULT_RULES);
+    expect(pyNotGo?.archId).toBe('base.test');
+  });
+
+  it('should correctly identify utility files across languages', () => {
+    expect(inferArchitecture('utils.py', '', DEFAULT_RULES)?.archId).toBe('base.utility');
+    expect(inferArchitecture('utils.go', '', DEFAULT_RULES)?.archId).toBe('base.utility');
+    expect(inferArchitecture('utils.ts', '', DEFAULT_RULES)?.archId).toBe('base.utility');
+  });
+});

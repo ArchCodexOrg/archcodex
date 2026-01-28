@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING.md with development guidelines
 - LICENSE file (MIT)
 
+## [1.39.0] - 2026-01-28
+
+### Changed
+- **Python validator** — migrated from regex to tree-sitter AST parsing (experimental)
+- **Go validator** — migrated from regex to tree-sitter AST parsing (experimental)
+
+### Added
+- Tree-sitter integration for accurate Python and Go code analysis
+- Support for previously unsupported patterns:
+  - Go: generics, grouped type declarations, multi-line function signatures
+  - Python: complex dataclasses, protocols, async patterns
+- Comprehensive test fixtures for advanced language patterns
+- Claude Code hooks for improved DX (session-start, pre-read reminders)
+
+### Fixed
+- Go: Generic type parameters now correctly parsed (e.g., `Container[T any]`)
+- Go: Grouped type declarations (`type ( ... )`) now fully supported
+- Python: Complex inheritance chains with protocols and ABCs
+- Python: Nested class extraction accuracy
+
 ## [1.38.0] - 2026-01-27
 
 ### Added

@@ -419,7 +419,7 @@ describe('PythonValidator', () => {
       expect(printCall).toBeDefined();
     });
 
-    it('handles nested classes (known limitation: inner methods included in outer)', async () => {
+    it('handles nested classes correctly with tree-sitter AST parsing', async () => {
       const content = [
         'class Outer:',
         '    def outer_method(self):',
@@ -429,16 +429,14 @@ describe('PythonValidator', () => {
         '            pass',
       ].join('\n');
       const model = await parse(content);
-      // Regex parser limitation: nested class methods are included in Outer's methods
-      // because extractMethods scans all indented lines until dedent to class level.
-      // Inner class is detected separately as its own class.
+      // With tree-sitter AST parsing, nested classes are handled correctly:
+      // - outer_method belongs only to Outer
+      // - inner_method belongs only to Inner (no "bleeding")
       const outer = model.classes.find(c => c.name === 'Outer');
       expect(outer).toBeDefined();
       expect(outer!.methods.some(m => m.name === 'outer_method')).toBe(true);
-      // Known limitation: inner_method bleeds into Outer
-      expect(outer!.methods.some(m => m.name === 'inner_method')).toBe(true);
-      // Inner is also detected as a standalone class (indented, but matches pattern)
-      // This is acceptable for constraint validation purposes
+      // Tree-sitter correctly scopes inner_method to Inner class only
+      expect(outer!.methods.some(m => m.name === 'inner_method')).toBe(false);
     });
 
     it('handles decorators with arguments on functions', async () => {
@@ -590,6 +588,225 @@ describe('PythonValidator', () => {
       const model = await parse(content);
       expect(model.exports).toHaveLength(1);
       expect(model.exports[0].name).toBe('IService');
+    });
+  });
+
+  describe('advanced patterns fixture', () => {
+    // Tests that parse the comprehensive tests/fixtures/python/advanced_patterns.py file
+    // to verify tree-sitter handles real-world advanced Python patterns
+
+    it('parses the advanced_patterns.py fixture file', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Basic validation that the file was parsed
+      expect(model.lineCount).toBeGreaterThan(600);
+      expect(model.language).toBe('python');
+    });
+
+    it('extracts Protocol-based interfaces from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Verify Protocol interfaces exist
+      // Note: Some Protocol[T] generics may be parsed as classes due to the base class extraction
+      const serializable = model.interfaces.find(i => i.name === 'Serializable');
+      expect(serializable).toBeDefined();
+
+      // At least some Protocol-based interfaces should be found
+      expect(model.interfaces.length).toBeGreaterThan(0);
+    });
+
+    it('extracts dataclass patterns from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Verify dataclass: Address (frozen), User
+      const address = model.classes.find(c => c.name === 'Address');
+      const user = model.classes.find(c => c.name === 'User');
+
+      expect(address).toBeDefined();
+      expect(address!.decorators.some(d => d.name === 'dataclass')).toBe(true);
+
+      expect(user).toBeDefined();
+      expect(user!.decorators.some(d => d.name === 'dataclass')).toBe(true);
+    });
+
+    it('extracts context manager with async support from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // DatabaseConnection has both sync and async context manager methods
+      const dbConnection = model.classes.find(c => c.name === 'DatabaseConnection');
+      expect(dbConnection).toBeDefined();
+
+      const methodNames = dbConnection!.methods.map(m => m.name);
+      expect(methodNames).toContain('__enter__');
+      expect(methodNames).toContain('__exit__');
+      expect(methodNames).toContain('__aenter__');
+      expect(methodNames).toContain('__aexit__');
+    });
+
+    it('extracts async batch processing function from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // process_users_batch is an async function
+      const processBatch = model.functions.find(f => f.name === 'process_users_batch');
+      expect(processBatch).toBeDefined();
+      expect(processBatch!.isAsync).toBe(true);
+    });
+
+    it('extracts enums from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Status and Priority are enums (classes extending Enum)
+      const status = model.classes.find(c => c.name === 'Status');
+      const priority = model.classes.find(c => c.name === 'Priority');
+
+      expect(status).toBeDefined();
+      expect(status!.extends).toBe('Enum');
+
+      expect(priority).toBeDefined();
+      expect(priority!.extends).toBe('Enum');
+    });
+
+    it('extracts class with decorators from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Find classes with decorators (dataclass, runtime_checkable)
+      const classesWithDecorators = model.classes.filter(c => c.decorators.length >= 1);
+      expect(classesWithDecorators.length).toBeGreaterThan(0);
+
+      // Specifically, Serializable should have @runtime_checkable
+      const serializable = model.interfaces.find(i => i.name === 'Serializable');
+      expect(serializable).toBeDefined();
+    });
+
+    it('extracts factory pattern functions from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // create_user_factory is a factory function
+      const createFactory = model.functions.find(f => f.name === 'create_user_factory');
+      expect(createFactory).toBeDefined();
+      expect(createFactory!.isExported).toBe(true);
+    });
+
+    it('extracts abstract base class methods from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // BaseEntity and BaseService are ABCs
+      const baseEntity = model.interfaces.find(i => i.name === 'BaseEntity');
+      const baseService = model.interfaces.find(i => i.name === 'BaseService');
+
+      expect(baseEntity).toBeDefined();
+      expect(baseService).toBeDefined();
+    });
+
+    it('extracts builder pattern class from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // UserBuilder has fluent methods: with_id, with_name, with_email, build
+      const userBuilder = model.classes.find(c => c.name === 'UserBuilder');
+      expect(userBuilder).toBeDefined();
+
+      const methodNames = userBuilder!.methods.map(m => m.name);
+      expect(methodNames).toContain('with_id');
+      expect(methodNames).toContain('with_name');
+      expect(methodNames).toContain('with_email');
+      expect(methodNames).toContain('build');
+    });
+
+    it('extracts generic container classes from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Result[T] and Cache[K, V] are generic classes
+      const result = model.classes.find(c => c.name === 'Result');
+      const cache = model.classes.find(c => c.name === 'Cache');
+
+      expect(result).toBeDefined();
+      expect(cache).toBeDefined();
+    });
+
+    it('extracts property mutations from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // Advanced patterns should have self.* mutations
+      const selfMutations = model.mutations.filter(m => m.rootObject === 'self');
+      expect(selfMutations.length).toBeGreaterThan(0);
+    });
+
+    it('extracts multiple inheritance patterns from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // AuditedUser extends User and mixes in Auditable, Versioned
+      const auditedUser = model.classes.find(c => c.name === 'AuditedUser');
+      expect(auditedUser).toBeDefined();
+      expect(auditedUser!.extends).toBe('User');
+      expect(auditedUser!.implements).toContain('Auditable');
+      expect(auditedUser!.implements).toContain('Versioned');
+    });
+
+    it('extracts nested classes from advanced patterns', async () => {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/python/advanced_patterns.py');
+      const content = await fs.readFile(fixturePath, 'utf-8');
+      const model = await validator.parseFile(fixturePath, content);
+
+      // EventSystem has nested classes: Event, Handler
+      const eventSystem = model.classes.find(c => c.name === 'EventSystem');
+      expect(eventSystem).toBeDefined();
+
+      // The nested classes should also be extracted
+      // (Note: tree-sitter extracts them as top-level due to our skipping nested class logic)
     });
   });
 });

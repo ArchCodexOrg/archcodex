@@ -4,18 +4,25 @@ archcodex.infra.validator-support:
   inherits: archcodex.infra
   mixins:
     - ocp
-  description: Validator subsystem support - registry, capabilities, and types
+  description: Validator subsystem support - registry, capabilities, types, and AST utilities
   rationale: |
     Support infrastructure for the language validator plugin system.
-    Defines the contracts (interfaces, types, capabilities) and the registry
-    that manages validator instances.
+    Defines the contracts (interfaces, types, capabilities), the registry
+    that manages validator instances, and shared AST extraction utilities.
 
-    Use for: Validator registry, language capabilities, validator interfaces/types.
+    Includes tree-sitter based AST extraction for Python and Go languages,
+    providing common traversal, extraction, and context management functions.
+
+    Use for: Validator registry, language capabilities, validator interfaces/types,
+             tree-sitter AST extraction utilities.
     Don't use for: Actual language validator implementations (use infra.validator).
   reference_implementations:
     - src/validators/validator-registry.ts
     - src/validators/capabilities.ts
     - src/validators/register.ts
+    - src/validators/tree-sitter/TreeSitterUtils.ts
+    - src/validators/tree-sitter/python-ast.ts
+    - src/validators/tree-sitter/go-ast.ts
   file_pattern: ${name}.ts
   default_path: src/validators
   constraints:
@@ -29,6 +36,7 @@ archcodex.infra.validator-support:
   hints:
     - "[OCP] Support new languages by extending capabilities and registering new validators"
     - "[DIP] Define interfaces here, implementations go in infra.validator"
+    - "Tree-sitter AST extraction provides language-agnostic traversal patterns"
 
 archcodex.infra.validator:
   inherits: archcodex.infra
@@ -39,14 +47,17 @@ archcodex.infra.validator:
   rationale: |
     Validators that analyze source code structure and produce SemanticModel.
     Each validator implements ILanguageValidator interface and uses a parser
-    appropriate for its target language (e.g., ts-morph for TypeScript,
-    regex-based parsing for Python).
+    appropriate for its target language:
+    - TypeScript/JavaScript: ts-morph (TypeScript compiler API)
+    - Python: tree-sitter-python (AST parsing)
+    - Go: tree-sitter-go (AST parsing)
 
     Use for: Files that parse and analyze source code for constraint validation.
     Don't use for: Constraint logic itself (use core.domain.constraint).
   reference_implementations:
     - src/validators/typescript.ts
     - src/validators/python.ts
+    - src/validators/go.ts
   file_pattern: ${name}.ts
   default_path: src/validators
   code_pattern: |-

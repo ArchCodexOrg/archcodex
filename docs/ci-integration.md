@@ -2,6 +2,8 @@
 
 Guide for integrating ArchCodex with CI/CD pipelines, pre-commit hooks, and development workflows.
 
+> **Note:** ArchCodex is not yet published to npm. These examples assume `archcodex` is available in PATH (via `npm link` after building from source). Once published, you can use `npx archcodex` directly.
+
 ---
 
 ## Pre-Commit Integration
@@ -13,8 +15,8 @@ Guide for integrating ArchCodex with CI/CD pipelines, pre-commit hooks, and deve
 npm install --save-dev husky
 npx husky init
 
-# Edit .husky/pre-commit
-npm run build && archcodex check --staged --format compact --max-errors 0
+# Edit .husky/pre-commit (assumes archcodex is linked globally)
+archcodex check --staged --format compact --max-errors 0
 ```
 
 ### lint-staged
@@ -33,7 +35,7 @@ npm run build && archcodex check --staged --format compact --max-errors 0
 
 ```yaml
 - name: ArchCodex Check
-  run: npx archcodex check --format compact --max-errors 0
+  run: archcodex check --format compact --max-errors 0
 ```
 
 ---
@@ -116,9 +118,9 @@ if [[ ! "$FILE_PATH" =~ \.(ts|tsx|js|jsx)$ ]]; then
   exit 0
 fi
 
-# Run archcodex check
+# Run archcodex check (assumes archcodex is in PATH)
 cd "$CLAUDE_PROJECT_DIR"
-RESULT=$(npx archcodex check "$FILE_PATH" --json 2>&1)
+RESULT=$(archcodex check "$FILE_PATH" --json 2>&1)
 
 ERRORS=$(echo "$RESULT" | jq -r '.summary.totalErrors // 0')
 WARNINGS=$(echo "$RESULT" | jq -r '.summary.totalWarnings // 0')
@@ -180,7 +182,7 @@ cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
-    "additionalContext": "NEW FILE: $FILE_PATH - Ensure it has @arch tag. Run 'npx archcodex discover \"<description>\"' to find the right architecture."
+    "additionalContext": "NEW FILE: $FILE_PATH - Ensure it has @arch tag. Run 'archcodex discover \"<description>\"' to find the right architecture."
   }
 }
 EOF

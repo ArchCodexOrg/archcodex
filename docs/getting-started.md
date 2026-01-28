@@ -98,6 +98,14 @@ type PaymentProcessor struct {}
 
 The same constraints, inheritance, and overrides work across all supported languages. Validation is language-aware — constraints that don't apply to a language (e.g., `require_decorator` for Go) are automatically skipped.
 
+**Parser Technology:**
+- **TypeScript/JavaScript**: ts-morph (full AST analysis)
+- **Python/Go**: tree-sitter (accurate AST parsing)
+
+Tree-sitter enables accurate parsing of complex patterns including:
+- Go generics (`Container[T any]`), grouped type declarations, interface composition
+- Python protocols, dataclasses, async/await, complex inheritance
+
 **Naming requirement:** Architecture IDs must contain at least one dot (`.`). This prevents false matches when `@arch` appears in prose text.
 
 | Valid | Invalid |
@@ -200,12 +208,19 @@ Follow these steps to add ArchCodex to a new project.
 
 ### Step 1: Install
 
-```bash
-# Global installation
-npm install -g archcodex
+> **Note:** ArchCodex is not yet published to npm. Install from source:
 
-# Or as a dev dependency
-npm install --save-dev archcodex
+```bash
+# Clone the repository
+git clone https://github.com/ArchCodexOrg/archcodex.git
+cd archcodex
+
+# Install dependencies and build
+npm install
+npm run build
+
+# Link globally (optional)
+npm link
 ```
 
 ### Step 2: Initialize
@@ -580,10 +595,9 @@ Your architecture already exists — it's just scattered across tribal knowledge
 
 ### Step 1: Install and Initialize
 
-Same as a new project:
+Same as a new project (see [Installation](#step-1-install) above):
 
 ```bash
-npm install --save-dev archcodex
 archcodex init
 ```
 
@@ -732,6 +746,8 @@ Gradually add more directories and architectures:
 
 ## CI/CD Integration
 
+> **Note:** These examples assume `archcodex` is available in PATH (via `npm link` after building from source). Once ArchCodex is published to npm, you can use `npx archcodex` directly.
+
 ### Pre-Commit Hook (Husky)
 
 ```bash
@@ -739,11 +755,13 @@ Gradually add more directories and architectures:
 npm install --save-dev husky
 npx husky init
 
-# Create hook
-echo 'npx archcodex check --staged --format compact --max-errors 0' > .husky/pre-commit
+# Create hook (assumes archcodex is linked globally)
+echo 'archcodex check --staged --format compact --max-errors 0' > .husky/pre-commit
 ```
 
 ### GitHub Actions
+
+For projects using ArchCodex from source:
 
 ```yaml
 name: Architecture Check
@@ -758,7 +776,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
-      - run: npx archcodex check --format compact --max-errors 0
+      - run: archcodex check --format compact --max-errors 0
 ```
 
 ### lint-staged Integration

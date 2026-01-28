@@ -106,7 +106,7 @@ async function tagFile(
 
   const newContent = archTag && options.force
     ? replaceArchTag(content, archId)
-    : insertArchTag(content, archId);
+    : insertArchTag(content, archId, filePath);
 
   if (!options.dryRun) await writeFile(fullPath, newContent);
   return 'tagged';
