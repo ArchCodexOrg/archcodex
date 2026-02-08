@@ -63,9 +63,7 @@ export async function loadArchIgnore(projectRoot: string): Promise<ArchIgnore> {
       const content = await readFile(archignorePath, 'utf-8');
       const filePatterns = parseArchIgnore(content);
       patterns.push(...filePatterns);
-    } catch {
-      // Ignore read errors, return empty filter
-    }
+    } catch { /* .archignore unreadable, skip */ }
   }
 
   return createArchIgnore(patterns);

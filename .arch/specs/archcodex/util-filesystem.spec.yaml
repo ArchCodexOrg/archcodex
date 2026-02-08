@@ -1,0 +1,179 @@
+# File System Utilities Specification
+#
+# Wrappers around Node.js fs and path operations, plus fast-glob.
+# Provides consistent async/sync file operations used throughout
+# the ArchCodex codebase.
+
+version: "1.0"
+
+spec.archcodex.utilFilesystem:
+  inherits: spec.function
+  implementation: src/utils/file-system.ts#readFile
+
+  # === STRATEGIC ===
+  goal: "Provide consistent file system operations with sensible defaults"
+  outcomes:
+    - "File reading/writing with UTF-8 encoding by default"
+    - "File existence checks that do not throw"
+    - "Directory creation with recursive mkdir"
+    - "Glob file matching with default ignores for node_modules and dist"
+    - "Path manipulation wrappers for resolve, relative, join, dirname, basename, extname"
+
+  # === OPERATIONAL ===
+  intent: "Wrap Node.js fs/path and fast-glob behind simple async/sync functions"
+
+  inputs:
+    filePath:
+      type: string
+      required: true
+      description: "Absolute or relative file/directory path"
+
+  outputs:
+    content:
+      type: string
+      description: "File contents as UTF-8 string (for read operations)"
+    exists:
+      type: boolean
+      description: "Whether the file/directory exists (for existence checks)"
+    files:
+      type: array
+      description: "Matched file paths (for glob operations)"
+
+  examples:
+    success:
+      - name: "readFile returns file contents"
+        given:
+          filePath: "/tmp/test-file.txt"
+          fileContent: "hello world"
+        then:
+          result: "hello world"
+
+      - name: "writeFile creates file with content"
+        given:
+          filePath: "/tmp/output/test.txt"
+          content: "written content"
+        then:
+          result.fileCreated: true
+
+      - name: "fileExists returns true for existing file"
+        given:
+          filePath: "/tmp/existing-file.txt"
+        then:
+          result: true
+
+      - name: "fileExists returns false for missing file"
+        given:
+          filePath: "/tmp/nonexistent-file.txt"
+        then:
+          result: false
+
+      - name: "isDirectory returns true for directory"
+        given:
+          filePath: "/tmp"
+        then:
+          result: true
+
+      - name: "isDirectory returns false for file"
+        given:
+          filePath: "/tmp/test-file.txt"
+        then:
+          result: false
+
+      - name: "isDirectory returns false for missing path"
+        given:
+          filePath: "/tmp/nonexistent-dir"
+        then:
+          result: false
+
+      - name: "ensureDir creates nested directories"
+        given:
+          dirPath: "/tmp/a/b/c"
+        then:
+          result.directoryCreated: true
+
+      - name: "globFiles matches patterns with defaults"
+        given:
+          patterns: ["**/*.ts"]
+          options:
+            cwd: "/project"
+        then:
+          result: "@length(@gt(0))"
+
+      - name: "globFiles ignores node_modules by default"
+        given:
+          patterns: ["**/*.ts"]
+          options:
+            cwd: "/project"
+        then:
+          result: "@all(@length(@gt(0)))"
+
+      - name: "countLines counts newlines"
+        given:
+          filePath: "/tmp/three-lines.txt"
+          fileContent: "line1\nline2\nline3\n"
+        then:
+          result: 3
+
+      - name: "resolvePath resolves relative to base"
+        given:
+          basePath: "/project"
+          segments: ["src", "core", "engine.ts"]
+        then:
+          result: "/project/src/core/engine.ts"
+
+      - name: "relativePath computes relative path"
+        given:
+          from: "/project/src"
+          to: "/project/src/core/engine.ts"
+        then:
+          result: "core/engine.ts"
+
+      - name: "basename extracts filename"
+        given:
+          filePath: "/project/src/core/engine.ts"
+        then:
+          result: "engine.ts"
+
+      - name: "basename with extension stripping"
+        given:
+          filePath: "/project/src/core/engine.ts"
+          ext: ".ts"
+        then:
+          result: "engine"
+
+      - name: "extname extracts extension"
+        given:
+          filePath: "/project/src/core/engine.ts"
+        then:
+          result: ".ts"
+
+      - name: "isAbsolute detects absolute paths"
+        given:
+          filePath: "/project/src/core/engine.ts"
+        then:
+          result: true
+
+      - name: "isAbsolute detects relative paths"
+        given:
+          filePath: "src/core/engine.ts"
+        then:
+          result: false
+
+  invariants:
+    - description: "readFile always returns UTF-8 string"
+      condition: "typeof readFile(path) === 'string'"
+
+    - description: "fileExists never throws"
+      condition: "fileExists(path) always returns boolean, never throws"
+
+    - description: "isDirectory never throws"
+      condition: "isDirectory(path) always returns boolean, never throws"
+
+    - description: "globFiles defaults to absolute paths"
+      condition: "without options.absolute, results are absolute paths"
+
+    - description: "globFiles ignores node_modules and dist by default"
+      condition: "without options.ignore, node_modules and dist are excluded"
+
+    - description: "writeFile creates parent directories"
+      condition: "writeFile creates the directory tree via ensureDir before writing"

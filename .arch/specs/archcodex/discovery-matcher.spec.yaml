@@ -1,0 +1,280 @@
+# Discovery Matcher Specification
+#
+# Matches natural language queries against architecture index entries.
+# Supports keyword matching (traditional) and concept matching (semantic).
+# Used by the `archcodex discover` command to help developers find
+# the right architecture ID for new files.
+
+version: "1.0"
+
+spec.archcodex.discoveryMatcher.matchQuery:
+  inherits: spec.function
+  implementation: src/core/discovery/matcher.ts#matchQuery
+
+  # === STRATEGIC ===
+  goal: "Match natural language queries to architecture index entries using keyword and concept matching"
+  outcomes:
+    - "Developers find relevant architectures by describing their intent"
+    - "Concept matching provides semantic understanding beyond keywords"
+    - "Results are ranked by relevance score"
+    - "Concept matches take priority over keyword matches"
+    - "Results are merged and deduplicated when both strategies match"
+
+  # === OPERATIONAL ===
+  intent: "Try concept matching first (if concepts provided), fall back to keyword matching, merge and deduplicate results, return sorted by score"
+
+  inputs:
+    index:
+      type: object
+      required: true
+      description: "Discovery index with entries array"
+      properties:
+        entries:
+          type: array
+          description: "Array of IndexEntry objects with arch_id, keywords, description"
+    query:
+      type: string
+      required: true
+      description: "Natural language query describing what the developer wants"
+    options:
+      type: object
+      required: false
+      description: "Match options"
+      properties:
+        limit: { type: number, description: "Max results (default 5)" }
+        minScore: { type: number, description: "Minimum score threshold 0-1 (default 0.2)" }
+        concepts: { type: object, description: "ConceptRegistry for semantic matching" }
+
+  outputs:
+    results:
+      type: array
+      description: "Array of MatchResult objects sorted by score descending"
+      items:
+        type: object
+        properties:
+          entry: { type: object, description: "The matched IndexEntry" }
+          score: { type: number, description: "Relevance score (0-1+)" }
+          matchedKeywords: { type: array, description: "Keywords that matched" }
+          matchedConcept: { type: string, description: "Concept name if matched via concepts" }
+
+  examples:
+    success:
+      - name: "exact keyword match scores high"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.utility", keywords: ["utility", "helper", "pure function"], description: "Pure utility functions" }
+              - { arch_id: "base.service", keywords: ["service", "business logic"], description: "Service layer" }
+          query: "utility function"
+          options: {}
+        then:
+          result: "@length(@gt(0))"
+
+      - name: "query matches entry description tokens"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.validator", keywords: ["validate"], description: "Input validation and sanitization" }
+          query: "sanitization"
+          options: {}
+        then:
+          result: "@length(@gt(0))"
+
+      - name: "query matches arch_id parts"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.utility", keywords: ["helper"], description: "Helpers" }
+          query: "utility"
+          options: {}
+        then:
+          result: "@length(@gt(0))"
+
+      - name: "concept matching returns high scores"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.utility", keywords: ["helper"], description: "Helpers" }
+          query: "I need a helper function"
+          options:
+            concepts:
+              utility:
+                aliases: ["helper", "util", "pure function"]
+                architectures: ["base.utility"]
+        then:
+          result: "@length(@gt(0))"
+
+      - name: "limit restricts result count"
+        given:
+          index:
+            entries:
+              - { arch_id: "a.one", keywords: ["test"], description: "Test one" }
+              - { arch_id: "a.two", keywords: ["test"], description: "Test two" }
+              - { arch_id: "a.three", keywords: ["test"], description: "Test three" }
+          query: "test"
+          options: { limit: 2 }
+        then:
+          result: "@length(2)"
+
+      - name: "results sorted by score descending"
+        given:
+          index:
+            entries:
+              - { arch_id: "weak.match", keywords: ["something"], description: "Vaguely related" }
+              - { arch_id: "strong.match", keywords: ["validator", "validation"], description: "Input validation" }
+          query: "validator"
+          options: {}
+        then:
+          result: "@length(@gt(0))"
+
+    errors:
+      - name: "empty query returns no results"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.util", keywords: ["utility"], description: "Utils" }
+          query: ""
+          options: {}
+        then:
+          result: "@length(0)"
+
+      - name: "stop-words-only query returns no results"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.util", keywords: ["utility"], description: "Utils" }
+          query: "the and for"
+          options: {}
+        then:
+          result: "@length(0)"
+
+      - name: "no matching entries returns empty"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.util", keywords: ["utility"], description: "Utils" }
+          query: "database migration schema"
+          options: {}
+        then:
+          result: "@length(0)"
+
+  invariants:
+    - description: "result count never exceeds limit"
+      condition: "result.length <= (options.limit ?? 5)"
+
+    - description: "results are sorted by score descending"
+      condition: "result.every((r, i) => i === 0 || result[i-1].score >= r.score)"
+
+    - description: "all scores are above minScore"
+      condition: "result.every(r => r.score >= (options.minScore ?? 0.2))"
+
+    - description: "no duplicate arch_ids in results"
+      condition: "new Set(result.map(r => r.entry.arch_id)).size === result.length"
+
+---
+
+spec.archcodex.discoveryMatcher.findByArchId:
+  inherits: spec.function
+  implementation: src/core/discovery/matcher.ts#findByArchId
+
+  # === STRATEGIC ===
+  goal: "Look up an index entry by exact architecture ID"
+  outcomes:
+    - "Returns the entry when found"
+    - "Returns undefined when not found"
+
+  # === OPERATIONAL ===
+  intent: "Linear search through index entries for matching arch_id"
+
+  inputs:
+    index:
+      type: object
+      required: true
+      description: "Discovery index"
+    archId:
+      type: string
+      required: true
+      description: "Architecture ID to find"
+
+  outputs:
+    result:
+      type: object
+      nullable: true
+      description: "IndexEntry if found, undefined otherwise"
+
+  examples:
+    success:
+      - name: "finds existing entry"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.utility", keywords: ["utility"] }
+              - { arch_id: "base.service", keywords: ["service"] }
+          archId: "base.utility"
+        then:
+          result: "@hasProperties({arch_id: 'base.utility'})"
+
+      - name: "returns undefined for non-existent ID"
+        given:
+          index:
+            entries:
+              - { arch_id: "base.utility", keywords: ["utility"] }
+          archId: "does.not.exist"
+        then:
+          result: "@undefined"
+
+    errors:
+      - name: "empty entries returns undefined"
+        given:
+          index:
+            entries: []
+          archId: "base.utility"
+        then:
+          result: "@undefined"
+
+---
+
+spec.archcodex.discoveryMatcher.getAllEntries:
+  inherits: spec.function
+  implementation: src/core/discovery/matcher.ts#getAllEntries
+
+  # === STRATEGIC ===
+  goal: "Return a copy of all index entries"
+  outcomes:
+    - "Returns all entries as a new array (not a reference)"
+
+  # === OPERATIONAL ===
+  intent: "Spread index entries into a new array"
+
+  inputs:
+    index:
+      type: object
+      required: true
+      description: "Discovery index"
+
+  outputs:
+    result:
+      type: array
+      description: "Copy of all IndexEntry objects"
+
+  examples:
+    success:
+      - name: "returns all entries"
+        given:
+          index:
+            entries:
+              - { arch_id: "a", keywords: [] }
+              - { arch_id: "b", keywords: [] }
+        then:
+          result: "@length(2)"
+
+      - name: "empty index returns empty array"
+        given:
+          index:
+            entries: []
+        then:
+          result: "@length(0)"
+
+  invariants:
+    - description: "result length equals entries length"
+      condition: "result.length === index.entries.length"

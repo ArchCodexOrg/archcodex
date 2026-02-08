@@ -1,0 +1,77 @@
+# SpecCodex Custom Fixtures for Share Resource Tests
+# Reusable test fixtures for sharing functionality
+#
+# Usage in specs:
+#   given: { resource: "@shareableResource", collaborators: "@collaboratorList" }
+
+version: "1.0"
+
+fixtures:
+  # Resource that can be shared with collaborators
+  shareableResource:
+    description: "Resource that can be shared"
+    mode: generate
+    depends_on: [authenticated]
+    value:
+      _id: "resource_shareable"
+      title: "Shareable Resource"
+      ownerId: "user_owner"
+      isPublic: false
+      collaborators: []
+      maxCollaborators: 10
+      createdAt: 1706745600000
+      updatedAt: 1706745600000
+
+  # List of users to share with
+  collaboratorList:
+    description: "List of users to share with"
+    mode: generate
+    value:
+      - userId: "user_collab1"
+        email: "collab1@test.com"
+        role: "editor"
+        name: "Collaborator One"
+      - userId: "user_collab2"
+        email: "collab2@test.com"
+        role: "viewer"
+        name: "Collaborator Two"
+
+  # Resource already shared with maximum collaborators
+  alreadySharedResource:
+    description: "Resource already shared with max collaborators"
+    mode: documentation
+    setup: |
+      Create resource shared with 10 users (the maximum):
+      1. Create base resource with ownerId
+      2. Add 10 collaborators via share mutation
+      3. Verify collaborator count equals maxCollaborators
+    depends_on: [authenticated]
+
+  # Single collaborator for simple tests
+  singleCollaborator:
+    description: "Single collaborator for basic share tests"
+    mode: generate
+    value:
+      userId: "user_single_collab"
+      email: "single@test.com"
+      role: "editor"
+      name: "Single Collaborator"
+
+  # Invalid collaborator data for error tests
+  invalidCollaborator:
+    description: "Invalid collaborator data to trigger validation errors"
+    mode: generate
+    value:
+      userId: ""
+      email: "invalid-email"
+      role: "invalid_role"
+
+  # Owner user fixture
+  resourceOwner:
+    description: "The owner of the shareable resource"
+    mode: generate
+    value:
+      _id: "user_owner"
+      email: "owner@test.com"
+      name: "Resource Owner"
+      permissions: ["read", "write", "share", "admin"]

@@ -63,6 +63,122 @@ export class HealthAnalyzer {
   }
 
   /**
+   * Calculate a numeric health score (0-100) from a health report.
+   * Factors considered:
+   * - Coverage (weight: 25%): Higher coverage = higher score
+   * - Override debt (weight: 25%): Expired/no-expiry overrides reduce score
+   * - Registry health (weight: 20%): Unused/redundant/similar architectures reduce score
+   * - Intent health (weight: 15%): Undefined/unused intents reduce score
+   * - Layer coverage (weight: 15%): Orphan files/phantom paths reduce score
+   *
+   * @param report The health report to score
+   * @returns A numeric score from 0-100
+   */
+  getHealthScore(report: HealthReport): number {
+    let score = 100;
+
+    // === Coverage Score (25% weight) ===
+    // 100% coverage = +0, less coverage scales down
+    const coverageScore = report.coverage.coveragePercent;
+    const coverageFactor = (100 - coverageScore) * 0.25; // Up to 25 points lost
+    score -= coverageFactor;
+
+    // === Override Debt Score (25% weight) ===
+    // Each expired override = -5 points, each no-expiry = -2 points
+    const expiredPenalty = (report.overrideDebt.expired * 5);
+    const noExpiryPenalty = (report.overrideDebt.noExpiry * 2);
+    const expiringPenalty = (report.overrideDebt.expiringSoon * 1);
+    const totalDebtPenalty = Math.min(expiredPenalty + noExpiryPenalty + expiringPenalty, 25); // Cap at 25 points
+    score -= totalDebtPenalty;
+
+    // === Registry Health Score (20% weight) ===
+    // Unused architectures = -1 point each (up to 10 points)
+    // Similar architectures = -2 points each (up to 5 points)
+    // Redundant architectures = -1 point each (up to 5 points)
+    let registryPenalty = 0;
+    registryPenalty += Math.min(report.registryHealth.unusedArchitectures, 10);
+    registryPenalty += Math.min(
+      (report.registryHealth.similarArchitectures?.length ?? 0) * 2,
+      5
+    );
+    registryPenalty += Math.min(
+      (report.registryHealth.redundantArchitectures?.length ?? 0),
+      5
+    );
+    registryPenalty += Math.min(
+      (report.registryHealth.lowUsageArchitectures?.length ?? 0) * 0.5,
+      3
+    );
+    registryPenalty += Math.min(
+      (report.registryHealth.singletonViolations?.length ?? 0) * 2,
+      5
+    );
+    const cappedRegistryPenalty = Math.min(registryPenalty, 20);
+    score -= cappedRegistryPenalty;
+
+    // === Intent Health Score (15% weight) ===
+    // Each undefined intent = -3 points, each unused = -1 point
+    if (report.intentHealth) {
+      const undefinedPenalty = Math.min(
+        report.intentHealth.undefinedIntents.length * 3,
+        10
+      );
+      const unusedPenalty = Math.min(
+        report.intentHealth.unusedIntents.length * 1,
+        5
+      );
+      const validationPenalty = Math.min(
+        report.intentHealth.validationIssues * 2,
+        5
+      );
+      const intentPenalty = Math.min(
+        undefinedPenalty + unusedPenalty + validationPenalty,
+        15
+      );
+      score -= intentPenalty;
+
+      // Registry error = -15 points
+      if (report.intentHealth.registryError) {
+        score -= 15;
+      }
+    }
+
+    // === Layer Coverage Score (15% weight) ===
+    if (report.layerHealth) {
+      let layerPenalty = 0;
+      layerPenalty += Math.min(
+        report.layerHealth.orphanFiles.length * 1,
+        10
+      );
+      layerPenalty += Math.min(
+        report.layerHealth.phantomPaths.length * 1,
+        3
+      );
+      layerPenalty += Math.min(
+        report.layerHealth.staleExclusions.length * 0.5,
+        2
+      );
+      const cappedLayerPenalty = Math.min(layerPenalty, 15);
+      score -= cappedLayerPenalty;
+    }
+
+    // === Type Duplicates (bonus/penalty) ===
+    if (report.typeDuplicates && report.typeDuplicates.length > 0) {
+      const exactDuplicates = report.typeDuplicates.filter(
+        (d) => d.matchType === 'exact'
+      ).length;
+      const renamedDuplicates = report.typeDuplicates.filter(
+        (d) => d.matchType === 'renamed'
+      ).length;
+      const typePenalty = Math.min(exactDuplicates * 3 + renamedDuplicates * 1, 10);
+      score -= typePenalty;
+    }
+
+    // Ensure score stays within bounds
+    return Math.max(0, Math.min(100, Math.round(score)));
+  }
+
+  /**
    * Generate a complete health report.
    */
   async analyze(options: HealthOptions = {}): Promise<HealthReport> {

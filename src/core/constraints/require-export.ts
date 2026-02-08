@@ -119,7 +119,7 @@ export class RequireExportValidator extends BaseConstraintValidator {
         if (regex.test(exportName)) {
           return true;
         }
-      } catch {
+      } catch { /* invalid regex pattern, skip */
         // Invalid regex, skip
       }
     }

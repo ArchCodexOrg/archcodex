@@ -2,9 +2,6 @@
  * @arch archcodex.test.unit
  * @intent:cli-output
  */
-/**
- * @arch archcodex.test.unit
- */
 import { describe, it, expect } from 'vitest';
 import { VerifyIntentValidator } from '../../../../src/core/constraints/verify-intent.js';
 import type { Constraint } from '../../../../src/core/registry/schema.js';

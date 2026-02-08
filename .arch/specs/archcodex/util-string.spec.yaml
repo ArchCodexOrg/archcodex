@@ -1,0 +1,122 @@
+# String Utility Specification
+#
+# String manipulation utilities.
+# Pure functions with no side effects.
+
+version: "1.0"
+
+spec.archcodex.utilString.truncateString:
+  inherits: spec.unit
+  implementation: src/utils/string.ts#truncateString
+
+  # === STRATEGIC ===
+  goal: "Truncate strings to a maximum length with ellipsis indicator"
+  outcomes:
+    - "Long strings are truncated with '...' suffix"
+    - "Short strings are returned unchanged"
+    - "Edge cases (negative, zero, small maxLen) are handled gracefully"
+
+  # === OPERATIONAL ===
+  intent: "If string exceeds maxLen, slice to (maxLen - 3) and append '...'; handle edge cases for small maxLen"
+
+  inputs:
+    str:
+      type: string
+      required: true
+      description: "The string to truncate"
+    maxLen:
+      type: number
+      required: true
+      description: "Maximum length of the resulting string (including ellipsis)"
+
+  outputs:
+    type: string
+    description: "The truncated string with ellipsis, or original if within limit"
+
+  examples:
+    success:
+      - name: "string within limit is unchanged"
+        given:
+          str: "hello"
+          maxLen: 10
+        then:
+          result: "hello"
+
+      - name: "string at exact limit is unchanged"
+        given:
+          str: "hello"
+          maxLen: 5
+        then:
+          result: "hello"
+
+      - name: "long string is truncated with ellipsis"
+        given:
+          str: "hello world"
+          maxLen: 8
+        then:
+          result: "hello..."
+
+      - name: "maxLen of 3 returns first 3 chars without ellipsis"
+        given:
+          str: "hello"
+          maxLen: 3
+        then:
+          result: "hel"
+
+      - name: "maxLen of 2 returns first 2 chars"
+        given:
+          str: "hello"
+          maxLen: 2
+        then:
+          result: "he"
+
+      - name: "maxLen of 1 returns first char"
+        given:
+          str: "hello"
+          maxLen: 1
+        then:
+          result: "h"
+
+      - name: "maxLen of 0 returns empty string"
+        given:
+          str: "hello"
+          maxLen: 0
+        then:
+          result: ""
+
+      - name: "negative maxLen returns empty string"
+        given:
+          str: "hello"
+          maxLen: -5
+        then:
+          result: ""
+
+      - name: "empty string is always returned as-is"
+        given:
+          str: ""
+          maxLen: 10
+        then:
+          result: ""
+
+      - name: "maxLen of 4 with long string uses ellipsis"
+        given:
+          str: "hello world"
+          maxLen: 4
+        then:
+          result: "h..."
+
+  invariants:
+    - description: "result length never exceeds maxLen (when maxLen >= 0)"
+      condition: "maxLen >= 0 implies result.length <= maxLen"
+
+    - description: "result equals input when input length <= maxLen"
+      condition: "str.length <= maxLen implies result === str"
+
+    - description: "truncated strings end with '...' when maxLen > 3"
+      condition: "str.length > maxLen && maxLen > 3 implies result.endsWith('...')"
+
+    - description: "negative maxLen always returns empty string"
+      condition: "maxLen < 0 implies result === ''"
+
+    - description: "pure function - no side effects"
+      condition: "same inputs always produce same output"

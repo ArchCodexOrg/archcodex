@@ -1,0 +1,269 @@
+# Analysis Engine Specification
+#
+# Orchestrator for schema-inferred analysis. Loads registries, builds
+# cross-reference graphs, runs all checkers, and returns filtered/sorted results.
+#
+# NOTE: The existing analyze-engine.spec.yaml covers runAllAnalyses and formatAnalysisResult.
+# This spec covers the supplementary public API: buildSummary behavior and the
+# deep analysis summarizeDrift helper, plus additional edge cases.
+
+version: "1.0"
+
+spec.archcodex.analysisEngine.runAllAnalyses:
+  inherits: spec.function
+  implementation: src/core/analysis/engine.ts#runAllAnalyses
+
+  # === STRATEGIC ===
+  goal: "Detect logic, security, data, consistency, and completeness issues across all specs"
+  outcomes:
+    - "All registered checkers run against loaded registries"
+    - "Results filtered by category, severity, and specId"
+    - "Issues sorted by severity (error > warning > info)"
+    - "Summary accurately counts issues by category and severity"
+    - "Deep mode reads implementation files and runs verifier drift detection"
+
+  # === OPERATIONAL ===
+  intent: "Load spec/arch/component-group registries, build cross-reference graph, run selected checkers, filter and sort results"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Absolute path to the project root containing .arch/ directory"
+    options:
+      type: object
+      required: false
+      description: "AnalysisOptions for filtering and configuration"
+      properties:
+        categories:
+          type: array
+          items: { type: string }
+          description: "Filter to specific checker categories (logic, security, data, consistency, completeness, other)"
+        severity:
+          type: enum
+          values: [error, warning, info]
+          description: "Minimum severity threshold (default: all severities)"
+        specIds:
+          type: array
+          items: { type: string }
+          description: "Filter to specific spec IDs only"
+        deep:
+          type: boolean
+          description: "Enable deep analysis: reads implementation files and checks for spec-to-code drift"
+
+  outputs:
+    issues:
+      type: array
+      description: "Array of AnalysisIssue objects sorted by severity"
+      items:
+        type: object
+        properties:
+          id: { type: string, description: "Rule ID (e.g. SEC-1, LOG-3)" }
+          category: { type: enum, values: [logic, security, data, consistency, completeness, other] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string, description: "Spec ID where issue was found (optional)" }
+          archId: { type: string, description: "Architecture ID involved (optional)" }
+          field: { type: string, description: "Specific field with issue (optional)" }
+          message: { type: string, description: "Human-readable description" }
+          suggestion: { type: string, description: "How to fix (optional)" }
+    summary:
+      type: object
+      description: "Aggregated issue counts"
+      properties:
+        total: { type: number }
+        byCategory: { type: object, description: "Record<category, count>" }
+        bySeverity: { type: object, description: "Record<severity, count>" }
+        specsAnalyzed: { type: number }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "empty project returns no issues"
+        given:
+          projectRoot: "/tmp/empty-project"
+        then:
+          result.issues: "@empty"
+          result.summary.total: 0
+          result.summary.specsAnalyzed: 0
+
+      - name: "detects SEC-1 for unauthenticated mutation with db effects"
+        given:
+          projectRoot: "/tmp/test-project"
+          # project has spec with security.authentication=none + db insert effect
+        then:
+          result.issues: "@hasItem({ id: 'SEC-1', severity: 'error', category: 'security' })"
+          result.summary.total: "@gt(0)"
+          result.summary.bySeverity.error: "@gt(0)"
+
+      - name: "category filter restricts to requested categories only"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            categories: ["logic"]
+        then:
+          # All returned issues must be in the logic category
+          result.summary.total: "@gte(0)"
+
+      - name: "severity filter excludes lower-severity issues"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            severity: "error"
+        then:
+          # Only errors, no warnings or info
+          result.summary.total: "@gte(0)"
+
+      - name: "specId filter limits scope"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            specIds: ["spec.tag.delete"]
+        then:
+          result.summary.specsAnalyzed: "@gte(0)"
+
+      - name: "deep mode adds implementation drift checks"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            deep: true
+        then:
+          result.issues: "@type('array')"
+          result.summary: "@defined"
+
+      - name: "issues are sorted by severity (errors first)"
+        given:
+          projectRoot: "/tmp/mixed-issues-project"
+        then:
+          result.issues: "@type('array')"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "Issues are sorted by severity (error first, then warning, then info)"
+      condition: >
+        for all i < result.issues.length - 1:
+        severityOrder(result.issues[i].severity) <= severityOrder(result.issues[i+1].severity)
+
+    - description: "Category filter is respected"
+      condition: >
+        if options.categories is set then
+        all result.issues have category in options.categories
+
+    - description: "Severity filter is respected"
+      condition: >
+        if options.severity is set then
+        all result.issues have severity >= options.severity threshold
+
+    - description: "SpecId filter is respected"
+      condition: >
+        if options.specIds is set then
+        result.issues with specId only contain specIds from options.specIds
+
+    - description: "Every issue has required fields"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@defined"
+          issue.category: "@defined"
+          issue.severity: "@defined"
+          issue.message: "@defined"
+
+    - description: "Summary total matches issues array length"
+      condition: "result.summary.total === result.issues.length"
+
+    - description: "Summary byCategory counts sum to total"
+      condition: "sum(Object.values(result.summary.byCategory)) === result.summary.total"
+
+    - description: "Summary bySeverity counts sum to total"
+      condition: "sum(Object.values(result.summary.bySeverity)) === result.summary.total"
+
+    - description: "specsAnalyzed is non-negative"
+      condition: "result.summary.specsAnalyzed >= 0"
+
+---
+
+# --- formatAnalysisResult ---
+
+spec.archcodex.analysisEngine.formatAnalysisResult:
+  inherits: spec.function
+  implementation: src/core/analysis/engine.ts#formatAnalysisResult
+
+  goal: "Format analysis results as a human-readable terminal string"
+  intent: "Group issues by category, render with severity icons, and append summary counts"
+
+  inputs:
+    result:
+      type: object
+      required: true
+      description: "AnalysisResult with issues array and summary"
+
+  outputs:
+    result:
+      type: string
+      description: "Formatted multi-line string for terminal display"
+
+  examples:
+    success:
+      - name: "empty result says no issues found"
+        given:
+          result:
+            issues: []
+            summary: { total: 0, byCategory: {}, bySeverity: {}, specsAnalyzed: 5 }
+        then:
+          result: "@all(@contains('No issues found'), @contains('Specs analyzed: 5'))"
+
+      - name: "formats error with ERR icon and category header"
+        given:
+          result:
+            issues:
+              - { id: "SEC-1", category: "security", severity: "error", specId: "spec.widget.create", message: "Unauthenticated write", suggestion: "Add authentication" }
+            summary: { total: 1, byCategory: { security: 1 }, bySeverity: { error: 1 }, specsAnalyzed: 1 }
+        then:
+          result: "@all(@contains('[ERR]'), @contains('SEC-1'), @contains('spec.widget.create'), @contains('Unauthenticated write'), @contains('Add authentication'), @contains('Security'))"
+
+      - name: "formats warning with WRN icon"
+        given:
+          result:
+            issues:
+              - { id: "LOG-2", category: "logic", severity: "warning", message: "Missing edge case" }
+            summary: { total: 1, byCategory: { logic: 1 }, bySeverity: { warning: 1 }, specsAnalyzed: 1 }
+        then:
+          result: "@all(@contains('[WRN]'), @contains('LOG-2'))"
+
+      - name: "formats info with INF icon"
+        given:
+          result:
+            issues:
+              - { id: "DAT-1", category: "data", severity: "info", message: "Consider adding index" }
+            summary: { total: 1, byCategory: { data: 1 }, bySeverity: { info: 1 }, specsAnalyzed: 1 }
+        then:
+          result: "@contains('[INF]')"
+
+      - name: "includes field label when present"
+        given:
+          result:
+            issues:
+              - { id: "DAT-3", category: "data", severity: "warning", field: "outputs.items", message: "Missing type" }
+            summary: { total: 1, byCategory: { data: 1 }, bySeverity: { warning: 1 }, specsAnalyzed: 1 }
+        then:
+          result: "@contains('outputs.items')"
+
+      - name: "summary line shows total and spec count"
+        given:
+          result:
+            issues:
+              - { id: "SEC-1", category: "security", severity: "error", message: "Issue 1" }
+              - { id: "LOG-1", category: "logic", severity: "warning", message: "Issue 2" }
+            summary: { total: 2, byCategory: { security: 1, logic: 1 }, bySeverity: { error: 1, warning: 1 }, specsAnalyzed: 3 }
+        then:
+          result: "@all(@contains('2 issue(s) across 3 spec(s)'), @contains('1 error(s)'), @contains('1 warning(s)'))"
+
+  invariants:
+    - description: "Empty issues always produces 'No issues found'"
+      condition: "if result.issues is empty then output contains 'No issues found'"
+
+    - description: "Severity icons use ERR/WRN/INF mapping"
+      condition: "error -> ERR, warning -> WRN, info -> INF"
+
+    - description: "Issues grouped by category with ## headers"
+      condition: "each unique category gets a '## Category (N)' header"

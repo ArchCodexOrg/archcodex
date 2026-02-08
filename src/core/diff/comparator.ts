@@ -311,7 +311,7 @@ async function findAffectedFiles(
     archChanges.filter(c => c.type === 'modified').map(c => c.archId)
   );
 
-  // TODO: Could also check if file uses affected mixins via inheritance
+  // FUTURE: Check if file uses affected mixins via inheritance chain resolution
   // const affectedMixins = new Set(mixinChanges.map(c => c.mixinId));
 
   // Scan files for @arch tags
@@ -343,9 +343,8 @@ async function findAffectedFiles(
         });
       }
 
-      // TODO: Could also check if file uses affected mixins via inheritance
-      // This would require resolving the full inheritance chain
-    } catch {
+      // FUTURE: Check if file uses affected mixins (requires full inheritance chain resolution)
+    } catch { /* file read or parse error */
       // Skip files that can't be read
     }
   }

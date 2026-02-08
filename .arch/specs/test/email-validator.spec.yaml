@@ -1,0 +1,87 @@
+# Email Validator Spec
+# E2E test for full SpecCodex lifecycle
+
+version: "1.0"
+
+spec.test.validateEmail:
+  inherits: spec.function
+  implementation: tests/spec/e2e/email-validator.ts#validateEmail
+
+  # === STRATEGIC ===
+  goal: "Validate email addresses with common rules"
+  outcomes:
+    - "Detect missing @ symbol"
+    - "Detect missing domain"
+    - "Reject whitespace in emails"
+
+  # === OPERATIONAL ===
+  intent: "Check if string is valid email format"
+
+  inputs:
+    email:
+      type: string
+      required: true
+      description: "Email address to validate"
+    options:
+      type: object
+      properties:
+        allowSubdomains: { type: boolean, default: true }
+        maxLength: { type: number, default: 254 }
+
+  outputs:
+    valid: { type: boolean }
+    error: { type: string, description: "Error code if invalid" }
+
+  # === INVARIANTS ===
+  invariants:
+    - "if valid then error is undefined"
+    - "if not valid then error is defined"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "valid simple email"
+        given:
+          email: "user@example.com"
+        then:
+          result.valid: true
+
+      - name: "valid with subdomain"
+        given:
+          email: "user@mail.example.com"
+        then:
+          result.valid: true
+
+      - name: "valid with plus addressing"
+        given:
+          email: "user+tag@example.com"
+        then:
+          result.valid: true
+
+    errors:
+      - name: "missing @ symbol"
+        given:
+          email: "userexample.com"
+        then:
+          result.valid: false
+          result.error: "MISSING_AT"
+
+      - name: "missing domain"
+        given:
+          email: "user@"
+        then:
+          result.valid: false
+          result.error: "MISSING_DOMAIN"
+
+      - name: "whitespace in email"
+        given:
+          email: "user name@example.com"
+        then:
+          result.valid: false
+          result.error: "INVALID_CHARS"
+
+      - name: "invalid length"
+        then: { error: "INVALID_LENGTH" }
+
+      - name: "invalid format"
+        then: { error: "INVALID_FORMAT" }

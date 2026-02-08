@@ -1,0 +1,219 @@
+# SpecCodex Signature Extractor Specification
+#
+# Parses TypeScript function signatures via AST for spec verification and inference.
+# Core infrastructure used by verifier, inferrer, and test generators.
+
+version: "1.0"
+
+spec.speccodex.signatureExtractor.parse:
+  inherits: spec.function
+  implementation: src/core/spec/generators/signature-extractor.ts#parseImplementationPath
+
+  goal: "Parse implementation path string into file path and export name"
+  outcomes:
+    - "Split 'path/to/file.ts#exportName' into components"
+    - "Return null for invalid path formats"
+
+  intent: "Parse the path#export format used throughout SpecCodex"
+
+  inputs:
+    implementationPath:
+      type: string
+      required: true
+      description: "Path in format path/to/file.ts#exportName"
+
+  outputs:
+    result:
+      type: object
+      description: "{ filePath, exportName } or null if invalid"
+
+  invariants:
+    - "Returns null when # separator is missing"
+    - "Returns null when export name is empty"
+    - "Returns null when file path is empty"
+    - "Supports .ts, .tsx, .js, .jsx extensions"
+    - "Does not validate file existence (pure string parsing)"
+
+  examples:
+    success:
+      - name: "standard TypeScript path"
+        given:
+          implementationPath: "src/utils/format.ts#formatDate"
+        then:
+          result.filePath: "src/utils/format.ts"
+          result.exportName: "formatDate"
+
+      - name: "nested path with dots"
+        given:
+          implementationPath: "src/domain/products/mutations/create.ts#create"
+        then:
+          result.filePath: "src/domain/products/mutations/create.ts"
+          result.exportName: "create"
+
+    errors:
+      - name: "missing hash separator"
+        given:
+          implementationPath: "src/utils/format.ts"
+        then:
+          result: null
+
+      - name: "empty export name"
+        given:
+          implementationPath: "src/utils/format.ts#"
+        then:
+          result: null
+
+---
+
+spec.speccodex.signatureExtractor.extract:
+  inherits: spec.function
+  implementation: src/core/spec/generators/signature-extractor.ts#extractFunctionSignature
+
+  goal: "Extract function signature from TypeScript source using AST parsing"
+  outcomes:
+    - "Parse implementation file with ts-morph"
+    - "Find exported function/const by name"
+    - "Extract parameters with types and optionality"
+    - "Detect destructured parameters"
+    - "Determine return type"
+    - "Detect async, factory patterns, and call patterns"
+
+  intent: "AST-based extraction of function signatures for spec verification and test generation"
+
+  inputs:
+    implementationPath:
+      type: string
+      required: true
+      description: "Path in format path/to/file.ts#exportName"
+    options:
+      type: object
+      required: true
+      description: "SignatureExtractorOptions with projectRoot"
+
+  outputs:
+    valid:
+      type: boolean
+      description: "Whether extraction succeeded"
+    functionName:
+      type: string
+      description: "Extracted function name"
+    parameters:
+      type: array
+      description: "Array of { name, type, optional } parameter definitions"
+    destructuredFields:
+      type: array
+      description: "Fields from destructured first parameter"
+    returnType:
+      type: string
+      description: "TypeScript return type string"
+    isAsync:
+      type: boolean
+      description: "Whether the function is async"
+    isFactory:
+      type: boolean
+      description: "Whether the function uses a factory/wrapper pattern"
+    callPattern:
+      type: enum
+      values: [direct, destructured, factory]
+      description: "How the function should be called in tests"
+    errors:
+      type: array
+      description: "Extraction errors with code and message"
+    dependencies:
+      type: array
+      description: "Import dependencies needed for testing"
+
+  invariants:
+    - "valid is true when file exists and export is found"
+    - "INVALID_PATH error when path format is wrong"
+    - "IMPLEMENTATION_NOT_FOUND error when file does not exist"
+    - "EXPORT_NOT_FOUND error when export name not in file"
+    - "NOT_A_FUNCTION error when export exists but is not callable"
+    - "callPattern is 'destructured' when first param is object destructuring"
+    - "callPattern is 'factory' when export is a wrapper like makeAuthMutation"
+    - "callPattern is 'direct' for standard function exports"
+    - "isAsync is true for async functions and functions returning Promise"
+
+  examples:
+    success:
+      - name: "plain exported function"
+        given:
+          implementationPath: "tests/fixtures/typescript/plain-function.ts#formatDate"
+          options: { projectRoot: "." }
+        then:
+          result.valid: true
+          result.functionName: "formatDate"
+          result.callPattern: "direct"
+          result.parameters: "@length(@gt(0))"
+          result.destructuredFields: "@defined"
+          result.returnType: "@defined"
+          result.isAsync: false
+          result.dependencies: "@defined"
+
+      - name: "async wrapper function"
+        given:
+          implementationPath: "tests/fixtures/typescript/auth-mutation.ts#create"
+          options: { projectRoot: "." }
+        then:
+          result.valid: true
+          result.isFactory: true
+
+    errors:
+      - name: "file not found"
+        given:
+          implementationPath: "nonexistent/file.ts#fn"
+          options: { projectRoot: "." }
+        then:
+          result.valid: false
+          result.errors: "@hasItem({ code: 'IMPLEMENTATION_NOT_FOUND' })"
+
+      - name: "export not found"
+        given:
+          implementationPath: "tests/fixtures/typescript/plain-function.ts#nonExistent"
+          options: { projectRoot: "." }
+        then:
+          result.valid: false
+          result.errors: "@hasItem({ code: 'EXPORT_NOT_FOUND' })"
+
+---
+
+spec.speccodex.signatureExtractor.dependencies:
+  inherits: spec.function
+  implementation: src/core/spec/generators/signature-extractor.ts#extractDependencies
+
+  goal: "Extract import dependencies needed to test a function"
+  outcomes:
+    - "Identify imports used by the function"
+    - "Determine which imports need mocking"
+    - "Return structured dependency list for test scaffolding"
+
+  intent: "Provide test generators with dependency info for mock scaffolding"
+
+  inputs:
+    implementationPath:
+      type: string
+      required: true
+      description: "Path in format path/to/file.ts#exportName"
+    options:
+      type: object
+      required: true
+      description: "SignatureExtractorOptions with projectRoot"
+
+  outputs:
+    result:
+      type: array
+      description: "Array of dependency objects with path, names, and mock hints"
+
+  invariants:
+    - "Dependencies include direct imports used by the function"
+    - "External package imports are flagged for mocking"
+    - "Relative imports are resolved relative to implementation file"
+
+  examples:
+    success:
+      - name: "function with imports"
+        given:
+          implementationPath: "src/core/spec/verifier.ts#verifyImplementation"
+          options: { projectRoot: "." }
+        then:
+          result: "@length(@gt(0))"

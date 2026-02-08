@@ -1,0 +1,94 @@
+# MCP Spec Init Handler Specification
+#
+# MCP tool handler for initializing SpecCodex in a project.
+
+version: "1.0"
+
+spec.archcodex.mcp.spec.init:
+  inherits: spec.function
+  implementation: src/mcp/handlers/spec.ts#handleSpecInit
+
+  # === STRATEGIC ===
+  goal: "Expose SpecCodex initialization via MCP for AI agent integration"
+  outcomes:
+    - "AI agents can initialize SpecCodex without CLI"
+    - "Returns structured JSON for agent consumption"
+    - "Provides helpful error messages for common issues"
+    - "Delegates to CLI implementation for consistency"
+
+  # === OPERATIONAL ===
+  intent: "Initialize SpecCodex via MCP tool call"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Project root path (auto-detected by MCP server)"
+    options:
+      type: object
+      properties:
+        force: { type: boolean, default: false, description: "Overwrite existing files" }
+        minimal: { type: boolean, default: false, description: "Skip example file" }
+        projectRoot: { type: string, description: "Override project root" }
+
+  outputs:
+    content:
+      type: array
+      items:
+        type: object
+        properties:
+          type: { type: string, enum: [text] }
+          text: { type: string, description: "JSON-formatted result" }
+    isError:
+      type: boolean
+      description: "True if operation failed"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "initialize in valid project"
+        given:
+          projectRoot: "/path/to/project"
+          options: {}
+        then:
+          result.content: "@length(@gte(1))"
+          result.content[0].type: "text"
+          # text contains JSON with success: true
+          result.isError: "@undefined"
+
+      - name: "initialize with force flag"
+        given:
+          projectRoot: "/path/to/project"
+          options: { force: true }
+        then:
+          result.content[0].type: "text"
+          result.isError: "@undefined"
+
+      - name: "initialize with minimal flag"
+        given:
+          projectRoot: "/path/to/project"
+          options: { minimal: true }
+        then:
+          result.content[0].type: "text"
+          result.isError: "@undefined"
+
+    errors:
+      - name: "project not initialized with archcodex"
+        given:
+          projectRoot: "/path/without/arch"
+          options: {}
+        then:
+          result.isError: true
+          # JSON contains error: "ARCH_NOT_INITIALIZED"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "Always returns MCP-compatible response format"
+      condition: "result.content is array with at least one element"
+    - description: "Success responses have isError undefined or false"
+      condition: "if success then result.isError is undefined"
+    - description: "Error responses have isError true"
+      condition: "if error then result.isError is true"
+    - description: "Response text is valid JSON"
+      condition: "JSON.parse(result.content[0].text) does not throw"
+

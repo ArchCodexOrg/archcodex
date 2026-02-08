@@ -1,10 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.core.domain.constraint
- * @intent:tested
  *
  * Integration tests for MCP server handlers:
  * - archcodex_session_context

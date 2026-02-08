@@ -59,14 +59,14 @@ export function createDiffArchCommand(): Command {
         let fromResolution, toResolution;
         try {
           fromResolution = resolveArchitecture(registry, fromArch);
-        } catch {
+        } catch { /* architecture resolution failed */
           logger.error(`Architecture '${fromArch}' not found in registry`);
           process.exit(1);
         }
 
         try {
           toResolution = resolveArchitecture(registry, toArch);
-        } catch {
+        } catch { /* architecture resolution failed */
           logger.error(`Architecture '${toArch}' not found in registry`);
           process.exit(1);
         }

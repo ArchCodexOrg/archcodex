@@ -166,7 +166,7 @@ describe('read command', () => {
 
     it('should have the correct description', () => {
       const command = createReadCommand();
-      expect(command.description()).toBe('Read a file with hydrated architectural context');
+      expect(command.description()).toBe('Get architectural constraints, boundaries, and hints for a file');
     });
 
     it('should have a required file argument', () => {
@@ -184,18 +184,18 @@ describe('read command', () => {
       const optionNames = options.map((opt) => opt.long);
       expect(optionNames).toContain('--format');
       expect(optionNames).toContain('--token-limit');
-      expect(optionNames).toContain('--no-content');
       expect(optionNames).toContain('--no-pointers');
       expect(optionNames).toContain('--with-example');
-      expect(optionNames).toContain('--with-source');
       expect(optionNames).toContain('--with-deps');
       expect(optionNames).toContain('--config');
+      expect(optionNames).not.toContain('--no-content');
+      expect(optionNames).not.toContain('--with-source');
     });
 
     it('should have correct default for format option', () => {
       const command = createReadCommand();
       const formatOption = command.options.find((opt) => opt.long === '--format');
-      expect(formatOption?.defaultValue).toBe('verbose');
+      expect(formatOption?.defaultValue).toBe('ai');
     });
 
     it('should have correct default for token-limit option', () => {
@@ -302,7 +302,7 @@ describe('read command', () => {
   });
 
   describe('content options', () => {
-    it('should pass includeContent based on format', async () => {
+    it('should never include file content regardless of format', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
       vi.mocked(HydrationEngine).mockImplementation(function() {
       return {
@@ -315,11 +315,11 @@ describe('read command', () => {
 
       expect(mockHydrateFile).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ includeContent: true })
+        expect.objectContaining({ includeContent: false })
       );
     });
 
-    it('should exclude content by default for AI format', async () => {
+    it('should never include file content for AI format', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
       vi.mocked(HydrationEngine).mockImplementation(function() {
       return {
@@ -330,27 +330,9 @@ describe('read command', () => {
       const command = createReadCommand();
       await command.parseAsync(['node', 'test', 'src/file.ts', '--format', 'ai']);
 
-      // withSource is undefined when not set, which is falsy
       expect(mockHydrateFile).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ includeContent: undefined })
-      );
-    });
-
-    it('should include content for AI format with --with-source', async () => {
-      const mockHydrateFile = vi.fn().mockResolvedValue(mockHydrationResult);
-      vi.mocked(HydrationEngine).mockImplementation(function() {
-      return {
-        hydrateFile: mockHydrateFile,
-      } as any;
-    });
-
-      const command = createReadCommand();
-      await command.parseAsync(['node', 'test', 'src/file.ts', '--format', 'ai', '--with-source']);
-
-      expect(mockHydrateFile).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ includeContent: true })
+        expect.objectContaining({ includeContent: false })
       );
     });
 

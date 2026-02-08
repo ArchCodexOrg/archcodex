@@ -5,6 +5,8 @@ archcodex.infra:
   mixins:
     - dip
   description: Infrastructure layer - external system adapters
+  file_pattern: "*.ts"
+  default_path: src/utils
   rationale: |
     Adapters for external systems (file system, git, APIs). Implements interfaces
     defined in the domain layer. Isolates external dependencies from core logic.

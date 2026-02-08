@@ -1,5 +1,6 @@
 /**
  * @arch archcodex.cli.formatter
+ * @intent:cli-output
  *
  * Formatters for the garden command output.
  */

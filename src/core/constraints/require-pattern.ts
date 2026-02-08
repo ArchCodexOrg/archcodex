@@ -59,7 +59,7 @@ export class RequirePatternValidator extends BaseConstraintValidator {
           )
         );
       }
-    } catch {
+    } catch { /* invalid regex pattern */
       violations.push(
         this.createViolation(
           constraint,

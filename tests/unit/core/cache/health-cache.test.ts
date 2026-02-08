@@ -2,10 +2,6 @@
  * @arch archcodex.test.unit
  * @intent:cli-output
  */
-/**
- * @arch archcodex.core.domain.constraint
- * @intent:tested
- */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HealthCacheManager } from '../../../../src/core/cache/health-cache.js';
 import type { HealthCacheEntry } from '../../../../src/core/cache/health-cache.js';

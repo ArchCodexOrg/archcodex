@@ -1,0 +1,251 @@
+# Unified Context Synthesizer Specification
+#
+# Combines module structure (from architecture map) with entity schemas
+# into a single LLM-optimized output for the archcodex_context MCP tool.
+
+version: "1.0"
+
+spec.archcodex.unifiedContextSynthesizer:
+  inherits: spec.function
+  implementation: src/core/unified-context/synthesizer.ts#synthesizeUnifiedContext
+
+  # === STRATEGIC ===
+  goal: "Provide a single-call context endpoint that gives AI agents everything they need"
+  outcomes:
+    - "Module queries return files, boundaries, entities, constraints, and impact"
+    - "Entity queries return fields, relationships, behaviors, and referencing files"
+    - "Large modules trigger interactive mode to avoid information overload"
+    - "Summary and brief modes return progressively less detail"
+
+  # === OPERATIONAL ===
+  intent: "Route to module or entity synthesizer based on options, auto-sync database, return unified context"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Absolute path to project root"
+    options:
+      type: object
+      required: true
+      description: "Query options specifying module or entity target"
+      properties:
+        module:
+          type: string
+          description: "Module path to query (e.g. 'src/core/db/')"
+        entity:
+          type: string
+          description: "Entity name to query (e.g. 'User')"
+        sections:
+          type: array
+          description: "Sections to include (default: all)"
+        summary:
+          type: boolean
+          description: "Summary mode - structure overview only"
+        brief:
+          type: boolean
+          description: "Brief mode - minimal essential info"
+        confirm:
+          type: boolean
+          description: "Confirm large module output"
+
+  outputs:
+    query:
+      type: object
+      description: "Query metadata with type ('module'|'entity') and target"
+    module:
+      type: object
+      description: "Module context (present for module queries)"
+    entity:
+      type: object
+      description: "Entity context (present for entity queries)"
+
+  examples:
+    success:
+      - name: "module query returns full context"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            module: "src/core/db/"
+        then:
+          result.query.type: "module"
+          result.query.target: "src/core/db/"
+          result.module: "@exists"
+
+      - name: "entity query returns entity context"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            entity: "User"
+        then:
+          result.query.type: "entity"
+          result.query.target: "User"
+          result.entity: "@exists"
+
+      - name: "returns null when neither module nor entity specified"
+        given:
+          projectRoot: "/tmp/test-project"
+          options: {}
+        then:
+          result: null
+
+      - name: "returns null for non-existent module"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            module: "src/nonexistent/"
+        then:
+          result: null
+
+  invariants:
+    - description: "exactly one of module or entity is populated per result"
+      condition: "(result.module !== undefined) XOR (result.entity !== undefined)"
+
+    - description: "query.type matches which field is populated"
+      condition: "result.query.type === 'module' implies result.module exists"
+
+# --- Module context ---
+
+spec.archcodex.synthesizeUnifiedModuleContext:
+  inherits: spec.function
+  implementation: src/core/unified-context/synthesizer.ts#synthesizeUnifiedModuleContext
+
+  goal: "Synthesize comprehensive module context for AI agent consumption"
+  intent: "Query DB for module files, compute roles/impact, fetch boundaries and constraints, return unified structure"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+    modulePath:
+      type: string
+      required: true
+    options:
+      type: object
+      required: false
+
+  outputs:
+    modulePath:
+      type: string
+    fileCount:
+      type: number
+    lineCount:
+      type: number
+    entityCount:
+      type: number
+    files:
+      type: object
+      description: "{ defines: [], implements: [], orchestrates: [] }"
+    entities:
+      type: array
+    consumers:
+      type: array
+    archcodex:
+      type: object
+
+  examples:
+    success:
+      - name: "large module without confirm triggers interactive mode"
+        given:
+          projectRoot: "/tmp/test-project"
+          modulePath: "src/"
+          options: {}
+          moduleFileCount: 35
+        then:
+          result.isLargeModule: true
+          result.archcodex.architecture: "(interactive)"
+
+      - name: "large module with confirm returns full context"
+        given:
+          projectRoot: "/tmp/test-project"
+          modulePath: "src/"
+          options:
+            confirm: true
+          moduleFileCount: 35
+        then:
+          result.isLargeModule: "@not(true)"
+          result.fileCount: "@gt(0)"
+
+      - name: "summary mode returns minimal structure"
+        given:
+          projectRoot: "/tmp/test-project"
+          modulePath: "src/core/"
+          options:
+            summary: true
+        then:
+          result.isSummary: true
+          result.archcodex.architecture: "(summary)"
+
+      - name: "brief mode returns constraints and boundaries only"
+        given:
+          projectRoot: "/tmp/test-project"
+          modulePath: "src/core/"
+          options:
+            brief: true
+        then:
+          result.isBrief: true
+          result.requestedSections: "@hasItem('boundaries')"
+          result.requestedSections: "@hasItem('constraints')"
+
+      - name: "empty module returns null"
+        given:
+          projectRoot: "/tmp/test-project"
+          modulePath: "src/nonexistent/"
+        then:
+          result: null
+
+  invariants:
+    - description: "interactive mode triggers above 30 files without confirm"
+      condition: "fileCount > 30 && !options.confirm implies isLargeModule === true"
+
+    - description: "files are grouped into defines/implements/orchestrates"
+      condition: "result.files has keys: defines, implements, orchestrates"
+
+# --- Entity context ---
+
+spec.archcodex.synthesizeUnifiedEntityContext:
+  inherits: spec.function
+  implementation: src/core/unified-context/synthesizer.ts#synthesizeUnifiedEntityContext
+
+  goal: "Synthesize entity-focused context with schema, relationships, and referencing files"
+  intent: "Use existing entity synthesizer, then enrich with file info from database"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+    entityName:
+      type: string
+      required: true
+
+  outputs:
+    name:
+      type: string
+    fields:
+      type: array
+    relationships:
+      type: array
+    behaviors:
+      type: array
+    operations:
+      type: array
+    files:
+      type: object
+
+  examples:
+    success:
+      - name: "known entity returns full context"
+        given:
+          projectRoot: "/tmp/test-project"
+          entityName: "User"
+        then:
+          result.name: "User"
+          result.fields: "@exists"
+          result.relationships: "@exists"
+
+      - name: "unknown entity returns null"
+        given:
+          projectRoot: "/tmp/test-project"
+          entityName: "NonExistentEntity"
+        then:
+          result: null

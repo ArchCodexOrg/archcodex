@@ -13,6 +13,9 @@ archcodex.core.engine:
 
     Use for: Files that coordinate multiple components to complete a workflow.
     Don't use for: Domain rules (use core.domain), individual validators (use constraint).
+  suggested_intents:
+    - name: stateless
+      when: "Engine does not manage persistent state (caches, connections)"
   reference_implementations:
     - src/core/health/analyzer.ts
     - src/core/validation/engine.ts

@@ -88,6 +88,9 @@ archcodex.cli.command:
 archcodex.cli.command.meta:
   inherits: archcodex.cli.command
   description: Meta commands for architecture setup and migration
+  reference_implementations:
+    - src/cli/commands/init.ts
+    - src/cli/commands/migrate-registry.ts
   rationale: |
     Commands that manage the .arch/ directory structure itself: init, migrate-registry, etc.
     These commands legitimately need to reference registry.yaml directly for setup/migration.
@@ -111,6 +114,9 @@ archcodex.cli.command.meta:
 archcodex.cli.command.complex:
   inherits: archcodex.cli.command
   description: Commands with multiple features, output modes, or subcommands
+  reference_implementations:
+    - src/cli/commands/check.ts
+    - src/cli/commands/health.ts
   rationale: |
     Some commands legitimately need more code due to multiple features:
     - Multiple output formats (human, json, ai)

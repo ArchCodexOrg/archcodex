@@ -1,0 +1,23 @@
+---
+
+archcodex.cli.command.documented:
+  inherits: archcodex.cli.command
+  description: Commands with comprehensive --help documentation and usage examples
+  rationale: |
+    Commands that include detailed help text, usage examples, and option descriptions
+    beyond the standard Commander.js defaults. These commands serve as reference
+    documentation for users.
+
+    Use for: Commands that need extensive help text or embedded documentation.
+    Don't use for: Simple commands where Commander.js defaults suffice.
+  reference_implementations:
+    - src/cli/commands/schema.ts
+  constraints:
+    - rule: max_file_lines
+      value: 500
+      severity: warning
+      why: Documented commands may be larger due to help text and examples
+  hints:
+    - Include usage examples in command description
+    - Document all options with clear descriptions
+    - Consider adding --examples flag for detailed usage

@@ -1,0 +1,237 @@
+# SpecCodex Invariant DSL Specification
+#
+# Defines a strict, LLM-friendly DSL for expressing spec invariants.
+# Natural language parsing is deprecated in favor of explicit DSL syntax.
+#
+# DESIGN PRINCIPLES:
+# 1. Explicit over implicit - no ambiguous natural language parsing
+# 2. LLM-friendly - patterns that LLMs recognize naturally from training data
+# 3. Helpful errors - clear messages explaining valid syntax when parsing fails
+# 4. Composable - simple primitives that combine into complex assertions
+
+version: "1.0"
+
+# =============================================================================
+# INVARIANT DSL SPECIFICATION
+# =============================================================================
+spec.speccodex.invariantDSL:
+  inherits: spec.function
+  implementation: src/core/spec/generators/property.ts#parseInvariant
+
+  goal: "Parse invariant expressions into executable test assertions"
+  outcomes:
+    - "All valid DSL patterns produce correct test code"
+    - "Invalid patterns produce helpful error messages with syntax hints"
+    - "LLMs can write invariants without documentation lookup"
+    - "Generated assertions are semantically equivalent to intent"
+
+  intent: "Parse an invariant DSL expression into test assertion code"
+
+  inputs:
+    invariant:
+      type: union
+      variants:
+        - type: string   # condition expression
+        - type: object   # structured invariant
+      required: true
+      description: |
+        Invariant expressed in DSL syntax. Supported forms:
+
+        1. CONDITION (JavaScript expression):
+           { condition: "result === input.a * input.b" }
+
+        2. FIELD ASSERTION (placeholder syntax):
+           { "result.field": "@gt(0)" }
+           { "result.items": "@length(3)" }
+
+        3. FORALL (loop assertion):
+           { forall: { variable: "item", in: "result.items", then: { "item.valid": true } } }
+
+        4. EXISTS (at-least-one assertion):
+           { exists: { variable: "item", in: "result.items", then: { "item.found": true } } }
+
+  outputs:
+    testName:
+      type: string
+      description: "Human-readable name for the test case"
+    assertion:
+      type: string
+      description: "Generated JavaScript/TypeScript assertion code"
+
+  # === INVARIANTS (self-referential!) ===
+  invariants:
+    - condition: "result.testName.length > 0"
+    - condition: "result.assertion.includes('expect')"
+    - condition: "typeof result.testName === 'string'"
+    - condition: "typeof result.assertion === 'string'"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      # Condition expressions
+      - name: "simple equality condition"
+        given:
+          invariant: { condition: "result === input.a * input.b" }
+        then:
+          result.assertion: "@contains('expect(result === input.a * input.b).toBe(true)')"
+
+      - name: "boolean condition with OR"
+        given:
+          invariant: { condition: "result.success || result.errors.length > 0" }
+        then:
+          result.assertion: "@contains('expect(result.success || result.errors.length > 0).toBe(true)')"
+
+      - name: "string method condition"
+        given:
+          invariant: { condition: "result.title.startsWith('Copy of ')" }
+        then:
+          result.assertion: "@contains('startsWith')"
+
+      # Field assertions with placeholders
+      - name: "greater than zero"
+        given:
+          invariant: { "result.count": "@gt(0)" }
+        then:
+          result.assertion: "@contains('toBeGreaterThan(0)')"
+
+      - name: "between range"
+        given:
+          invariant: { "result.score": "@between(0, 100)" }
+        then:
+          result.assertion: "@all(@contains('toBeGreaterThanOrEqual(0)'), @contains('toBeLessThanOrEqual(100)'))"
+
+      - name: "regex match"
+        given:
+          invariant: { "result.orderId": "@matches('^ORD-[0-9]+$')" }
+        then:
+          result.assertion: "@contains('toMatch')"
+          result.assertion: "@contains('ORD-[0-9]+')"
+
+      - name: "array length"
+        given:
+          invariant: { "result.items": "@length(5)" }
+        then:
+          result.assertion: "@contains('toHaveLength(5)')"
+
+      - name: "array has item"
+        given:
+          invariant: { "result.items": "@hasItem({ id: 1 })" }
+        then:
+          result.assertion: "@contains('arrayContaining')"
+
+      - name: "composite assertion with @all"
+        given:
+          invariant: { "result.value": "@all(@gt(0), @lt(100))" }
+        then:
+          result.assertion: "@contains('toBeGreaterThan(0)')"
+          result.assertion: "@contains('toBeLessThan(100)')"
+
+      # Forall invariants
+      - name: "forall with equality"
+        given:
+          invariant:
+            forall:
+              variable: item
+              in: result.items
+              then: { "item.status": "active" }
+        then:
+          result.assertion: "@contains('for')"
+          result.assertion: "@contains('result.items')"
+          result.assertion: "@contains('item.status')"
+
+      - name: "forall with placeholder"
+        given:
+          invariant:
+            forall:
+              variable: item
+              in: input.items
+              then: { "item.quantity": "@gte(1)" }
+        then:
+          result.assertion: "@contains('toBeGreaterThanOrEqual(1)')"
+
+      # Exists invariants
+      - name: "exists with condition"
+        given:
+          invariant:
+            exists:
+              variable: item
+              in: result.items
+              where: { "item.status": "active" }
+        then:
+          result.assertion: "@contains('some')"
+          result.assertion: "@contains('item.status')"
+
+    errors:
+      - name: "unrecognized string invariant"
+        given:
+          invariant: "this is just random text"
+        then:
+          error: "INVALID_INVARIANT_SYNTAX"
+          "error.message": "@contains('Use condition:')"
+          "error.hint": "@contains('{ condition: \"<expression>\" }')"
+
+      - name: "malformed forall missing variable"
+        given:
+          invariant:
+            forall:
+              in: result.items
+              then: { "item.valid": true }
+        then:
+          error: "INVALID_FORALL_SYNTAX"
+          "error.message": "@contains('variable')"
+
+      - name: "unknown placeholder"
+        given:
+          invariant: { "result.field": "@unknown_assertion" }
+        then:
+          error: "UNKNOWN_PLACEHOLDER"
+          "error.suggestions": "@exists"
+
+# =============================================================================
+# DEPRECATION: Natural Language Invariants
+# =============================================================================
+spec.speccodex.invariantDSL.deprecation:
+  inherits: spec.type
+
+  intent: "Document deprecated natural language invariant patterns"
+  goal: "Track deprecated patterns and their DSL replacements"
+  outcomes:
+    - "Deprecated patterns are documented with their DSL replacements"
+    - "Migration guide helps users transition from natural language to DSL"
+
+  fields:
+    patterns:
+      type: array
+      description: "List of deprecated patterns with replacements"
+    guide:
+      type: string
+      description: "Migration guide for moving from natural language to DSL"
+
+# =============================================================================
+# ERROR MESSAGES (LLM-friendly hints)
+# =============================================================================
+spec.speccodex.invariantDSL.errors:
+  inherits: spec.type
+
+  intent: "Define helpful error messages for invalid invariant syntax"
+  goal: "Provide LLM-friendly error messages and hints for syntax errors"
+  outcomes:
+    - "Each error type has a clear message and syntax hint"
+    - "Error messages help LLMs self-correct invalid invariant syntax"
+
+  fields:
+    INVALID_INVARIANT_SYNTAX:
+      type: object
+      description: "Error for unrecognized invariant syntax"
+    INVALID_FORALL_SYNTAX:
+      type: object
+      description: "Error for malformed forall invariant"
+    INVALID_EXISTS_SYNTAX:
+      type: object
+      description: "Error for malformed exists invariant"
+    UNKNOWN_PLACEHOLDER:
+      type: object
+      description: "Error for unknown placeholder name"
+    INVALID_CONDITION_EXPRESSION:
+      type: object
+      description: "Error for invalid JavaScript expression in condition"

@@ -1,0 +1,51 @@
+---
+
+archcodex.infra.config:
+  inherits: archcodex.infra
+  mixins:
+    - tested
+  description: Configuration loading adapter - .archconfig, credentials, environment
+  rationale: |
+    Loads configuration from files (.archconfig, YAML) and environment variables.
+    Wraps file reading and parsing with validation and sensible defaults.
+
+    Use for: Files that load configuration, credentials, or environment variables.
+    Don't use for: Git operations (use infra.git), general file I/O (use infra.fs).
+  reference_implementations:
+    - src/utils/archconfig.ts
+  file_pattern: "*config*.ts"
+  default_path: src/utils
+  code_pattern: |-
+    import { readFile } from 'fs/promises';
+    import { existsSync } from 'fs';
+
+    /**
+     * Load configuration from a known file path.
+     * Returns defaults when file is missing.
+     */
+    export async function loadConfig(projectRoot: string): Promise<Config> {
+      const configPath = join(projectRoot, '.archconfig');
+      if (!existsSync(configPath)) {
+        return defaultConfig;
+      }
+      const raw = await readFile(configPath, 'utf8');
+      return parseConfig(raw);
+    }
+  constraints:
+    # commander, ../cli already forbidden by parent (infra)
+    - rule: forbid_import
+      value:
+        - chalk
+        - ts-morph
+        - ../core
+      severity: error
+      why: "[DIP] Config adapter must not depend on presentation, AST, or domain concerns"
+    - rule: max_file_lines
+      value: 150
+      exclude_comments: true
+      severity: warning
+      why: Keep config loading focused
+  hints:
+    - Always provide sensible defaults when config files are missing
+    - Validate loaded configuration against expected schema
+    - Support both project-local and user-home config locations

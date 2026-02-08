@@ -1,0 +1,70 @@
+version: "1.0"
+
+spec.test.directParams:
+  inherits: spec.function
+  implementation: tests/spec/e2e/signature-test.ts#directParams
+  goal: "Test direct positional parameters"
+  outcomes:
+    - "Concatenates string a and number b into a single string"
+  intent: "Concatenate string and number"
+  inputs:
+    a: { type: string, required: true }
+    b: { type: number, required: true }
+  examples:
+    success:
+      - name: "basic concat"
+        given: { a: "test", b: 123 }
+        then: { result: "test123" }
+
+spec.test.destructuredParams:
+  inherits: spec.function
+  implementation: tests/spec/e2e/signature-test.ts#destructuredParams
+  goal: "Test destructured parameters"
+  outcomes:
+    - "Formats name and age into 'Name is Age' string"
+  intent: "Format name and age"
+  inputs:
+    name: { type: string, required: true }
+    age: { type: number, required: true }
+  examples:
+    success:
+      - name: "format person"
+        given: { name: "Alice", age: 30 }
+        then: { result: "Alice is 30" }
+
+spec.test.asyncFunction:
+  inherits: spec.function
+  implementation: tests/spec/e2e/signature-test.ts#asyncFunction
+  goal: "Test async function detection"
+  outcomes:
+    - "Uppercases input string asynchronously"
+  intent: "Uppercase a string"
+  inputs:
+    input: { type: string, required: true }
+  examples:
+    success:
+      - name: "uppercase"
+        given: { input: "hello" }
+        then: { result: "HELLO" }
+
+spec.test.syncWithError:
+  inherits: spec.function
+  implementation: tests/spec/e2e/signature-test.ts#syncWithError
+  goal: "Test sync function with error return"
+  outcomes:
+    - "Returns valid: true for positive numbers, valid: false with error for negative"
+  intent: "Validate positive number"
+  inputs:
+    value: { type: number, required: true }
+  outputs:
+    valid: { type: boolean }
+    error: { type: string, optional: true }
+  examples:
+    success:
+      - name: "valid positive"
+        given: { value: 5 }
+        then: { result.valid: true, result.error: "@undefined" }
+    errors:
+      - name: "invalid negative"
+        given: { value: -1 }
+        then: { result.valid: false, result.error: "NEGATIVE" }

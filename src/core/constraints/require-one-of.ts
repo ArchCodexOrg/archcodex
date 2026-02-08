@@ -132,7 +132,7 @@ export class RequireOneOfValidator extends BaseConstraintValidator {
       try {
         const regex = new RegExp(pattern.slice(1, -1), 'ms');
         return regex.test(content);
-      } catch {
+      } catch { /* invalid regex pattern */
         return false;
       }
     }

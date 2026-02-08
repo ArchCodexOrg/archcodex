@@ -1,0 +1,178 @@
+# Validator Registry Specification
+#
+# Singleton registry for managing language validators with lazy instantiation.
+# Maps file extensions to validator factories and provides capabilities lookup.
+
+version: "1.0"
+
+spec.archcodex.validatorRegistry:
+  inherits: spec.function
+  implementation: src/validators/validator-registry.ts#ValidatorRegistry
+
+  # === STRATEGIC ===
+  goal: "Manage language validator registration and lookup by file extension"
+  outcomes:
+    - "Validators are lazily instantiated on first access"
+    - "File extensions map to registered validators"
+    - "Capabilities can be queried per extension"
+    - "Unsupported extensions return null gracefully"
+    - "All validator instances can be disposed and cleared"
+
+  # === OPERATIONAL ===
+  intent: "Register validator factories keyed by ID and extension, instantiate lazily on first use"
+
+  inputs:
+    id:
+      type: string
+      required: true
+      description: "Unique validator identifier (e.g., 'typescript', 'python')"
+    factory:
+      type: function
+      required: true
+      description: "Factory function that creates an ILanguageValidator instance"
+    languages:
+      type: array
+      required: true
+      description: "Languages this validator supports"
+    extensions:
+      type: array
+      required: true
+      description: "File extensions this validator handles (e.g., ['.ts', '.tsx'])"
+    capabilities:
+      type: object
+      required: false
+      description: "Language capabilities (falls back to default from languages[0])"
+
+  outputs:
+    validator:
+      type: object
+      description: "ILanguageValidator instance (or null if not found)"
+
+  examples:
+    success:
+      - name: "register and retrieve by extension"
+        given:
+          id: "typescript"
+          factory: "() => new TypeScriptValidator()"
+          languages: ["typescript", "javascript"]
+          extensions: [".ts", ".tsx", ".js", ".jsx"]
+        then:
+          result.getForExtension(".ts"): "@exists"
+          result.getForExtension(".tsx"): "@exists"
+
+      - name: "lazy instantiation on first access"
+        given:
+          id: "typescript"
+          factory: "() => new TypeScriptValidator()"
+          languages: ["typescript"]
+          extensions: [".ts"]
+        then:
+          result.factoryCallCount: 0
+          result.afterGetForExtension.factoryCallCount: 1
+
+      - name: "second access reuses same instance"
+        given:
+          id: "typescript"
+          registered: true
+        then:
+          result.firstGet: "@exists"
+          result.secondGet: "@exists"
+          result.sameInstance: true
+
+      - name: "getById returns validator by registration ID"
+        given:
+          id: "typescript"
+          registered: true
+        then:
+          result.getById: "@exists"
+
+      - name: "getById returns null for unknown ID"
+        given:
+          id: "python"
+          registered: false
+        then:
+          result.getById: null
+
+      - name: "getForExtension returns null for unsupported extension"
+        given:
+          extension: ".py"
+        then:
+          result: null
+
+      - name: "extension lookup is case-insensitive"
+        given:
+          id: "typescript"
+          extensions: [".ts"]
+          lookupExtension: ".TS"
+        then:
+          result.getForExtension: "@exists"
+
+      - name: "isSupported returns true for registered extension"
+        given:
+          registeredExtensions: [".ts", ".tsx"]
+          extension: ".ts"
+        then:
+          result: true
+
+      - name: "isSupported returns false for unregistered extension"
+        given:
+          extension: ".rs"
+        then:
+          result: false
+
+      - name: "getSupportedExtensions lists all registered extensions"
+        given:
+          registeredExtensions: [".ts", ".tsx", ".js", ".jsx"]
+        then:
+          result: "@all(@length(4), @hasItem('.ts'))"
+
+      - name: "getRegisteredValidators lists all validator IDs"
+        given:
+          registeredIds: ["typescript"]
+        then:
+          result: "@hasItem('typescript')"
+
+      - name: "getCapabilitiesForExtension returns capabilities"
+        given:
+          extension: ".ts"
+          registered: true
+        then:
+          result: "@exists"
+
+      - name: "getCapabilitiesForExtension returns null for unknown"
+        given:
+          extension: ".unknown"
+        then:
+          result: null
+
+      - name: "disposeAll calls dispose on all instances"
+        given:
+          registeredAndInstantiated: ["typescript"]
+        then:
+          result.instancesDisposed: 1
+
+      - name: "clear removes all registrations"
+        given:
+          registeredIds: ["typescript"]
+        then:
+          result.afterClear.getRegisteredValidators: "@length(0)"
+          result.afterClear.getSupportedExtensions: "@length(0)"
+
+  invariants:
+    - description: "factory is called at most once per registration"
+      condition: "getForExtension and getById reuse the cached instance"
+
+    - description: "extension lookup is always case-insensitive"
+      condition: "extension.toLowerCase() is used for all lookups"
+
+    - description: "getForExtension returns null for unregistered extensions"
+      condition: "no extension without a registration returns a validator"
+
+    - description: "disposeAll resets instances to undefined"
+      condition: "after disposeAll, next access triggers factory again"
+
+    - description: "clear disposes then clears all maps"
+      condition: "after clear, registrations and extensionMap are empty"
+
+    - description: "global validatorRegistry is a singleton"
+      condition: "validatorRegistry is a module-level const instance"

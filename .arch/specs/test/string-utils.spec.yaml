@@ -1,0 +1,62 @@
+# String Utilities Spec
+# Test spec for E2E validation
+
+version: "1.0"
+
+spec.test.slugify:
+  inherits: spec.function
+  implementation: src/utils/string.ts#slugify
+
+  # === STRATEGIC ===
+  goal: "Convert any string to a URL-safe slug"
+  outcomes:
+    - "Lowercase output"
+    - "Replace spaces with dashes"
+    - "Remove special characters"
+
+  # === OPERATIONAL ===
+  intent: "Transform string into lowercase dash-separated slug"
+
+  inputs:
+    text:
+      type: string
+      required: true
+      description: "Input text to convert"
+    options:
+      type: object
+      properties:
+        maxLength: { type: number, default: 100 }
+        lowercase: { type: boolean, default: true }
+
+  outputs:
+    result:
+      type: string
+      description: "URL-safe slug generated from the input text"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "result": "@matches('^[a-z0-9-]*$')" }
+    - condition: "!result.includes('--')"
+    - condition: "result.length <= (input.options?.maxLength || 100)"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "basic conversion"
+        given:
+          text: "Hello World"
+        then:
+          result: "hello-world"
+
+      - name: "special characters removed"
+        given:
+          text: "Hello! @World #2024"
+        then:
+          result: "hello-world-2024"
+
+      - name: "max length truncation"
+        given:
+          text: "Very Long Title Here"
+          options: { maxLength: 10 }
+        then:
+          result: "@length(@lte(10))"

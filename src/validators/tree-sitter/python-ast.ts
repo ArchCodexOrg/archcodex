@@ -182,8 +182,7 @@ export function extractPythonSemanticModel(
       mutations,
       exports,
     };
-  } catch {
-    // Parser failure - return base model with file metadata only
+  } catch { /* AST parse failed, return base model with file metadata only */
     return baseModel;
   }
 }

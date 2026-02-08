@@ -100,7 +100,7 @@ export abstract class BaseLLMProvider implements ILLMProvider {
         keywords,
         tokenUsage: response.usage,
       };
-    } catch {
+    } catch { /* LLM call failed, return empty keywords */
       return { archId: request.archId, keywords: [] };
     }
   }
@@ -224,7 +224,7 @@ Return ONLY the JSON array.`;
         confidence: (parsed[i]?.confidence as 'high' | 'medium' | 'low') || 'low',
         reasoning: parsed[i]?.reasoning || 'No reasoning provided',
       }));
-    } catch {
+    } catch { /* JSON parse failed */
       return this.createFailedResults(checks, 'Failed to parse LLM response');
     }
   }
@@ -240,7 +240,7 @@ Return ONLY the JSON array.`;
         return parsed.filter((k): k is string => typeof k === 'string');
       }
       return [];
-    } catch {
+    } catch { /* JSON parse failed */
       return [];
     }
   }

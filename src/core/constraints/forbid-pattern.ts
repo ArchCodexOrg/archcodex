@@ -112,7 +112,7 @@ export class ForbidPatternValidator extends BaseForbidValidator {
           });
         }
       }
-    } catch {
+    } catch { /* invalid regex pattern */
       violations.push(
         this.createViolation(
           constraint,

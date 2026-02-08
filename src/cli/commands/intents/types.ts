@@ -1,5 +1,5 @@
 /**
- * @arch archcodex.core.types
+ * @arch archcodex.cli.types
  *
  * Shared types for intent CLI commands.
  */

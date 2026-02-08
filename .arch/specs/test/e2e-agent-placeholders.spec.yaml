@@ -1,0 +1,99 @@
+version: "1.0"
+
+spec.test.agent.placeholders:
+  type: test
+  inherits: spec.function
+  goal: "Validate placeholder expansion across all assertion types"
+  intent: "Test placeholder expansion in assertions"
+  description: |
+    Comprehensive test of SpecCodex placeholder system covering:
+    - String and URL generation
+    - Numeric value generation and assertions
+    - Array item assertions
+    - Timestamp operations
+    - Comparison operators
+  
+  inputs:
+    data:
+      type: object
+      description: Test data with various types
+  
+  outputs:
+    processed:
+      type: object
+      description: Processed test data
+  
+  examples:
+    success:
+      - name: "string placeholders"
+        given:
+          data: 
+            text: "@string(100)"
+            url: "@url(500)"
+        then:
+          processed.text: "@length(@lte(100))"
+          processed.text: "@type('string')"
+          processed.url: "@contains('https')"
+      
+      - name: "numeric assertions"
+        given:
+          data:
+            count: "@between(1, 50)"
+            score: "@gt(0)"
+            maxValue: "@lt(100)"
+        then:
+          processed.count: "@gte(1)"
+          processed.count: "@lte(50)"
+          processed.score: "@gt(0)"
+          processed.maxValue: "@lt(100)"
+      
+      - name: "timestamp operations"
+        given:
+          data:
+            createdAt: "@now"
+            yesterday: "@now(-1d)"
+            nextWeek: "@now(+7d)"
+        then:
+          processed.createdAt: "@exists"
+          processed.yesterday: "@lt(@now)"
+          processed.nextWeek: "@gt(@now)"
+      
+      - name: "array assertions"
+        given:
+          data:
+            items: 
+              - { id: 1, name: "test" }
+              - { id: 2, name: "example" }
+        then:
+          processed.items: "@length(2)"
+          processed.items: "@hasItem({ id: 1 })"
+          processed.items: "@hasItem({ id: 2 })"
+      
+      - name: "uuid and identity"
+        given:
+          data:
+            id: "@uuid"
+            created: "@created"
+        then:
+          processed.id: "@exists"
+          processed.id: "@matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')"
+          processed.created: "@created"
+      
+      - name: "empty and undefined assertions"
+        given:
+          data:
+            emptyArray: []
+            emptyString: ""
+            nullValue: null
+            undefinedValue: undefined
+        then:
+          processed.emptyArray: "@empty"
+          processed.emptyString: "@empty"
+          processed.nullValue: "@undefined"
+          processed.undefinedValue: "@undefined"
+
+  invariants:
+    - condition: "result.processed !== null"
+      description: "Processed data should never be null"
+    - condition: "result.processed !== undefined"
+      description: "Processed data should always be defined"

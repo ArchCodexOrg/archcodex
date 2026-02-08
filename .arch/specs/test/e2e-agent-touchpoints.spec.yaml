@@ -1,0 +1,48 @@
+version: "1.0"
+
+spec.test.agent.archiveProduct:
+  type: test
+  inherits: spec.mutation
+
+  goal: "Verify UI touchpoint scaffolding for agent-driven product archiving"
+  intent: "Archive a product from context menu"
+
+  inputs:
+    productId: { type: id, table: products, required: true }
+    reason: { type: string, max: 500 }
+
+  outputs:
+    success: { type: boolean }
+    archivedAt: { type: number }
+
+  ui:
+    touchpoints:
+      - component: ProductCard
+        location: context menu
+        handler: handleArchive
+        wired: false
+      - component: ProductListItem
+        location: context menu
+        handler: handleArchive
+        wired: false
+      - component: ProductGrid
+        location: context menu
+        handler: handleArchive
+        wired: false
+    trigger:
+      location: "context menu"
+      label: "Archive"
+      icon: "archive"
+    feedback:
+      success: "Product archived"
+      error: "Failed to archive product"
+
+  examples:
+    success:
+      - name: "archive product"
+        given:
+          user: "@authenticated"
+          productId: "@string(24)"
+        then:
+          result.success: true
+          result.archivedAt: "@gt(0)"

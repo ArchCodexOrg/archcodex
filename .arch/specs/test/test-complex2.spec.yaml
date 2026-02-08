@@ -1,0 +1,34 @@
+version: "1.0"
+spec.test.validateRequest:
+  inherits: spec.function
+  implementation: tests/e2e/request.ts#validateRequest
+  goal: "Validate HTTP request"
+  outcomes:
+    - "Returns success: true and code 200 for valid requests"
+    - "Returns success: false for invalid requests"
+  intent: "Check request properties"
+  inputs:
+    request:
+      type: object
+      required: true
+      properties:
+        method: { type: string }
+        valid: { type: boolean }
+  outputs:
+    result:
+      type: object
+      properties:
+        success: { type: boolean }
+        code: { type: number }
+  examples:
+    success:
+      - name: "valid GET request"
+        given: 
+          request: { method: "GET", valid: true }
+        then:
+          result: "@hasProperties({ success: true, code: 200 })"
+    errors:
+      - name: "invalid request"
+        given: { request: { method: "GET", valid: false } }
+        then:
+          result.success: false

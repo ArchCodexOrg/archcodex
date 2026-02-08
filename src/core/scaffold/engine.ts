@@ -275,7 +275,7 @@ export class ScaffoldEngine {
     try {
       const { architecture } = resolveArchitecture(this.registry, archId);
       return architecture;
-    } catch {
+    } catch { /* architecture not found in registry */
       return undefined;
     }
   }
@@ -473,7 +473,7 @@ export class ScaffoldEngine {
         file: referenceFiles[0],
         skeleton: lines.join('\n'),
       };
-    } catch {
+    } catch { /* file read or skeleton extraction failed */
       return undefined;
     }
   }

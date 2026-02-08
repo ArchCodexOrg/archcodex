@@ -38,8 +38,47 @@ archcodex.test.unit:
 
     Use for: tests/unit/**/*.test.ts
     Don't use for: Integration tests or end-to-end tests
-  file_pattern: ${name}.test.ts
+  reference_implementations:
+    - tests/unit/core/constraints/forbid-import.test.ts
+  file_pattern: "*.test.ts"
   default_path: tests/unit
+  code_pattern: |-
+    /**
+     * @arch archcodex.test.unit
+     *
+     * Tests for MyModule.
+     */
+    import { describe, it, expect, beforeEach } from 'vitest';
+    import { MyModule } from '../../src/core/my-module/engine.js';
+    import type { MyInput } from '../../src/core/my-module/types.js';
+
+    describe('MyModule', () => {
+      let module: MyModule;
+
+      beforeEach(() => {
+        module = new MyModule();
+      });
+
+      function createInput(overrides: Partial<MyInput> = {}): MyInput {
+        return {
+          name: 'test',
+          value: 42,
+          ...overrides,
+        };
+      }
+
+      it('should handle valid input', () => {
+        const input = createInput();
+        const result = module.process(input);
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid input', () => {
+        const input = createInput({ name: '' });
+        const result = module.process(input);
+        expect(result.success).toBe(false);
+      });
+    });
   constraints:
     - rule: location_pattern
       value: tests/unit/
@@ -60,8 +99,48 @@ archcodex.test.integration:
 
     Use for: tests/integration/**/*.test.ts
     Don't use for: Unit tests with mocked dependencies
-  file_pattern: ${name}.test.ts
+  reference_implementations:
+    - tests/integration/multi-language.test.ts
+  file_pattern: "*.test.ts"
   default_path: tests/integration
+  code_pattern: |-
+    /**
+     * @arch archcodex.test.integration
+     *
+     * Integration tests for MyFeature.
+     */
+    import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+    import * as fs from 'fs/promises';
+    import * as path from 'path';
+    import * as os from 'os';
+
+    describe('MyFeature Integration Tests', () => {
+      let tempDir: string;
+
+      beforeEach(async () => {
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'archcodex-test-'));
+        await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+        await fs.mkdir(path.join(tempDir, '.arch'), { recursive: true });
+      });
+
+      afterEach(async () => {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      });
+
+      it('should process files end-to-end', async () => {
+        // Setup: create test files in tempDir
+        await fs.writeFile(
+          path.join(tempDir, 'src', 'example.ts'),
+          '/** @arch test.arch */\nexport const x = 1;'
+        );
+
+        // Exercise: run the feature
+        const result = await myFeature(tempDir);
+
+        // Verify: check the output
+        expect(result.success).toBe(true);
+      });
+    });
   constraints:
     - rule: location_pattern
       value: tests/integration/
@@ -72,3 +151,60 @@ archcodex.test.integration:
     - Clean up after tests (use beforeEach/afterEach)
     - Test realistic workflows end-to-end
     - May be slower than unit tests - that's OK
+
+archcodex.test.fixture:
+  inherits: base
+  description: Test fixtures - sample implementations for spec verification
+  rationale: |
+    Implementation fixtures used by SpecCodex for verification.
+    These are sample code files that specs test against, not test files themselves.
+
+    Use for: tests/spec/e2e/*.ts (non-test), tests/spec/ui/*.ts
+    Don't use for: Actual test files (use archcodex.test)
+  reference_implementations:
+    - tests/spec/e2e/calculator.ts
+    - tests/spec/e2e/email-validator.ts
+    - tests/spec/ui/bookmark-share.ts
+  file_pattern: ${name}.ts
+  default_path: tests/spec
+  constraints:
+    - rule: allow_pattern
+      value: "any type allowed in fixtures"
+      pattern: ':\s*any\b'
+    - rule: allow_pattern
+      value: "console allowed in fixtures"
+      pattern: 'console\.(log|error|warn)'
+    - rule: location_pattern
+      value: tests/spec/
+      severity: warning
+      why: Test fixtures should be in tests/spec/ directory
+  hints:
+    - These are sample implementations that specs verify against
+    - Keep them simple and focused on demonstrating the spec
+    - Don't add production-quality error handling - keep them readable
+
+archcodex.test.script:
+  inherits: base
+  description: Development/test scripts - utilities for testing and development
+  rationale: |
+    Scripts used for testing, debugging, or development tasks.
+    Not deployed to production. Allows console output for visibility.
+
+    Use for: scripts/*.ts, development utilities
+    Don't use for: Production code
+  reference_implementations:
+    - scripts/run-drift.ts
+    - scripts/generate-improvement-tests.ts
+  file_pattern: ${name}.ts
+  default_path: scripts
+  constraints:
+    - rule: allow_pattern
+      value: "console allowed in scripts"
+      pattern: 'console\.(log|error|warn|debug)'
+    - rule: location_pattern
+      value: scripts/
+      severity: warning
+      why: Scripts should be in scripts/ directory
+  hints:
+    - Scripts can use console.log for progress output
+    - These are not deployed to production

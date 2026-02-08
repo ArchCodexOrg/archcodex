@@ -18,7 +18,7 @@ export type CoverageSourceType =
  * A discovered source that needs a handler.
  */
 export interface CoverageSource {
-  /** The source value (e.g., "bookmark.archived") */
+  /** The source value (e.g., "product.archived") */
   value: string;
   /** File where the source was found */
   file: string;
@@ -76,12 +76,12 @@ export interface CoverageConstraintConfig {
    * Transform applied to source value before checking.
    * Supports:
    * - ${value} - raw value (default)
-   * - ${PascalCase} - bookmark.archived → BookmarkArchived
-   * - ${camelCase} - bookmark.archived → bookmarkArchived
-   * - ${snake_case} - bookmarkArchived → bookmark_archived
-   * - ${UPPER_CASE} - bookmark.archived → BOOKMARK_ARCHIVED
-   * - ${kebab-case} - bookmarkArchived → bookmark-archived
-   * - Custom template: "handle${PascalCase}" → handleBookmarkArchived
+   * - ${PascalCase} - product.archived → ProductArchived
+   * - ${camelCase} - product.archived → productArchived
+   * - ${snake_case} - productArchived → product_archived
+   * - ${UPPER_CASE} - product.archived → PRODUCT_ARCHIVED
+   * - ${kebab-case} - productArchived → product-archived
+   * - Custom template: "handle${PascalCase}" → handleProductArchived
    */
   transform?: string;
   /** Severity */

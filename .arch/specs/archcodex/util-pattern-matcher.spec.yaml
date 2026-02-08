@@ -1,0 +1,421 @@
+# Pattern Matcher Utility Specification
+#
+# Shared pattern matching with ReDoS protection.
+# Used by intent validation, require_one_of, and other pattern-based constraints.
+
+version: "1.0"
+
+spec.archcodex.utilPatternMatcher.validatePattern:
+  inherits: spec.unit
+  implementation: src/utils/pattern-matcher.ts#validatePattern
+
+  goal: "Detect dangerous regex patterns before execution"
+  outcomes:
+    - "Known ReDoS patterns are rejected"
+    - "Excessively long patterns are rejected"
+    - "Safe patterns return null (no error)"
+
+  intent: "Check pattern length and test against known catastrophic backtracking signatures"
+
+  inputs:
+    pattern:
+      type: string
+      required: true
+      description: "Regex pattern string to validate"
+
+  outputs:
+    type: string
+    nullable: true
+    description: "Error message if dangerous, null if safe"
+
+  examples:
+    success:
+      - name: "safe pattern returns null"
+        given:
+          pattern: "isDeleted.*false"
+        then:
+          result: null
+
+      - name: "catastrophic backtracking (.*)+  is rejected"
+        given:
+          pattern: "(.*)+test"
+        then:
+          result: "@contains('ReDoS')"
+
+      - name: "catastrophic backtracking (.+)+ is rejected"
+        given:
+          pattern: "(.+)+match"
+        then:
+          result: "@contains('ReDoS')"
+
+      - name: "nested quantifier (a+)+ is rejected"
+        given:
+          pattern: "(a+)+b"
+        then:
+          result: "@contains('ReDoS')"
+
+      - name: "pattern exceeding 5000 chars is rejected"
+        given:
+          pattern: "@length(5001)"
+        then:
+          result: "@contains('maximum length')"
+
+      - name: "empty pattern is safe"
+        given:
+          pattern: ""
+        then:
+          result: null
+
+  invariants:
+    - description: "null means safe, non-null means dangerous"
+      condition: "result === null implies pattern is safe to compile"
+
+# ---
+
+spec.archcodex.utilPatternMatcher.patternMatches:
+  inherits: spec.unit
+  implementation: src/utils/pattern-matcher.ts#patternMatches
+
+  goal: "Check if a pattern matches file content with ReDoS protection"
+  outcomes:
+    - "Regex patterns match correctly with multiline+dotAll"
+    - "Dangerous patterns return false instead of hanging"
+    - "Invalid explicit regex returns false"
+    - "Invalid implicit regex falls back to literal string match"
+
+  intent: "Validate pattern, parse as regex or literal, execute with timing tracking"
+
+  inputs:
+    pattern:
+      type: string
+      required: true
+      description: "Regex pattern (/pattern/flags) or literal string"
+    content:
+      type: string
+      required: true
+      description: "File content to search"
+
+  outputs:
+    type: boolean
+    description: "Whether the pattern matched"
+
+  examples:
+    success:
+      - name: "regex matches content"
+        given:
+          pattern: "export\\s+class"
+          content: "export class Foo {}"
+        then:
+          result: true
+
+      - name: "explicit regex with flags"
+        given:
+          pattern: "/hello/i"
+          content: "HELLO world"
+        then:
+          result: true
+
+      - name: "regex does not match"
+        given:
+          pattern: "export\\s+interface"
+          content: "export class Foo {}"
+        then:
+          result: false
+
+      - name: "literal string fallback"
+        given:
+          pattern: "class Foo"
+          content: "export class Foo {}"
+        then:
+          result: true
+
+      - name: "dangerous pattern returns false"
+        given:
+          pattern: "(.*)+evil"
+          content: "some content"
+        then:
+          result: false
+
+      - name: "invalid explicit regex returns false"
+        given:
+          pattern: "/[invalid(regex/"
+          content: "some content"
+        then:
+          result: false
+
+  invariants:
+    - description: "dangerous patterns never match"
+      condition: "validatePattern(pattern) !== null implies result === false"
+
+    - description: "never throws"
+      condition: "patternMatches() always returns boolean, never throws"
+
+# ---
+
+spec.archcodex.utilPatternMatcher.findPatternMatch:
+  inherits: spec.unit
+  implementation: src/utils/pattern-matcher.ts#findPatternMatch
+
+  goal: "Find where a pattern matches with line and column information"
+  intent: "Validate, parse, and execute regex with location tracking for error reporting"
+
+  inputs:
+    pattern:
+      type: string
+      required: true
+    content:
+      type: string
+      required: true
+
+  outputs:
+    matched:
+      type: boolean
+    line:
+      type: number
+      description: "1-indexed line number of match"
+    column:
+      type: number
+      description: "1-indexed column number of match"
+    matchedText:
+      type: string
+    error:
+      type: string
+
+  examples:
+    success:
+      - name: "match on first line"
+        given:
+          pattern: "export"
+          content: "export class Foo {}"
+        then:
+          result.matched: true
+          result.line: 1
+          result.column: 1
+          result.matchedText: "export"
+
+      - name: "match on third line"
+        given:
+          pattern: "dispose"
+          content: "class Scanner {\n  cache = new Map();\n  dispose(): void {}\n}"
+        then:
+          result.matched: true
+          result.line: 3
+
+      - name: "no match returns matched false"
+        given:
+          pattern: "nonexistent"
+          content: "export class Foo {}"
+        then:
+          result.matched: false
+
+      - name: "dangerous pattern returns error"
+        given:
+          pattern: "(.*)+evil"
+          content: "content"
+        then:
+          result.matched: false
+          result.error: "@contains('ReDoS')"
+
+  invariants:
+    - description: "line and column are only present when matched"
+      condition: "result.matched === false implies result.line is undefined"
+
+    - description: "line numbers are 1-indexed"
+      condition: "result.line >= 1 when present"
+
+# ---
+
+spec.archcodex.utilPatternMatcher.levenshteinDistance:
+  inherits: spec.unit
+  implementation: src/utils/pattern-matcher.ts#levenshteinDistance
+
+  goal: "Compute edit distance between two strings for fuzzy matching"
+  intent: "Dynamic programming matrix for insertions, deletions, and substitutions"
+
+  inputs:
+    a:
+      type: string
+      required: true
+    b:
+      type: string
+      required: true
+
+  outputs:
+    type: number
+    description: "Minimum edit operations to transform a into b"
+
+  examples:
+    success:
+      - name: "identical strings have distance 0"
+        given:
+          a: "hello"
+          b: "hello"
+        then:
+          result: 0
+
+      - name: "single character difference"
+        given:
+          a: "cat"
+          b: "bat"
+        then:
+          result: 1
+
+      - name: "empty string vs non-empty"
+        given:
+          a: ""
+          b: "abc"
+        then:
+          result: 3
+
+      - name: "both empty"
+        given:
+          a: ""
+          b: ""
+        then:
+          result: 0
+
+      - name: "insertion needed"
+        given:
+          a: "abc"
+          b: "abcd"
+        then:
+          result: 1
+
+  invariants:
+    - description: "distance is symmetric"
+      condition: "levenshteinDistance(a, b) === levenshteinDistance(b, a)"
+
+    - description: "distance is non-negative"
+      condition: "result >= 0"
+
+    - description: "distance is 0 only for identical strings"
+      condition: "result === 0 implies a === b"
+
+# ---
+
+spec.archcodex.utilPatternMatcher.stringSimilarity:
+  inherits: spec.unit
+  implementation: src/utils/pattern-matcher.ts#stringSimilarity
+
+  goal: "Compute normalized similarity score between two strings"
+  intent: "1 - (levenshtein distance / max length), yielding 0.0 to 1.0 range"
+
+  inputs:
+    a:
+      type: string
+      required: true
+    b:
+      type: string
+      required: true
+
+  outputs:
+    type: number
+    description: "Similarity score between 0.0 (completely different) and 1.0 (identical)"
+
+  examples:
+    success:
+      - name: "identical strings score 1.0"
+        given:
+          a: "hello"
+          b: "hello"
+        then:
+          result: 1.0
+
+      - name: "completely different strings score near 0"
+        given:
+          a: "abc"
+          b: "xyz"
+        then:
+          result: 0.0
+
+      - name: "both empty strings score 1.0"
+        given:
+          a: ""
+          b: ""
+        then:
+          result: 1.0
+
+      - name: "similar strings score between 0 and 1"
+        given:
+          a: "kitten"
+          b: "sitting"
+        then:
+          result: "@gt(0.3)"
+          result: "@lt(1.0)"
+
+  invariants:
+    - description: "score is always between 0 and 1"
+      condition: "0 <= result <= 1"
+
+    - description: "score is symmetric"
+      condition: "stringSimilarity(a, b) === stringSimilarity(b, a)"
+
+    - description: "identical strings always score 1.0"
+      condition: "a === b implies result === 1.0"
+
+# ---
+
+spec.archcodex.utilPatternMatcher.isIntentPattern:
+  inherits: spec.unit
+  implementation: src/utils/pattern-matcher.ts#isIntentPattern
+
+  goal: "Detect if a pattern string is an intent annotation"
+  intent: "Check if string starts with '@intent:' prefix"
+
+  inputs:
+    pattern:
+      type: string
+      required: true
+
+  outputs:
+    type: boolean
+
+  examples:
+    success:
+      - name: "intent pattern detected"
+        given:
+          pattern: "@intent:stateless"
+        then:
+          result: true
+
+      - name: "regular pattern is not intent"
+        given:
+          pattern: "export class"
+        then:
+          result: false
+
+      - name: "empty string is not intent"
+        given:
+          pattern: ""
+        then:
+          result: false
+
+spec.archcodex.utilPatternMatcher.extractIntentName:
+  inherits: spec.unit
+  implementation: src/utils/pattern-matcher.ts#extractIntentName
+
+  goal: "Extract intent name from an intent pattern string"
+  intent: "Strip '@intent:' prefix, return null if not a valid intent pattern"
+
+  inputs:
+    pattern:
+      type: string
+      required: true
+
+  outputs:
+    type: string
+    nullable: true
+
+  examples:
+    success:
+      - name: "extracts intent name"
+        given:
+          pattern: "@intent:stateless"
+        then:
+          result: "stateless"
+
+      - name: "returns null for non-intent"
+        given:
+          pattern: "export class"
+        then:
+          result: null

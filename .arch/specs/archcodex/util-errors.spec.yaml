@@ -1,0 +1,140 @@
+# Error Types Specification
+#
+# Error class hierarchy and error code constants for ArchCodex.
+# All errors extend ArchCodexError which provides structured codes,
+# messages, details, and JSON serialization.
+
+version: "1.0"
+
+spec.archcodex.utilErrors:
+  inherits: spec.type
+  implementation: src/utils/errors.ts#ArchCodexError
+
+  # === STRATEGIC ===
+  goal: "Define structured error hierarchy with typed error codes"
+  outcomes:
+    - "All ArchCodex errors carry a code, message, and optional details"
+    - "Error subclasses provide domain-specific error categories"
+    - "Error codes are constants matching the specification"
+    - "Errors serialize to JSON for structured logging and API responses"
+
+  # === OPERATIONAL ===
+  intent: "Provide a base error class and domain-specific subclasses with code constants"
+
+  inputs:
+    code:
+      type: string
+      required: true
+      description: "Error code from ErrorCodes constants (e.g., 'E001', 'S002')"
+    message:
+      type: string
+      required: true
+      description: "Human-readable error message"
+    details:
+      type: object
+      required: false
+      description: "Additional structured details about the error"
+
+  outputs:
+    error:
+      type: object
+      description: "Error instance with code, message, name, details, and toJSON()"
+
+  examples:
+    success:
+      - name: "ArchCodexError with code and message"
+        given:
+          code: "E001"
+          message: "Class must extend BaseService"
+        then:
+          result.name: "ArchCodexError"
+          result.code: "E001"
+          result.message: "Class must extend BaseService"
+
+      - name: "ArchCodexError with details"
+        given:
+          code: "E003"
+          message: "Forbidden import detected"
+          details: { import: "lodash", file: "src/core/engine.ts" }
+        then:
+          result.details: "@hasProperties({import: 'lodash', file: 'src/core/engine.ts'})"
+
+      - name: "ArchCodexError toJSON serialization"
+        given:
+          code: "S001"
+          message: "Parse error in registry"
+          details: { line: 42 }
+        then:
+          result.toJSON.name: "ArchCodexError"
+          result.toJSON.code: "S001"
+          result.toJSON.message: "Parse error in registry"
+          result.toJSON.details: "@hasProperties({line: 42})"
+
+      - name: "ConfigError subclass"
+        given:
+          ErrorClass: "ConfigError"
+          code: "S005"
+          message: "Invalid registry format"
+        then:
+          result.name: "ConfigError"
+          result.code: "S005"
+
+      - name: "RegistryError subclass"
+        given:
+          ErrorClass: "RegistryError"
+          code: "S003"
+          message: "Circular inheritance detected"
+        then:
+          result.name: "RegistryError"
+
+      - name: "ValidationError subclass"
+        given:
+          ErrorClass: "ValidationError"
+          code: "E003"
+          message: "Forbidden import: chalk"
+        then:
+          result.name: "ValidationError"
+          result.code: "E003"
+
+      - name: "SecurityError subclass"
+        given:
+          ErrorClass: "SecurityError"
+          code: "SEC001"
+          message: "Path traversal attempt detected"
+        then:
+          result.name: "SecurityError"
+          result.code: "SEC001"
+
+      - name: "ErrorCodes are string constants"
+        given:
+          codes: "ErrorCodes"
+        then:
+          result.MUST_EXTEND: "E001"
+          result.FORBID_IMPORT: "E003"
+          result.PARSE_ERROR: "S001"
+          result.UNKNOWN_ARCH: "S002"
+          result.CIRCULAR_INHERITANCE: "S003"
+          result.PATH_TRAVERSAL: "SEC001"
+          result.OVERRIDE_EXPIRED: "O003"
+
+  invariants:
+    - description: "all error subclasses extend ArchCodexError"
+      condition: "ConfigError, RegistryError, ValidationError, OverrideError, SystemError, SecurityError all instanceof ArchCodexError"
+
+    - description: "all errors extend Error"
+      condition: "every ArchCodexError instance is instanceof Error"
+
+    - description: "toJSON always includes name, code, and message"
+      condition: "toJSON() returns object with name, code, message keys"
+
+    - description: "error codes are unique across all categories"
+      condition: "no two ErrorCodes values are the same"
+
+    - description: "validation error codes start with E"
+      condition: "MUST_EXTEND through REQUIRE_COMPANION_FILE all start with 'E'"
+
+    - description: "override error codes start with O"
+      condition: "OVERRIDE_* codes all start with 'O'"
+
+    - description: "system error codes start with S"
+      condition: "PARSE_ERROR through INVALID_REGISTRY all start with 'S'"

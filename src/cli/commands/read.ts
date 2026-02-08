@@ -23,14 +23,12 @@ import type { LayerConfig, Config } from '../../core/config/schema.js';
  */
 export function createReadCommand(): Command {
   return new Command('read')
-    .description('Read a file with hydrated architectural context')
-    .argument('<file>', 'File to read')
-    .option('-f, --format <format>', 'Output format: verbose, terse, or ai', 'verbose')
+    .description('Get architectural constraints, boundaries, and hints for a file')
+    .argument('<file>', 'File to get constraints for')
+    .option('-f, --format <format>', 'Output format: verbose, terse, or ai', 'ai')
     .option('-t, --token-limit <limit>', 'Maximum tokens for header', '4000')
-    .option('--no-content', 'Only output the header, not the file content')
     .option('--no-pointers', 'Exclude pointer content from hydration')
     .option('--with-example', 'Include reference implementation (golden sample)')
-    .option('--with-source', 'Include file source in AI format (default: excluded)')
     .option('--with-deps', 'Include imported_by count in AI format (slower)')
     .option('-c, --config <path>', 'Path to config file', '.arch/config.yaml')
     .action(async (file: string, options: ReadOptions) => {
@@ -46,10 +44,8 @@ export function createReadCommand(): Command {
 interface ReadOptions {
   format: string;
   tokenLimit: string;
-  content: boolean;
   pointers: boolean;
   withExample: boolean;
-  withSource: boolean;
   withDeps: boolean;
   config: string;
 }
@@ -100,8 +96,8 @@ async function runRead(file: string, options: ReadOptions): Promise<void> {
     }
   }
 
-  // For AI format, default to no content unless --with-source is set
-  const includeContent = format === 'ai' ? options.withSource : options.content;
+  // Never include file content — archcodex read returns only architectural data
+  const includeContent = false;
 
   // Skip pattern registry for .arch/ config files (patterns are irrelevant for config)
   const isArchConfigFile = relativePath.startsWith('.arch/') || relativePath.startsWith('.arch\\');
@@ -196,8 +192,7 @@ async function getGoldenSample(
 
     log.info('No accessible reference implementation found');
     return null;
-  } catch {
-    // Architecture not found
+  } catch { /* architecture not found in registry */
     return null;
   }
 }

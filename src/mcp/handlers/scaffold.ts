@@ -33,17 +33,13 @@ export async function handleScaffold(projectRoot: string, options: ScaffoldOptio
   let registry;
   try {
     registry = await loadRegistry(projectRoot);
-  } catch {
-    // Registry is optional
-  }
+  } catch { /* registry optional */ }
 
   // Load intent registry for suggestions
   let intentRegistry;
   try {
     intentRegistry = await loadIntentRegistry(projectRoot);
-  } catch {
-    // Intent registry is optional
-  }
+  } catch { /* intent registry optional */ }
 
   const engine = new ScaffoldEngine(projectRoot, '.arch/templates', registry);
   const index = await loadIndex(projectRoot);

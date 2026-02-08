@@ -41,8 +41,9 @@ export function createTestPatternCommand(): Command {
       let pattern: RegExp;
       try {
         pattern = new RegExp(regex, 'gms');
-      } catch (e) {
-        console.error(`\x1b[31mInvalid regex: ${(e as Error).message}\x1b[0m`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`\x1b[31mInvalid regex: ${message}\x1b[0m`);
         process.exit(1);
       }
 
@@ -70,7 +71,7 @@ export function createTestPatternCommand(): Command {
         let content: string;
         try {
           content = fs.readFileSync(file, 'utf-8');
-        } catch {
+        } catch { /* file read failed, skip */
           continue;
         }
 

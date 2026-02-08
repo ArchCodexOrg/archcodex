@@ -103,7 +103,7 @@ export async function outputJson(options: Record<string, boolean | string>, proj
       const registry = await loadRegistry(projectRoot);
       if (showAll || options.mixins) output.mixins = Object.keys(registry.mixins);
       if (showAll || options.architectures) output.architectures = Object.keys(registry.nodes);
-    } catch {
+    } catch { /* registry not available, return empty arrays */
       if (showAll || options.mixins) output.mixins = [];
       if (showAll || options.architectures) output.architectures = [];
     }
@@ -208,7 +208,7 @@ export async function outputComprehensive(projectRoot: string): Promise<void> {
       console.log(`  \x1b[33m${key}\x1b[0m${parent}`);
       if (desc) console.log(`    ${desc.substring(0, 65)}`);
     }
-  } catch {
+  } catch { /* registry not available */
     console.log('\n\x1b[33m(Could not load registry - run from project root)\x1b[0m');
   }
 
@@ -327,7 +327,7 @@ export async function outputSections(options: Record<string, boolean | string>, 
           console.log('');
         }
       }
-    } catch {
+    } catch { /* registry not available */
       console.log('\n\x1b[33m(Could not load registry)\x1b[0m');
     }
   }

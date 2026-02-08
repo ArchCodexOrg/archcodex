@@ -1,0 +1,53 @@
+---
+
+archcodex.infra.git:
+  inherits: archcodex.infra
+  mixins:
+    - tested
+  description: Git operations adapter - staged files, commit state, repository queries
+  rationale: |
+    Wraps git CLI operations (child_process) for staged file detection,
+    diff generation, and repository state queries.
+
+    Use for: Files that interact with git (staged files, commits, branches).
+    Don't use for: Config loading (use infra.config), file I/O (use infra.fs).
+  reference_implementations:
+    - src/utils/git.ts
+  file_pattern: git*.ts
+  default_path: src/utils
+  code_pattern: |-
+    import { execFileSync } from 'child_process';
+
+    /**
+     * Query git state for a specific repository.
+     * Always handle non-git directories gracefully.
+     */
+    export function getStagedFiles(projectRoot: string): string[] {
+      try {
+        const result = execFileSync('git', ['diff', '--cached', '--name-only'], {
+          cwd: projectRoot,
+          encoding: 'utf8',
+        });
+        return result.trim().split('\n').filter(Boolean);
+      } catch {
+        return []; // Not a git repository or git not available
+      }
+    }
+  constraints:
+    # commander, ../cli already forbidden by parent (infra)
+    - rule: forbid_import
+      value:
+        - chalk
+        - ts-morph
+        - ../core
+      severity: error
+      why: "[DIP] Git adapter must not depend on presentation, AST, or domain concerns"
+    - rule: max_file_lines
+      value: 150
+      exclude_comments: true
+      severity: warning
+      why: Keep git operations focused
+  hints:
+    - Always handle non-git directories gracefully (return empty results, not errors)
+    - Use execFileSync/execFile instead of exec to avoid shell injection
+    - Return parsed, typed data - not raw git output strings

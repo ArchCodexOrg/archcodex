@@ -51,6 +51,11 @@ vi.mock('../../../../src/utils/archignore.js', () => ({
   loadArchIgnore: vi.fn(),
 }));
 
+vi.mock('../../../../src/core/registry/component-groups.js', () => ({
+  loadComponentGroupsRegistry: vi.fn(),
+  expandChecklist: vi.fn(),
+}));
+
 import {
   loadIntentRegistry,
   getIntentsByCategory,
@@ -71,6 +76,7 @@ import { inferArchitecture, buildRulesFromSettings } from '../../../../src/core/
 import { patternMatches } from '../../../../src/utils/pattern-matcher.js';
 import { readFile, globFiles } from '../../../../src/utils/file-system.js';
 import { loadArchIgnore } from '../../../../src/utils/archignore.js';
+import { loadComponentGroupsRegistry, expandChecklist } from '../../../../src/core/registry/component-groups.js';
 import { handleAction, handleFeature, handleInfer } from '../../../../src/mcp/handlers/intents.js';
 
 describe('MCP Intents Handler', () => {
@@ -247,6 +253,13 @@ describe('MCP Action Handler', () => {
     vi.mocked(loadFeatureRegistry).mockResolvedValue({
       features: {},
     });
+    vi.mocked(loadComponentGroupsRegistry).mockResolvedValue({
+      'component-groups': {},
+    });
+    vi.mocked(expandChecklist).mockImplementation((checklist) => ({
+      format: Array.isArray(checklist) ? 'flat' : 'structured',
+      flat: Array.isArray(checklist) ? checklist : undefined,
+    }));
     vi.mocked(listActionNames).mockReturnValue(['add-view']);
   });
 

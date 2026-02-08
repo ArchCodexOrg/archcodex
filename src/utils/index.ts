@@ -11,3 +11,4 @@ export * from './archignore.js';
 export * from './path-matcher.js';
 export * from './git.js';
 export * from './archconfig.js';
+export * from './string.js';

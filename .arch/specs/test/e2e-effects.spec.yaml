@@ -1,0 +1,32 @@
+version: "1.0"
+
+spec.test.e2e.effectsTest:
+  type: test
+  inherits: spec.mutation
+  goal: "Validate side effect code generation for all effect types"
+  intent: "Test all effect type code generation"
+
+  inputs:
+    data:
+      type: object
+      required: true
+
+  outputs:
+    success:
+      type: boolean
+
+  effects:
+    - audit_log: { action: "test.action", resourceType: "testResource" }
+    - database: { table: "testTable", operation: "insert" }
+    - cache: { invalidated: "list" }
+    - notification: { type: "test_notification", channel: "email" }
+    - scheduler: { job: "testJob", delay: "1h" }
+    - webhook: { url: "https://api.example.com/hook", event: "test.event" }
+    - embedding: { timing: "async" }
+    - metrics: { counter: "test_counter" }
+
+  examples:
+    success:
+      - name: "triggers all effects"
+        given: { data: { key: "value" } }
+        then: { result.success: true }

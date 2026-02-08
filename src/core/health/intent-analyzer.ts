@@ -150,7 +150,7 @@ export class IntentAnalyzer {
               }
             }
           }
-        } catch {
+        } catch { /* TypeScript parse failed */
           // TypeScript parsing failed, ignore function-level intents
         }
       }

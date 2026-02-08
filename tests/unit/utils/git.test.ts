@@ -14,6 +14,8 @@ import {
   isGitRepository,
   getCurrentBranch,
   toAbsolutePaths,
+  getGitCommitHash,
+  getChangedFilesSinceCommit,
 } from '../../../src/utils/git.js';
 
 const execAsync = promisify(exec);
@@ -151,6 +153,110 @@ describe('git utilities', () => {
 
       const result = await getModifiedFiles(testDir);
       expect(result).toContain('file.ts');
+    });
+  });
+
+  describe('getGitCommitHash', () => {
+    it('should return null for non-git directory', () => {
+      const result = getGitCommitHash(testDir);
+      expect(result).toBeNull();
+    });
+
+    it('should return 40-char hex hash for git repo with commits', async () => {
+      await execAsync('git init', { cwd: testDir });
+      await execAsync('git config user.email "test@test.com"', { cwd: testDir });
+      await execAsync('git config user.name "Test"', { cwd: testDir });
+      await writeFile(join(testDir, 'README.md'), '# Test\n');
+      await execAsync('git add .', { cwd: testDir });
+      await execAsync('git commit -m "Initial commit"', { cwd: testDir });
+
+      const result = getGitCommitHash(testDir);
+      expect(result).toMatch(/^[a-f0-9]{40}$/);
+    });
+  });
+
+  describe('getChangedFilesSinceCommit', () => {
+    it('should return empty arrays for non-git directory', () => {
+      const result = getChangedFilesSinceCommit(testDir, 'abc123');
+      expect(result).toEqual({ added: [], modified: [], deleted: [] });
+    });
+
+    it('should return empty arrays for invalid commit hash', async () => {
+      await execAsync('git init', { cwd: testDir });
+      await execAsync('git config user.email "test@test.com"', { cwd: testDir });
+      await execAsync('git config user.name "Test"', { cwd: testDir });
+      await writeFile(join(testDir, 'README.md'), '# Test\n');
+      await execAsync('git add .', { cwd: testDir });
+      await execAsync('git commit -m "Initial"', { cwd: testDir });
+
+      const result = getChangedFilesSinceCommit(testDir, 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+      expect(result).toEqual({ added: [], modified: [], deleted: [] });
+    });
+
+    it('should detect added files since a commit', async () => {
+      await execAsync('git init', { cwd: testDir });
+      await execAsync('git config user.email "test@test.com"', { cwd: testDir });
+      await execAsync('git config user.name "Test"', { cwd: testDir });
+
+      // Create initial commit
+      await writeFile(join(testDir, 'existing.ts'), 'const x = 1;\n');
+      await execAsync('git add .', { cwd: testDir });
+      await execAsync('git commit -m "Initial"', { cwd: testDir });
+
+      // Get the commit hash
+      const { stdout: hash } = await execAsync('git rev-parse HEAD', { cwd: testDir });
+      const sinceCommit = hash.trim();
+
+      // Add a new file
+      await writeFile(join(testDir, 'new-file.ts'), 'const y = 2;\n');
+      await execAsync('git add .', { cwd: testDir });
+      await execAsync('git commit -m "Add new file"', { cwd: testDir });
+
+      const result = getChangedFilesSinceCommit(testDir, sinceCommit);
+      expect(result.added).toContain('new-file.ts');
+    });
+
+    it('should detect modified files since a commit', async () => {
+      await execAsync('git init', { cwd: testDir });
+      await execAsync('git config user.email "test@test.com"', { cwd: testDir });
+      await execAsync('git config user.name "Test"', { cwd: testDir });
+
+      // Create initial commit
+      await writeFile(join(testDir, 'file.ts'), 'original\n');
+      await execAsync('git add .', { cwd: testDir });
+      await execAsync('git commit -m "Initial"', { cwd: testDir });
+
+      const { stdout: hash } = await execAsync('git rev-parse HEAD', { cwd: testDir });
+      const sinceCommit = hash.trim();
+
+      // Modify the file
+      await writeFile(join(testDir, 'file.ts'), 'modified\n');
+      await execAsync('git add .', { cwd: testDir });
+      await execAsync('git commit -m "Modify file"', { cwd: testDir });
+
+      const result = getChangedFilesSinceCommit(testDir, sinceCommit);
+      expect(result.modified).toContain('file.ts');
+    });
+
+    it('should detect deleted files since a commit', async () => {
+      await execAsync('git init', { cwd: testDir });
+      await execAsync('git config user.email "test@test.com"', { cwd: testDir });
+      await execAsync('git config user.name "Test"', { cwd: testDir });
+
+      // Create initial commit with a file
+      await writeFile(join(testDir, 'to-delete.ts'), 'will be deleted\n');
+      await execAsync('git add .', { cwd: testDir });
+      await execAsync('git commit -m "Initial"', { cwd: testDir });
+
+      const { stdout: hash } = await execAsync('git rev-parse HEAD', { cwd: testDir });
+      const sinceCommit = hash.trim();
+
+      // Delete the file
+      await execAsync('git rm to-delete.ts', { cwd: testDir });
+      await execAsync('git commit -m "Delete file"', { cwd: testDir });
+
+      const result = getChangedFilesSinceCommit(testDir, sinceCommit);
+      expect(result.deleted).toContain('to-delete.ts');
     });
   });
 

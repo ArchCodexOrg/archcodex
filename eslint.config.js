@@ -23,8 +23,23 @@ export default [
     rules: {
       ...tseslintPlugin.configs.recommended.rules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
       'no-unused-vars': 'off', // Use TypeScript's rule instead
+      'no-console': 'error',
+    },
+  },
+  // CLI and MCP layers: console output is legitimate for user-facing output
+  {
+    files: ['src/cli/**/*.ts', 'src/mcp/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  // Logger wraps console by design
+  {
+    files: ['src/utils/logger.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
   {

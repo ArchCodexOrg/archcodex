@@ -212,7 +212,7 @@ export class CoverageValidator {
 
         sources.push({ value, file, line: lineNumber });
       }
-    } catch {
+    } catch { /* invalid regex pattern */
       // Invalid regex - skip
     }
 
@@ -252,7 +252,7 @@ export class CoverageValidator {
       };
 
       visit(sourceFile);
-    } catch {
+    } catch { /* TypeScript parse failed */
       // Failed to parse - return empty
     }
 
@@ -320,7 +320,7 @@ export class CoverageValidator {
       };
 
       visit(sourceFile);
-    } catch {
+    } catch { /* TypeScript parse failed */
       // Failed to parse - return empty
     }
 
@@ -403,7 +403,7 @@ export class CoverageValidator {
           return { file, line: 1 };
         }
       }
-    } catch {
+    } catch { /* invalid regex, fallback to literal search */
       // Invalid regex - try literal search
       for (const [file, content] of targetContents) {
         if (content.includes(value)) {
@@ -470,7 +470,7 @@ export class CoverageValidator {
       const content = await fs.promises.readFile(file, 'utf-8');
       this.contentCache.set(file, content);
       return content;
-    } catch {
+    } catch { /* file read error */
       return '';
     }
   }

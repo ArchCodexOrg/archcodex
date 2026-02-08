@@ -289,11 +289,9 @@ describe('MCP Validation Handlers', () => {
       });
     });
 
-    it('should include file content for non-AI formats', async () => {
+    it('should never include file content regardless of format', async () => {
       const mockHydrateFile = vi.fn().mockResolvedValue({
         header: 'ARCH: test.arch',
-        content: 'const x = 1;',
-        output: 'ARCH: test.arch\n\nconst x = 1;',
         tokenCount: 100,
         truncated: false,
       });
@@ -312,11 +310,11 @@ describe('MCP Validation Handlers', () => {
 
       expect(mockHydrateFile).toHaveBeenCalledWith('src/test.ts', {
         format: 'verbose',
-        includeContent: true,
+        includeContent: false,
       });
 
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.fileContent).toBe('const x = 1;');
+      expect(parsed.fileContent).toBeUndefined();
     });
 
     it('should include relevant patterns when found', async () => {

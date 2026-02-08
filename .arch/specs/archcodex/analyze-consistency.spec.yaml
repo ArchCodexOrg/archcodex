@@ -1,0 +1,386 @@
+# Consistency Checker - Schema-Inferred Analysis
+#
+# Detects cross-schema consistency issues by comparing spec definitions
+# against registry architectures, component groups, intents, and actions.
+# 11 analyses: CON-1 through CON-11.
+
+version: "1.0"
+
+spec.archcodex.analyze.consistency:
+  inherits: spec.function
+  implementation: src/core/analysis/checkers/consistency.ts#checkConsistency
+
+  # === STRATEGIC ===
+  goal: "Detect consistency issues between spec and architecture schemas"
+  outcomes:
+    - "Detect security claims not enforced by architecture"
+    - "Detect component group vs touchpoints mismatches"
+    - "Detect mixin-constraint contradictions"
+    - "Detect side effects in pure layers"
+    - "Detect intent-constraint drift"
+    - "Detect action checklist gaps"
+    - "Detect deprecated architecture references"
+    - "Detect parent-child constraint conflicts"
+    - "Detect architecture pattern drift (auth/inherits divergence)"
+    - "Detect architecture tag mismatch in implementation (deep)"
+    - "Detect implementation path in wrong layer"
+
+  # === OPERATIONAL ===
+  intent: "Cross-reference spec definitions against architecture registry for consistency"
+
+  inputs:
+    specs:
+      type: array
+      required: true
+      description: "Array of resolved spec nodes"
+    archRegistry:
+      type: object
+      required: true
+      description: "Loaded ArchCodex registry"
+    componentGroups:
+      type: object
+      required: true
+      description: "Component groups registry"
+    graph:
+      type: object
+      required: true
+      description: "CrossReferenceGraph"
+
+  outputs:
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          category: { type: enum, values: [consistency] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string, optional: true }
+          archId: { type: string, optional: true }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "All issues have category 'consistency'"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.category: "consistency"
+
+    - description: "Issue IDs follow CON-N pattern"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@matches('^CON-(1[01]|[1-9])$')"
+
+  # === EXAMPLES ===
+  defaults: &empty_context
+    archRegistry: { nodes: {}, mixins: {} }
+    componentGroups: {}
+    graph: { entityToSpecs: {}, tableToWriters: {}, tableToReaders: {}, specDependents: {}, archToSpecs: {} }
+
+  examples:
+    success:
+      # --- CON-1: Architecture-spec security mismatch ---
+      - name: "CON-1: detects auth claim without architecture enforcement"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              security: { authentication: required }
+              architectures: [archcodex.util]
+          archRegistry:
+            nodes:
+              archcodex.util:
+                description: "Utility functions"
+                constraints: []
+                # No auth-related constraints
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.util": [spec.widget.create] }
+        then:
+          result.issues: "@hasItem({ id: 'CON-1', severity: 'warning' })"
+
+      # --- CON-2: Component group vs touchpoints mismatch ---
+      - name: "CON-2: detects touchpoints fewer than component group"
+        given:
+          specs:
+            - specId: spec.item.duplicate
+              intent: "Duplicate item"
+              ui:
+                touchpoints:
+                  - { component: ProductCard, handler: handleDuplicate, wired: true }
+                  - { component: ProductListItem, handler: handleDuplicate, wired: true }
+                  - { component: ProductGrid, handler: handleDuplicate, wired: true }
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups:
+            component-groups:
+              product-cards:
+                components:
+                  - { path: src/components/products/ProductCard.tsx }
+                  - { path: src/components/products/ProductListItem.tsx }
+                  - { path: src/components/products/ProductGrid.tsx }
+                  - { path: src/components/products/ProductBanner.tsx }
+                  - { path: src/components/products/ProductPreview.tsx }
+                triggers:
+                  entities: [products]
+          graph:
+            entityToSpecs: { item: [spec.item.duplicate] }
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'CON-2', severity: 'error' })"
+
+      # --- CON-3: Mixin-constraint contradiction ---
+      - name: "CON-3: detects mixin vs architecture forbid conflict"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              mixins: [logs_audit]
+              architectures: [archcodex.util]
+          archRegistry:
+            nodes:
+              archcodex.util:
+                description: "Pure utils"
+                constraints:
+                  - { rule: forbid_import, value: ["../core/audit"] }
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.util": [spec.widget.create] }
+        then:
+          result.issues: "@hasItem({ id: 'CON-3', severity: 'error' })"
+
+      # --- CON-4: Layer-effect alignment ---
+      - name: "CON-4: detects side effects in pure layer"
+        given:
+          specs:
+            - specId: spec.format.date
+              intent: "Format date"
+              architectures: [archcodex.util]
+              effects:
+                - { database: { table: logs, operation: insert } }
+          archRegistry:
+            nodes:
+              archcodex.util:
+                description: "Pure utility functions"
+                kind: implementation
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.util": [spec.format.date] }
+        then:
+          result.issues: "@hasItem({ id: 'CON-4', severity: 'warning' })"
+
+      # --- CON-5: Intent-constraint drift ---
+      - name: "CON-5: detects stateless intent with cache effects"
+        given:
+          specs:
+            - specId: spec.compute.hash
+              intent: "Compute hash"
+              architectures: [archcodex.core.engine]
+              effects:
+                - { cache: { key: hash_cache, action: set } }
+          archRegistry:
+            nodes:
+              archcodex.core.engine:
+                description: "Engine"
+                expected_intents: [stateless]
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.core.engine": [spec.compute.hash] }
+        then:
+          result.issues: "@hasItem({ id: 'CON-5', severity: 'warning' })"
+
+      # --- CON-6: Action checklist vs spec coverage gap ---
+      - name: "CON-6: detects action checklist item without spec coverage"
+        given:
+          specs: []
+          archRegistry:
+            nodes: {}
+            mixins: {}
+            actions:
+              add-widget:
+                description: "Add widget"
+                checklist:
+                  - "Create mutation in src/modules/widgets/"
+                  - "Add barrel export"
+                  - "Update CLI documentation"
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'CON-6', severity: 'info' })"
+
+      # --- CON-7: Deprecated architecture in feature template ---
+      - name: "CON-7: detects deprecated architecture reference"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              architectures: [archcodex.deprecated.handler]
+          archRegistry:
+            nodes:
+              archcodex.deprecated.handler:
+                description: "Old handler pattern"
+                deprecated_from: "2.0"
+                migration_guide: "Use archcodex.core.engine instead"
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.deprecated.handler": [spec.widget.create] }
+        then:
+          result.issues: "@hasItem({ id: 'CON-7', severity: 'warning' })"
+
+      # --- CON-8: Parent-child constraint conflict ---
+      - name: "CON-8: detects child architecture contradicting parent"
+        given:
+          specs: []
+          archRegistry:
+            nodes:
+              archcodex.core:
+                description: "Core"
+                constraints:
+                  - { rule: forbid_import, value: [commander] }
+              archcodex.core.cli:
+                description: "CLI in core (bad)"
+                inherits: archcodex.core
+                constraints:
+                  - { rule: require_import, value: [commander] }
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'CON-8', severity: 'error' })"
+
+      # --- CON-9: Architecture pattern drift ---
+      - name: "CON-9: detects auth pattern divergence within architecture"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              security: { authentication: required }
+            - specId: spec.widget.list
+              intent: "List widgets"
+              security: { authentication: required }
+            - specId: spec.widget.public
+              intent: "Public widget"
+              security: { authentication: none }
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.core.engine": [spec.widget.create, spec.widget.list, spec.widget.public] }
+        then:
+          result.issues: "@hasItem({ id: 'CON-9', severity: 'warning' })"
+
+      # --- CON-10: Architecture tag mismatch (deep) ---
+      # Note: requires verifierResults context (populated by --deep analysis)
+      - name: "CON-10: detects @arch tag mismatch in implementation"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              architectures: [archcodex.core.engine]
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          graph: { entityToSpecs: {}, tableToWriters: {}, tableToReaders: {}, specDependents: {}, archToSpecs: {} }
+          # Deep: verifierResults populated by engine with architectureMismatch data
+          verifierResults:
+            spec.widget.create:
+              architectureMismatch: true
+              missingArchTag: archcodex.core.engine
+              actualArchTag: archcodex.cli.command
+              extraErrors: []
+              missingOutputs: []
+        then:
+          result.issues: "@hasItem({ id: 'CON-10', severity: 'warning' })"
+
+      # --- CON-11: Layer leak ---
+      - name: "CON-11: detects implementation in wrong layer"
+        given:
+          specs:
+            - specId: spec.order.handler
+              intent: "Handle order"
+              implementation: src/cli/services/order.ts#handleOrder
+              architectures: [archcodex.core.engine]
+          archRegistry:
+            nodes:
+              archcodex.core.engine:
+                description: "Core engine"
+                layer: core
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.core.engine": [spec.widget.handler] }
+        then:
+          result.issues: "@hasItem({ id: 'CON-11', severity: 'warning' })"
+
+      # --- No false positives ---
+      - name: "no issue for consistent spec and architecture"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              security: { authentication: required }
+              architectures: [archcodex.cli.mcp.handler]
+          archRegistry:
+            nodes:
+              archcodex.cli.mcp.handler:
+                description: "MCP handler"
+                constraints:
+                  - { rule: require_import, value: ["makeAuthMutation"] }
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.cli.mcp.handler": [spec.tag.create] }
+        then:
+          result.issues: "@empty"

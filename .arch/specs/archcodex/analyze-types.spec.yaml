@@ -1,0 +1,133 @@
+# Schema-Inferred Analysis Types
+#
+# Defines the core data structures for the analysis engine.
+# These types are shared across all checkers and the orchestrator.
+
+version: "1.0"
+
+spec.archcodex.analyze.types:
+  inherits: spec.type
+
+  goal: "Define data structures for schema-inferred analysis"
+  intent: "Type definitions for AnalysisIssue, AnalysisResult, CrossReferenceGraph, and Checker"
+  description: >
+    Core types used by the analysis engine to represent issues found by
+    cross-referencing ArchCodex registry schemas and SpecCodex spec schemas.
+
+  fields:
+    AnalysisCategory:
+      type: enum
+      values: [logic, security, data, consistency, completeness, other]
+      description: "Categories of issues the analysis engine can detect"
+
+    AnalysisSeverity:
+      type: enum
+      values: [error, warning, info]
+      description: "Issue severity levels, ordered from most to least severe"
+
+    AnalysisIssue:
+      id:
+        type: string
+        description: "Unique analysis rule ID (e.g., SEC-1, LOG-3, DAT-5)"
+      category:
+        type: enum
+        values: [logic, security, data, consistency, completeness, other]
+        description: "Which checker category found this issue"
+      severity:
+        type: enum
+        values: [error, warning, info]
+      specId:
+        type: string
+        optional: true
+        description: "Spec ID where the issue was found"
+      archId:
+        type: string
+        optional: true
+        description: "Architecture ID involved in the issue"
+      field:
+        type: string
+        optional: true
+        description: "Specific field or section with the issue"
+      message:
+        type: string
+        description: "Human-readable description of the issue"
+      suggestion:
+        type: string
+        optional: true
+        description: "How to fix the issue"
+      relatedSpecs:
+        type: array
+        items: { type: string }
+        optional: true
+        description: "Other specs involved in cross-spec issues"
+
+    AnalysisSummary:
+      total:
+        type: number
+        description: "Total number of issues found"
+      byCategory:
+        type: object
+        description: "Issue counts keyed by category"
+      bySeverity:
+        type: object
+        description: "Issue counts keyed by severity"
+      specsAnalyzed:
+        type: number
+        description: "Number of specs analyzed"
+
+    AnalysisResult:
+      issues:
+        type: array
+        items: { type: AnalysisIssue }
+        description: "All issues found, sorted by severity"
+      summary:
+        type: AnalysisSummary
+        description: "Aggregated counts"
+
+    AnalysisOptions:
+      categories:
+        type: array
+        items: { type: string }
+        optional: true
+        description: "Filter to specific categories (default: all)"
+      severity:
+        type: enum
+        values: [error, warning, info]
+        optional: true
+        description: "Minimum severity threshold (default: info)"
+      specIds:
+        type: array
+        items: { type: string }
+        optional: true
+        description: "Filter to specific spec IDs"
+
+    CrossReferenceGraph:
+      entityToSpecs:
+        type: object
+        description: "Map<entityPrefix, specId[]> - specs grouped by entity"
+      tableToWriters:
+        type: object
+        description: "Map<tableName, {specId, operation}[]> - specs with db write effects"
+      tableToReaders:
+        type: object
+        description: "Map<tableName, {specId, inputField}[]> - specs with id inputs referencing table"
+      specDependents:
+        type: object
+        description: "Map<specId, specId[]> - reverse depends_on lookup"
+      archToSpecs:
+        type: object
+        description: "Map<archId, specId[]> - specs using each architecture"
+
+    Checker:
+      id:
+        type: string
+        description: "Checker identifier (e.g., 'security', 'logic')"
+      name:
+        type: string
+        description: "Human-readable checker name"
+      category:
+        type: enum
+        values: [logic, security, data, consistency, completeness, other]
+      check:
+        type: string
+        description: "Function signature: (context: AnalysisContext) => AnalysisIssue[]"

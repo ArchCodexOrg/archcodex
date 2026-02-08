@@ -1,0 +1,225 @@
+# Database Scanner Specification
+#
+# Populates and syncs the SQLite database with file system data.
+# Supports full scan and incremental git-based updates.
+
+version: "1.0"
+
+spec.archcodex.dbScanner:
+  inherits: spec.function
+  implementation: src/core/db/scanner.ts#DatabaseScanner
+
+  # === STRATEGIC ===
+  goal: "Keep the architecture database in sync with the file system"
+  outcomes:
+    - "Full scan populates files, imports, and entity references from scratch"
+    - "Incremental sync only re-scans git-changed files for speed"
+    - "Single-file sync updates one file without full rescan"
+    - "Import graph is resolved to known project files only"
+
+  # === OPERATIONAL ===
+  intent: "Glob source files, extract arch IDs/imports/entities via regex, and persist to SQLite"
+
+  inputs:
+    options:
+      type: object
+      required: false
+      description: "Scan configuration"
+      properties:
+        patterns:
+          type: array
+          description: "Glob patterns for files to include (defaults to src/**/*.ts, etc.)"
+        ignore:
+          type: array
+          description: "Glob patterns to ignore (defaults to node_modules, dist, *.d.ts, etc.)"
+        concurrency:
+          type: number
+          description: "Max concurrent file reads (default 50)"
+
+  outputs:
+    filesScanned:
+      type: number
+      description: "Total files scanned"
+    filesWithArch:
+      type: number
+      description: "Files with @arch tags"
+    importCount:
+      type: number
+      description: "Total import relationships"
+    entityRefCount:
+      type: number
+      description: "Total entity references found"
+    durationMs:
+      type: number
+      description: "Time taken in milliseconds"
+
+  examples:
+    success:
+      - name: "full scan populates database"
+        given:
+          projectRoot: "/tmp/test-project"
+          options: {}
+        then:
+          result.filesScanned: "@gt(0)"
+          result.durationMs: "@gt(0)"
+
+      - name: "full scan detects arch tags"
+        given:
+          projectRoot: "/tmp/test-project"
+          files:
+            - path: "src/core/engine.ts"
+              content: "/** @arch archcodex.core.engine */\nexport class Engine {}"
+            - path: "src/utils/helper.ts"
+              content: "export function helper() {}"
+        then:
+          result.filesScanned: 2
+          result.filesWithArch: 1
+
+      - name: "incremental sync skips unchanged commits"
+        given:
+          projectRoot: "/tmp/test-project"
+          lastCommit: "abc123"
+          currentCommit: "abc123"
+        then:
+          result.filesScanned: 0
+          result.incrementalUpdates: 0
+
+      - name: "incremental sync falls back to full scan without git history"
+        given:
+          projectRoot: "/tmp/test-project"
+          lastCommit: null
+        then:
+          result.filesScanned: "@gt(0)"
+
+      - name: "single file sync returns true on success"
+        given:
+          projectRoot: "/tmp/test-project"
+          filePath: "src/core/engine.ts"
+        then:
+          result: true
+
+      - name: "single file sync deletes missing file from database"
+        given:
+          projectRoot: "/tmp/test-project"
+          filePath: "src/deleted-file.ts"
+        then:
+          # File removed from DB, returns result of deletion
+          result: "@exists"
+
+    errors:
+      - name: "needsFullScan returns true when no prior scan exists"
+        given:
+          projectRoot: "/tmp/fresh-project"
+        then:
+          result: true
+
+  invariants:
+    - description: "filesWithArch is always <= filesScanned"
+      condition: "result.filesWithArch <= result.filesScanned"
+
+    - description: "durationMs is always non-negative"
+      condition: "result.durationMs >= 0"
+
+    - description: "full scan sets last_full_scan metadata"
+      condition: "after fullScan(), getMeta('last_full_scan') is not null"
+
+    - description: "imports only reference known project files"
+      condition: "all import.toFile values exist in the files table"
+
+# --- Helper functions (internal, not class methods) ---
+
+spec.archcodex.dbScanner.extractImports:
+  inherits: spec.function
+  implementation: src/core/db/scanner.ts#extractImports
+
+  goal: "Extract import paths from TypeScript/JavaScript file content"
+  intent: "Regex-based extraction of import/export from statements, deduplicated"
+
+  inputs:
+    content:
+      type: string
+      required: true
+      description: "File source code"
+
+  outputs:
+    type: array
+    description: "Deduplicated array of relative import paths"
+
+  examples:
+    success:
+      - name: "extracts named import"
+        given:
+          content: "import { Foo } from './foo.js';"
+        then:
+          result: "@hasItem('./foo.js')"
+
+      - name: "extracts re-export"
+        given:
+          content: "export { Bar } from '../bar.js';"
+        then:
+          result: "@hasItem('../bar.js')"
+
+      - name: "deduplicates repeated imports"
+        given:
+          content: "import { A } from './mod.js';\nimport { B } from './mod.js';"
+        then:
+          result: "@length(1)"
+
+      - name: "ignores non-relative imports"
+        given:
+          content: "import chalk from 'chalk';"
+        then:
+          result: "@length(0)"
+
+spec.archcodex.dbScanner.isValidImportPath:
+  inherits: spec.function
+  implementation: src/core/db/scanner.ts#isValidImportPath
+
+  goal: "Filter out malformed import paths from regex matches"
+  intent: "Validate that an import path starts with . or /, has no whitespace or invalid chars, and is reasonable length"
+
+  inputs:
+    importPath:
+      type: string
+      required: true
+
+  outputs:
+    type: boolean
+
+  examples:
+    success:
+      - name: "relative path is valid"
+        given:
+          importPath: "./foo.js"
+        then:
+          result: true
+
+      - name: "absolute path is valid"
+        given:
+          importPath: "/src/bar.ts"
+        then:
+          result: true
+
+      - name: "bare module specifier is invalid"
+        given:
+          importPath: "chalk"
+        then:
+          result: false
+
+      - name: "path with whitespace is invalid"
+        given:
+          importPath: "./foo bar.js"
+        then:
+          result: false
+
+      - name: "path with special characters is invalid"
+        given:
+          importPath: "./foo<bar>.ts"
+        then:
+          result: false
+
+      - name: "excessively long path is invalid"
+        given:
+          importPath: "@length(501)"
+        then:
+          result: false

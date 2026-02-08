@@ -476,6 +476,19 @@ export {
   type FeatureRegistry,
 } from './feature-schema.js';
 
+export {
+  ComponentGroupItemSchema,
+  ComponentGroupTriggersSchema,
+  ComponentGroupRelatedSchema,
+  ComponentGroupDefinitionSchema,
+  ComponentGroupsRegistrySchema,
+  type ComponentGroupItem,
+  type ComponentGroupTriggers,
+  type ComponentGroupRelated,
+  type ComponentGroupDefinition,
+  type ComponentGroupsRegistry,
+} from './component-group-schema.js';
+
 // Type exports
 export type Severity = z.infer<typeof SeveritySchema>;
 export type ConstraintRule = z.infer<typeof ConstraintRuleSchema>;

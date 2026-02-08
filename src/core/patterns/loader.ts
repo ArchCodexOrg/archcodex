@@ -34,7 +34,7 @@ export async function loadPatternRegistry(
     const parsed = yaml.parse(content);
     const validated = PatternRegistrySchema.parse(parsed);
     return validated;
-  } catch {
+  } catch { /* file not found or invalid YAML */
     // If patterns.yaml is invalid, return empty registry rather than crashing
     return { patterns: {} };
   }

@@ -5,6 +5,31 @@ archcodex.infra.fs:
   mixins:
     - tested
   description: File system operations - reading, writing, globbing
+  reference_implementations:
+    - src/utils/file-system.ts
+    - src/utils/yaml.ts
+  file_pattern: "*.ts"
+  default_path: src/utils
+  code_pattern: |-
+    /**
+     * @arch archcodex.infra.fs
+     *
+     * File system operations with error handling.
+     */
+    import { readFile as fsReadFile, writeFile as fsWriteFile } from 'fs/promises';
+    import { existsSync } from 'fs';
+
+    /**
+     * Read a file with consistent error handling.
+     * Returns undefined instead of throwing when file not found.
+     */
+    export async function readFile(filePath: string): Promise<string | undefined> {
+      try {
+        return await fsReadFile(filePath, 'utf-8');
+      } catch {
+        return undefined;
+      }
+    }
   rationale: |
     File system abstraction for reading, writing, and finding files.
     Wraps Node.js fs operations with error handling and consistent API.

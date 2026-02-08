@@ -39,10 +39,10 @@ archcodex.cli.mcp:
       severity: error
       why: MCP server doesn't use CLI framework
     - rule: max_file_lines
-      value: 1200
+      value: 800
       exclude_comments: true
       severity: warning
-      why: MCP SDK requires central routing in server.ts - handler implementations extracted to handlers/
+      why: Keep server.ts lean - tool definitions and handlers belong in handlers/
   hints:
     - Tool handlers are in handlers/ - server.ts is the routing layer
     - Auto-detect project root from file path when possible
@@ -57,6 +57,9 @@ archcodex.cli.mcp.handler:
 
     Use for: MCP tool handler functions
     Don't use for: MCP server setup (use cli.mcp), core logic (use core)
+  suggested_intents:
+    - name: stateless
+      when: "Handler has no cleanup requirements"
   file_pattern: ${name}.ts
   default_path: src/mcp/handlers
   constraints:

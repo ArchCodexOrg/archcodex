@@ -1,0 +1,306 @@
+# Data Checker - Schema-Inferred Analysis
+#
+# Detects data integrity issues by analyzing spec inputs, outputs,
+# effects, and cross-spec relationships for leakage, orphans, and drift.
+# 11 analyses: DAT-1 through DAT-11.
+
+version: "1.0"
+
+spec.archcodex.analyze.data:
+  inherits: spec.function
+  implementation: src/core/analysis/checkers/data.ts#checkData
+
+  # === STRATEGIC ===
+  goal: "Detect data integrity issues inferable from spec schemas"
+  outcomes:
+    - "Detect sensitive data leaking into outputs"
+    - "Detect missing cascade effects on delete"
+    - "Detect denormalization drift"
+    - "Detect missing timestamp updates"
+    - "Detect cross-spec type mismatches"
+    - "Detect untested nullable outputs"
+    - "Detect authenticated mutations without audit trails"
+    - "Detect partial writes from early returns between effects (deep)"
+    - "Detect uniqueness constraints without error examples"
+    - "Detect enum value mismatches in examples"
+    - "Detect cross-spec input type/constraint drift"
+
+  # === OPERATIONAL ===
+  intent: "Analyze spec inputs, outputs, effects, and cross-references for data integrity gaps"
+
+  inputs:
+    specs:
+      type: array
+      required: true
+      description: "Array of resolved spec nodes to analyze"
+    graph:
+      type: object
+      required: true
+      description: "CrossReferenceGraph for cross-spec analysis"
+
+  outputs:
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          category: { type: enum, values: [data] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string }
+          field: { type: string, optional: true }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+          relatedSpecs: { type: array, items: { type: string }, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "All issues have category 'data'"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.category: "data"
+
+    - description: "Issue IDs follow DAT-N pattern"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@matches('^DAT-(1[01]|[1-9])$')"
+
+  # === EXAMPLES ===
+  defaults: &minimal_graph
+    graph: { entityToSpecs: {}, tableToWriters: {}, tableToReaders: {}, specDependents: {}, archToSpecs: {} }
+
+  examples:
+    success:
+      # --- DAT-1: Sensitive data leakage ---
+      - name: "DAT-1: detects password in output"
+        given:
+          specs:
+            - specId: spec.user.create
+              intent: "Create user"
+              inputs:
+                email: { type: string }
+                password: { type: string }
+              outputs:
+                email: { type: string }
+                password: { type: string }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'DAT-1', severity: 'error', field: 'password' })"
+
+      - name: "DAT-1: detects token in output"
+        given:
+          specs:
+            - specId: spec.auth.login
+              intent: "Login"
+              inputs:
+                apiToken: { type: string }
+              outputs:
+                apiToken: { type: string }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'DAT-1', severity: 'error', field: 'apiToken' })"
+
+      # --- DAT-2: Missing cascade effects ---
+      - name: "DAT-2: detects orphaned references on delete"
+        given:
+          specs:
+            - specId: spec.project.delete
+              intent: "Delete project"
+              effects:
+                - { database: { table: projects, operation: delete } }
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                projectId: { type: id, table: projects }
+          graph:
+            entityToSpecs: { project: [spec.project.delete], tag: [spec.tag.create] }
+            tableToWriters: { projects: [{ specId: spec.project.delete, operation: delete }] }
+            tableToReaders: { projects: [{ specId: spec.tag.create, inputField: projectId }] }
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'DAT-2', severity: 'warning', specId: 'spec.project.delete' })"
+
+      # --- DAT-3: Denormalization drift ---
+      - name: "DAT-3: detects missing count update on insert"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              effects:
+                - { database: { table: tags, operation: insert } }
+              invariants:
+                - { condition: "project.tagCount is incremented" }
+            - specId: spec.project.get
+              intent: "Get project"
+              outputs:
+                tagCount: { type: number }
+          graph:
+            entityToSpecs: { tag: [spec.tag.create], project: [spec.project.get] }
+            tableToWriters: { tags: [{ specId: spec.tag.create, operation: insert }] }
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'DAT-3', severity: 'warning' })"
+
+      # --- DAT-4: Missing timestamp effects ---
+      - name: "DAT-4: detects update without updatedAt"
+        given:
+          specs:
+            - specId: spec.product.update
+              intent: "Update product"
+              effects:
+                - { database: { table: products, operation: update } }
+              outputs:
+                title: { type: string }
+                # No updatedAt in outputs
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'DAT-4', severity: 'warning' })"
+
+      # --- DAT-5: Cross-spec type mismatch ---
+      - name: "DAT-5: detects table reference mismatch across specs"
+        given:
+          specs:
+            - specId: spec.order.create
+              intent: "Create order"
+              outputs:
+                _id: { type: id, table: orders }
+            - specId: spec.order.share
+              intent: "Share order"
+              inputs:
+                orderId: { type: id, table: documents }
+              depends_on: [spec.order.create]
+          graph:
+            entityToSpecs: { order: [spec.order.create, spec.order.share] }
+            tableToWriters: {}
+            tableToReaders: { documents: [{ specId: spec.order.share, inputField: orderId }] }
+            specDependents: { spec.order.create: [spec.order.share] }
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'DAT-5', severity: 'error' })"
+
+      # --- DAT-6: Nullable output without coverage ---
+      - name: "DAT-6: detects untested nullable output"
+        given:
+          specs:
+            - specId: spec.product.get
+              intent: "Get product"
+              outputs:
+                title: { type: string }
+                description: { type: string, nullable: true }
+              examples:
+                success:
+                  - name: "with description"
+                    given: { id: "bk1" }
+                    then:
+                      result.title: "Test"
+                      result.description: "A product"
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'DAT-6', severity: 'warning', field: 'description' })"
+
+      # --- DAT-7: Missing audit trail ---
+      - name: "DAT-7: detects mutation without audit log"
+        given:
+          specs:
+            - specId: spec.product.archive
+              intent: "Archive product"
+              security: { authentication: required }
+              effects:
+                - { database: { table: products, operation: update } }
+                # No audit_log effect
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'DAT-7', severity: 'warning' })"
+
+      # --- DAT-8: Partial write (deep) ---
+      - name: "DAT-8: detects early return between effects"
+        given:
+          specs:
+            - specId: spec.order.process
+              intent: "Process order"
+              effects:
+                - { database: { table: orders, operation: update } }
+                - { database: { table: inventory, operation: update } }
+          <<: *minimal_graph
+          # Deep: implementation has return statement between two db writes
+        then:
+          result.issues: "@hasItem({ id: 'DAT-8', severity: 'warning' })"
+
+      # --- DAT-9: Unique constraint without error example ---
+      - name: "DAT-9: detects uniqueness invariant without duplicate error"
+        given:
+          specs:
+            - specId: spec.user.create
+              intent: "Create user"
+              inputs:
+                email: { type: string, required: true }
+              invariants:
+                - { condition: "email must be unique across all users" }
+              examples:
+                success:
+                  - { name: "works", given: { email: "test@test.com" }, then: { result: "@exists" } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'DAT-9', severity: 'warning' })"
+
+      # --- DAT-10: Enum mismatch in examples ---
+      - name: "DAT-10: detects example using value not in enum"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                color: { type: enum, values: [red, blue, green] }
+              examples:
+                success:
+                  - name: "with purple"
+                    given: { color: purple }
+                    then: { result: "@exists" }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'DAT-10', severity: 'warning', field: 'color' })"
+
+      # --- DAT-11: Cross-spec input drift ---
+      - name: "DAT-11: detects type mismatch for same input across entity"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              inputs:
+                name: { type: string, max: 100 }
+            - specId: spec.widget.update
+              intent: "Update widget"
+              inputs:
+                name: { type: string, max: 200 }
+          graph:
+            entityToSpecs: { widget: [spec.widget.create, spec.widget.update] }
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'DAT-11', severity: 'warning', field: 'name' })"
+
+      # --- No false positives ---
+      - name: "no issue for spec with audit trail and timestamps"
+        given:
+          specs:
+            - specId: spec.product.update
+              intent: "Update product"
+              security: { authentication: required }
+              outputs:
+                title: { type: string }
+                updatedAt: { type: number }
+              effects:
+                - { database: { table: products, operation: update } }
+                - { audit_log: { action: "product.update", resourceType: product } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@empty"

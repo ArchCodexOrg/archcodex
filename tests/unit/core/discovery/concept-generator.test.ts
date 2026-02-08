@@ -2,9 +2,6 @@
  * @arch archcodex.test.unit
  * @intent:cli-output
  */
-/**
- * @arch archcodex.test
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateConcepts } from '../../../../src/core/discovery/concept-generator.js';
 import type { Registry } from '../../../../src/core/registry/schema.js';

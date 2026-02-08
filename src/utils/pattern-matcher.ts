@@ -128,12 +128,10 @@ export function patternMatches(pattern: string, content: string): boolean {
     try {
       const regex = new RegExp(parsed.regex, parsed.flags);
       return timedRegexTest(regex, content);
-    } catch {
-      // If explicit regex failed, return false
+    } catch { /* regex invalid, fallback to literal if implicit */
       if (parsed.isExplicit) {
         return false;
       }
-      // For implicit patterns, fall back to literal match
     }
   }
 
@@ -176,12 +174,10 @@ export function findPatternMatch(pattern: string, content: string): PatternMatch
           matchedText: result[0],
         };
       }
-    } catch {
-      // If explicit regex failed, return not matched
+    } catch { /* regex invalid, fallback to literal if implicit */
       if (parsed.isExplicit) {
         return { matched: false };
       }
-      // For implicit patterns, fall back to literal match
     }
   }
 

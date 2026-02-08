@@ -248,12 +248,11 @@ layers:
     paths: ["src/cli/**"]
     can_import: [utils, core, infra]  # top layer
 
-  - name: convex
-    paths: ["convex/**"]
-    can_import: [utils]
+  - name: api
+    paths: ["src/api/**"]
+    can_import: [utils, core]
     exclude:  # skip generated files
-      - "convex/_generated/**"
-      - "convex/**/types.ts"
+      - "src/api/generated/**"
 ```
 
 **Difference from packages:**
@@ -295,12 +294,12 @@ domain.events:
 
 | Placeholder | Example Input | Output |
 |-------------|---------------|--------|
-| `${value}` | `bookmark.archived` | `bookmark.archived` |
-| `${PascalCase}` | `bookmark.archived` | `BookmarkArchived` |
-| `${camelCase}` | `bookmark.archived` | `bookmarkArchived` |
-| `${snake_case}` | `bookmarkArchived` | `bookmark_archived` |
-| `${UPPER_CASE}` | `bookmark.archived` | `BOOKMARK_ARCHIVED` |
-| `${kebab-case}` | `bookmarkArchived` | `bookmark-archived` |
+| `${value}` | `product.archived` | `product.archived` |
+| `${PascalCase}` | `product.archived` | `ProductArchived` |
+| `${camelCase}` | `product.archived` | `productArchived` |
+| `${snake_case}` | `productArchived` | `product_archived` |
+| `${UPPER_CASE}` | `product.archived` | `PRODUCT_ARCHIVED` |
+| `${kebab-case}` | `productArchived` | `product-archived` |
 
 ### Constraint Fields
 
@@ -666,7 +665,7 @@ api.controller:
 | Condition | Example |
 |-----------|---------|
 | `not_has_decorator` | `not_has_decorator: "@Generated"` |
-| `not_has_import` | `not_has_import: "convex/server"` |
+| `not_has_import` | `not_has_import: "@internal/server"` |
 | `not_extends` | `not_extends: "BaseEntity"` |
 | `not_file_matches` | `not_file_matches: "**/generated/**"` |
 | `not_implements` | `not_implements: "IMockable"` |
@@ -686,21 +685,21 @@ constraints:
     value: "console\\.(log|error|warn)"
     applies_when: "console\\."           # Only check if file contains this
     unless:
-      - import:convexLogger              # Skip if imports convexLogger
+      - import:structuredLogger              # Skip if imports structuredLogger
       - "@intent:debug-only"             # Skip if has @intent:debug-only
       - decorator:@DevOnly               # Skip if has @DevOnly decorator
-    why: "Use convexLogger for structured logging"
-    alternative: convexLogger
+    why: "Use structuredLogger for structured logging"
+    alternative: structuredLogger
 ```
 
 ### `unless` Formats
 
 | Format | Description | Example |
 |--------|-------------|---------|
-| `import:module` | File imports this module | `import:convexLogger` |
+| `import:module` | File imports this module | `import:structuredLogger` |
 | `@intent:name` | File has this @intent | `@intent:debug-only` |
 | `decorator:@Name` | File uses this decorator | `decorator:@DevOnly` |
-| `plainString` | Treated as import | `convexLogger` |
+| `plainString` | Treated as import | `structuredLogger` |
 
 ### Comparison with `when`
 

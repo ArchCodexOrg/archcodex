@@ -2,9 +2,6 @@
  * @arch archcodex.test.unit
  * @intent:cli-output
  */
-/**
- * @arch archcodex.test
- */
 import { describe, it, expect } from 'vitest';
 import { matchConcepts, validateConcepts, getArchitecturesFromMatches, type ConceptRegistry } from '../../../../src/core/discovery/concepts.js';
 

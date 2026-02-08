@@ -1,9 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.test.unit
  *
  * Tests for AST-based semantic analyzer.
  */

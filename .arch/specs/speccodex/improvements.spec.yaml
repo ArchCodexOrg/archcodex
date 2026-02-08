@@ -1,0 +1,1728 @@
+# SpecCodex Improvement Specifications
+#
+# Specs for improvements identified during dogfooding.
+# Each addresses a friction point found when writing specs → tests.
+
+version: "1.0"
+
+# =============================================================================
+# IMPROVEMENT 1: Array/Object Path Assertions
+# =============================================================================
+# Problem: @contains('intent') on result.fields doesn't work when fields is
+#          an array of objects like [{ name: 'intent', type: 'string' }]
+# Solution: Add @hasItem for object matching and JSONPath-like syntax
+
+spec.speccodex.placeholders.hasItem:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#expandPlaceholder
+
+  # === STRATEGIC ===
+  goal: "Enable assertions on arrays of objects with property matching"
+  outcomes:
+    - "@hasItem({ prop: value }) checks array contains object with property"
+    - "@hasItem supports nested property paths"
+    - "@hasItem can combine with @all for multiple checks"
+    - "Generates expect.arrayContaining assertion"
+
+  # === OPERATIONAL ===
+  intent: "Expand @hasItem placeholder to array assertion"
+
+  inputs:
+    placeholder:
+      type: string
+      required: true
+      pattern: "@hasItem\\(.*\\)"
+      description: "The @hasItem placeholder with object matcher"
+    value:
+      type: array
+      required: true
+      description: "The array to search"
+
+  outputs:
+    type: { type: string, description: "Always 'assertion'" }
+    asserts: { type: string, description: "Always 'hasItem'" }
+    value: { type: object, description: "Parsed object matcher" }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "Result type is always 'assertion' for valid placeholders"
+      condition: "result.type === 'assertion'"
+    - { "@hasItem generates expect.arrayContaining": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "match object by single property"
+        given:
+          placeholder: "@hasItem({ name: 'intent' })"
+          value: [{ name: "intent", type: "string" }, { name: "goal", type: "string" }]
+        then:
+          result.type: "assertion"
+          result.asserts: "hasItem"
+          result.value: "@exists"
+
+      - name: "match object by multiple properties"
+        given:
+          placeholder: "@hasItem({ name: 'url', required: true })"
+          value: [{ name: "url", type: "string", required: true }]
+        then:
+          result.type: "assertion"
+          result.asserts: "hasItem"
+          result.value: "@exists"
+
+      - name: "match with nested path"
+        given:
+          placeholder: "@hasItem({ security.authentication: 'required' })"
+          value: [{ security: { authentication: "required" } }]
+        then:
+          result.type: "assertion"
+          result.asserts: "hasItem"
+
+      - name: "combine with other placeholder"
+        given:
+          placeholder: "@hasItem({ count: '@gt(0)' })"
+          value: [{ count: 5 }, { count: 10 }]
+        then:
+          result.type: "assertion"
+          result.asserts: "hasItem"
+
+    errors:
+      - name: "no matching object"
+        given:
+          placeholder: "@hasItem({ name: 'missing' })"
+          value: [{ name: "intent" }, { name: "goal" }]
+        then:
+          result: false
+          error.message: "@contains('no item matches')"
+
+      - name: "empty array"
+        given:
+          placeholder: "@hasItem({ name: 'x' })"
+          value: []
+        then:
+          result: false
+
+      - name: "invalid placeholder syntax"
+        given:
+          placeholder: "@hasItem(invalid)"
+          value: []
+        then:
+          # Returns UNKNOWN_PLACEHOLDER because pattern doesn't match @hasItem regex
+          error.code: "UNKNOWN_PLACEHOLDER"
+
+      - name: "invalid placeholder parameter"
+        then: { error: "INVALID_PLACEHOLDER_PARAM" }
+
+      - name: "invalid placeholder"
+        then: { error: "INVALID_PLACEHOLDER" }
+
+      - name: "fixture resolution error"
+        then: { error: "FIXTURE_RESOLUTION_ERROR" }
+
+# =============================================================================
+# IMPROVEMENT 2: Output Schema Definition
+# =============================================================================
+# Problem: Specs define inputs well but don't define output shape.
+#          Tests had to discover return type from implementation.
+# Solution: Add outputs: section to spec schema
+
+spec.speccodex.schema.outputs:
+  inherits: spec.function
+  implementation: src/core/spec/schema.ts#OutputFieldSchema
+
+  # === STRATEGIC ===
+  goal: "Enable specs to define expected output structure"
+  outcomes:
+    - "outputs: section defines return type shape"
+    - "Generator uses outputs for type inference"
+    - "Verifier checks implementation returns match outputs"
+    - "Schema documentation includes outputs"
+
+  # === OPERATIONAL ===
+  intent: "Parse and validate outputs section in specs"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Spec with outputs section"
+
+  outputs:
+    schema:
+      type: object
+      description: "Parsed output schema"
+      properties:
+        fields:
+          type: array
+          items: { name: string, type: string, optional: boolean }
+        nested:
+          type: object
+          description: "Nested object schemas"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "outputs fields have type info": true }
+    - { "nested outputs are recursively parsed": true }
+    - { "optional fields are marked": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "simple output schema"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            outputs:
+              id: { type: id, table: products }
+              url: { type: string }
+              createdAt: { type: number }
+        then:
+          result.valid: true
+          # NOTE: Multiple assertions on same path need @and() - this is an improvement!
+          result.schema.fields: "@and(@hasItem({ name: 'id', type: 'id' }), @hasItem({ name: 'url', type: 'string' }))"
+
+      - name: "nested output schema"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            outputs:
+              result:
+                type: object
+                properties:
+                  items: { type: array, items: { type: string } }
+                  total: { type: number }
+        then:
+          result.valid: true
+          result.schema.nested.result: "@defined"
+
+      - name: "optional output fields"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            outputs:
+              data: { type: string }
+              error: { type: string, optional: true }
+        then:
+          result.valid: true
+          result.schema.fields: "@hasItem({ name: 'error', optional: true })"
+
+      - name: "enum output type"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            outputs:
+              status: { type: enum, values: [pending, active, completed] }
+              callPattern: { type: enum, values: [direct, destructured, factory] }
+        then:
+          result.valid: true
+          "result.schema.fields[0]": { name: "status", type: "enum" }
+          "result.schema.fields[1]": { name: "callPattern", type: "enum" }
+
+    errors:
+      - name: "output field without type"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            outputs:
+              data: { description: "No type specified" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_TYPE"
+          "result.errors[0].field": "data"
+
+# =============================================================================
+# IMPROVEMENT 3: Structured Invariants
+# =============================================================================
+# Problem: Invariants like "output is valid YAML" are prose, not machine-checkable
+# Solution: Structured invariant syntax with built-in matchers
+
+spec.speccodex.invariants.structured:
+  inherits: spec.function
+  implementation: src/core/spec/generators/property.ts#parseInvariantMetadata
+
+  # === STRATEGIC ===
+  goal: "Enable machine-checkable invariants with structured syntax"
+  outcomes:
+    - "Invariants use assertion syntax, not prose"
+    - "Property-based tests generated from structured invariants"
+    - "Clear distinction between prose notes and testable invariants"
+    - "Support for forall/exists quantifiers"
+
+  # === OPERATIONAL ===
+  intent: "Parse structured invariant definitions into metadata"
+
+  inputs:
+    invariant:
+      type: object
+      required: true
+      description: "Structured invariant definition (also accepts string for prose notes)"
+
+  outputs:
+    type:
+      type: enum
+      values: [assertion, forall, exists, condition, note]
+      description: "Invariant type classification"
+    testable:
+      type: boolean
+      description: "Whether invariant can generate automated tests"
+    path:
+      type: string
+      optional: true
+      description: "JSONPath to asserted field (for assertion type)"
+    variable:
+      type: string
+      optional: true
+      description: "Loop variable name (for forall/exists)"
+    collection:
+      type: string
+      optional: true
+      description: "Collection path being iterated (for forall/exists)"
+    hasFilter:
+      type: boolean
+      optional: true
+      description: "Whether a filter/where clause is present"
+    description:
+      type: string
+      optional: true
+      description: "Human-readable description if provided"
+    condition:
+      type: string
+      optional: true
+      description: "The condition expression (for condition type)"
+
+  # === INVARIANTS ===
+  invariants:
+    # Testability is determined by type
+    - description: "Only 'note' type is not testable"
+      condition: "(result.type === 'note') === (result.testable === false)"
+    # Type is always one of the valid values
+    - description: "Type is one of the valid enum values"
+      condition: "['assertion', 'forall', 'exists', 'condition', 'note'].includes(result.type)"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "object assertion invariant"
+        given:
+          invariant: { "result.url": "valid_url" }
+        then:
+          result.type: "assertion"
+          result.path: "result.url"
+          result.testable: true
+          result.variable: "@undefined"
+          result.collection: "@undefined"
+          result.hasFilter: "@undefined"
+          result.condition: "@undefined"
+          result.description: "@undefined"
+
+      - name: "condition invariant"
+        given:
+          invariant:
+            description: "Result equals input sum"
+            condition: "result === input.a + input.b"
+        then:
+          result.type: "condition"
+          result.testable: true
+          result.condition: "result === input.a + input.b"
+          result.description: "Result equals input sum"
+
+      - name: "forall quantifier"
+        given:
+          invariant:
+            forall:
+              variable: item
+              in: result.items
+              then: { "item.status": "valid" }
+        then:
+          result.type: "forall"
+          result.variable: "item"
+          result.collection: "result.items"
+          result.testable: true
+          result.hasFilter: false
+
+      - name: "forall with where filter"
+        given:
+          invariant:
+            forall:
+              variable: item
+              in: result.items
+              where: { "item.active": true }
+              then: { "item.visible": true }
+        then:
+          result.type: "forall"
+          result.variable: "item"
+          result.collection: "result.items"
+          result.hasFilter: true
+          result.testable: true
+
+      - name: "exists quantifier"
+        given:
+          invariant:
+            exists:
+              variable: item
+              in: result.items
+              where: { "item.status": "active" }
+        then:
+          result.type: "exists"
+          result.variable: "item"
+          result.collection: "result.items"
+          result.hasFilter: true
+          result.testable: true
+
+      - name: "exists without filter (simple existence)"
+        given:
+          invariant:
+            exists:
+              variable: item
+              in: result.items
+        then:
+          result.type: "exists"
+          result.variable: "item"
+          result.collection: "result.items"
+          result.hasFilter: false
+          result.testable: true
+
+      - name: "prose note (not testable)"
+        given:
+          invariant: { note: "Response time should be under 100ms" }
+        then:
+          result.type: "note"
+          result.testable: false
+          result.description: "Response time should be under 100ms"
+          result.path: "@undefined"
+          result.variable: "@undefined"
+          result.collection: "@undefined"
+          result.hasFilter: "@undefined"
+          result.condition: "@undefined"
+
+      - name: "string invariant becomes note (invalid)"
+        given:
+          invariant: "output is always valid"
+        then:
+          result.type: "note"
+          result.testable: false
+          result.description: "output is always valid"
+
+# =============================================================================
+# IMPROVEMENT 4: Test Name Synchronization
+# =============================================================================
+# Problem: Generated test names differ from spec example names.
+#          Breaks traceability between spec and tests.
+# Solution: Generator uses example.name directly as test name
+
+spec.speccodex.generate.naming:
+  inherits: spec.function
+  implementation: src/core/spec/generators/unit.ts#generateUnitTests
+
+  # === STRATEGIC ===
+  goal: "Ensure generated test names match spec example names exactly"
+  outcomes:
+    - "it() uses example.name without modification"
+    - "describe() uses specId or spec.intent"
+    - "Traceability from test failure → spec example"
+    - "Name collisions detected and reported"
+
+  # === OPERATIONAL ===
+  intent: "Generate test names from spec example names"
+
+  inputs:
+    examples:
+      type: array
+      required: true
+      description: "Spec examples with names"
+
+  outputs:
+    testNames:
+      type: array
+      items: { type: string }
+      description: "Generated test names"
+    warnings:
+      type: array
+      items: { type: object, properties: { code: { type: string }, message: { type: string } } }
+      optional: true
+    valid:
+      type: boolean
+
+  # === INVARIANTS ===
+  invariants:
+    # Test names are generated for valid inputs
+    - description: "Valid input produces at least one test name"
+      condition: "result.valid !== true || result.testNames.length >= 1"
+    # Invalid inputs include error information
+    - description: "Invalid input includes error details"
+      condition: "result.valid !== false || result.errors !== undefined"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "exact name match"
+        given:
+          examples:
+            - { name: "valid url creates product", given: {}, then: {} }
+            - { name: "invalid url returns error", given: {}, then: {} }
+        then:
+          result.testNames: "@all(@hasItem('valid url creates product'), @hasItem('invalid url returns error'), @length(2))"
+          result.warnings: "@undefined"
+
+      - name: "name with special characters"
+        given:
+          examples:
+            - { name: "URL > 2048 chars → URL_TOO_LONG", given: {}, then: {} }
+        then:
+          result.testNames: "@hasItem('URL > 2048 chars → URL_TOO_LONG')"
+
+      - name: "missing name generates default"
+        given:
+          examples:
+            - { given: { url: "https://x.com" }, then: { result: "@defined" } }
+        then:
+          result.testNames: "@hasItem('example 1')"
+          result.warnings: "@hasItem({ code: 'MISSING_NAME' })"
+
+    errors:
+      - name: "duplicate names"
+        given:
+          examples:
+            - { name: "test case", given: {}, then: {} }
+            - { name: "test case", given: {}, then: {} }
+        then:
+          result.valid: false
+          "result.errors[0].code": "DUPLICATE_NAME"
+          "result.errors[0].name": "test case"
+
+      - name: "no examples"
+        then: { error: "NO_EXAMPLES" }
+
+      - name: "invalid spec"
+        then: { error: "INVALID_SPEC" }
+
+      - name: "missing name"
+        then: { error: "MISSING_NAME" }
+
+# =============================================================================
+# IMPROVEMENT 5: Required Error Section Validation
+# =============================================================================
+# Problem: Specs without errors: section lead to incomplete test coverage.
+#          Easy to forget error cases.
+# Solution: Validator warns when errors: section is missing
+
+spec.speccodex.validator.errors:
+  inherits: spec.function
+  implementation: src/core/spec/validator.ts#validateSpecRegistry
+
+  # === STRATEGIC ===
+  goal: "Ensure all specs consider error cases"
+  outcomes:
+    - "Validator warns when errors: section missing"
+    - "Validator warns when common errors not covered"
+    - "Suggestions for common error cases based on inputs"
+    - "Can be disabled with explicit 'errors: none'"
+
+  # === OPERATIONAL ===
+  intent: "Validate spec has appropriate error cases"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Spec to validate"
+
+  outputs:
+    warnings:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "missing errors: generates warning": true }
+    - { "errors: none suppresses warning": true }
+    - { "required inputs suggest validation errors": true }
+
+  # === EFFECTS (for integration tests) ===
+  effects:
+    - { metrics: { counter: "spec.validation.warnings", labels: { type: "missing_errors" } } }
+    - { cache: { invalidated: "spec.validation.${specId}" } }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "spec with errors section passes"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              success: [{ name: "works", given: {}, then: {} }]
+              errors: [{ name: "fails", given: {}, then: { error: "ERROR" } }]
+        then:
+          result.warnings: []
+
+      - name: "spec with errors: none passes"
+        given:
+          spec:
+            specId: "spec.pure.function"
+            intent: "Pure function that cannot fail"
+            examples:
+              success: [{ name: "works", given: {}, then: {} }]
+              errors: none  # Explicit: no error cases possible
+        then:
+          result.warnings: []
+
+    errors:
+      - name: "missing intent"
+        then: { error: "MISSING_INTENT" }
+
+      - name: "unknown mixin"
+        then: { error: "UNKNOWN_MIXIN" }
+
+      - name: "unknown parent"
+        then: { error: "UNKNOWN_PARENT" }
+
+      - name: "circular inheritance"
+        then: { error: "CIRCULAR_INHERITANCE" }
+
+      - name: "goal without outcomes"
+        then: { error: "GOAL_WITHOUT_OUTCOMES" }
+
+      - name: "missing auth error example"
+        then: { error: "MISSING_AUTH_ERROR_EXAMPLE" }
+
+      - name: "missing errors"
+        then: { error: "MISSING_ERRORS" }
+
+      - name: "unknown composed mixin"
+        then: { error: "UNKNOWN_COMPOSED_MIXIN" }
+
+      - name: "example incomplete"
+        then: { error: "EXAMPLE_INCOMPLETE" }
+
+      - name: "unknown input field"
+        then: { error: "UNKNOWN_INPUT_FIELD" }
+
+      - name: "example type mismatch"
+        then: { error: "EXAMPLE_TYPE_MISMATCH" }
+
+      - name: "missing required input"
+        then: { error: "MISSING_REQUIRED_INPUT" }
+
+      - name: "unknown field"
+        then: { error: "UNKNOWN_FIELD" }
+
+      - name: "unknown mixin field"
+        then: { error: "UNKNOWN_MIXIN_FIELD" }
+
+    warnings:
+      - name: "missing errors section"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              success: [{ name: "works", given: {}, then: {} }]
+        then:
+          result.warnings: "@hasItem({ code: 'MISSING_ERRORS' })"
+          "result.warnings[0].message": "@contains('No error cases defined')"
+
+      - name: "suggest validation error for required input"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              url: { type: string, validate: url, required: true }
+            examples:
+              success: [{ name: "works", given: { url: "https://x.com" }, then: {} }]
+        then:
+          result.warnings: "@hasItem({ code: 'MISSING_ERRORS' })"
+          "result.warnings[0].suggestion": "@contains('INVALID_URL')"
+
+      - name: "suggest auth error for authenticated spec"
+        given:
+          spec:
+            specId: "spec.test"
+            inherits: "spec.mutation"  # Has security.authentication: required
+            intent: "Test"
+            examples:
+              success: [{ name: "works", given: {}, then: {} }]
+        then:
+          result.warnings: "@hasItem({ code: 'MISSING_ERRORS' })"
+          "result.warnings[0].suggestion": "@contains('NOT_AUTHENTICATED')"
+
+# =============================================================================
+# IMPROVEMENT 6: Output Schema Verification
+# =============================================================================
+# Problem: Spec says result.types but implementation returns result.inputTypes.
+#          No verification catches this naming drift.
+# Solution: Verifier checks implementation return shape matches spec outputs
+
+spec.speccodex.verify.schema:
+  inherits: spec.function
+  implementation: src/core/spec/verifier.ts#verifyImplementation
+
+  # === STRATEGIC ===
+  goal: "Verify implementation return type matches spec outputs"
+  outcomes:
+    - "Detect field name mismatches (types vs inputTypes)"
+    - "Detect missing fields in implementation"
+    - "Detect extra fields not in spec"
+    - "Support for nested object comparison"
+
+  # === OPERATIONAL ===
+  intent: "Verify implementation return shape matches spec outputs"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Spec with outputs section"
+    implementationContent:
+      type: string
+      required: true
+      description: "Source code of the implementation file"
+    implementationPath:
+      type: string
+      required: true
+      description: "Path to implementation file"
+
+  outputs:
+    drift:
+      type: array
+      items:
+        type: object
+        properties:
+          type: { type: enum, values: [field_name_mismatch, missing_field, extra_field] }
+          specField: { type: string }
+          implField: { type: string, optional: true }
+          severity: { type: enum, values: [error, warning] }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "field_name_mismatch is error": true }
+    - { "missing_field is error": true }
+    - { "extra_field is warning": true }
+
+  # === EFFECTS (for integration tests) ===
+  effects:
+    - { audit_log: { action: "spec.verify.drift", resourceType: "spec", metadata: { driftCount: "${result.drift.length}" } } }
+    - { notification: { type: "drift_detected", channel: "slack", condition: "result.drift.length > 0" } }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "matching output shape"
+        given:
+          spec:
+            specId: "spec.test"
+            implementation: "src/test.ts#fn"
+            intent: "Test"
+            outputs:
+              fields: { type: array }
+              sections: { type: array }
+          implementationContent: "export function fn(): { fields: string[], sections: string[] } { return { fields: [], sections: [] }; }"
+          implementationPath: "src/test.ts"
+        then:
+          result.valid: true
+          result.drift: "@length(0)"
+
+    errors:
+      - name: "field name mismatch"
+        given:
+          spec:
+            specId: "spec.schema"
+            implementation: "src/test.ts#fn"
+            intent: "Get schema"
+            outputs:
+              types: { type: array }
+          implementationContent: "export function fn(): { inputTypes: string[] } { return { inputTypes: [] }; }"
+        then:
+          result.valid: false
+
+      - name: "missing output field"
+        given:
+          spec:
+            specId: "spec.test"
+            implementation: "src/test.ts#fn"
+            intent: "Test"
+            outputs:
+              data: { type: object }
+              meta: { type: object }
+          implementationContent: "export function fn(): { data: object } { return { data: {} }; }"
+        then:
+          result.valid: false
+
+    warnings:
+      - name: "extra implementation field"
+        given:
+          spec:
+            specId: "spec.test"
+            implementation: "src/test.ts#fn"
+            intent: "Test"
+            outputs:
+              data: { type: object }
+          implementationContent: "export function fn(): { data: object, _internal: object } { return { data: {}, _internal: {} }; }"
+        then:
+          result.valid: true  # Warning, not error
+
+# =============================================================================
+# IMPROVEMENT 7: Full Coverage Generation
+# =============================================================================
+# Problem: Tests beyond spec examples (like checking all object keys) were added
+#          manually. These are valuable but not spec-driven.
+# Solution: coverage: full option generates exhaustive tests from schema
+
+spec.speccodex.generate.coverage:
+  inherits: spec.function
+  implementation: src/core/spec/generators/unit.ts#generateUnitTests
+
+  # === STRATEGIC ===
+  goal: "Generate exhaustive tests beyond explicit examples"
+  outcomes:
+    - "Test all enum values from input schema"
+    - "Test boundary values for numeric inputs (min/max)"
+    - "Test boundary values for string inputs (max length)"
+    - "Generated tests marked as 'generated' source"
+
+  # === OPERATIONAL ===
+  intent: "Generate comprehensive tests from spec input schema"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Spec with inputs"
+    options:
+      type: object
+      properties:
+        coverage:
+          type: enum
+          values: [examples, full]
+          default: examples
+          description: "examples: only from examples section; full: adds schema-based tests"
+
+  outputs:
+    testCount:
+      type: number
+      description: "Total number of tests generated"
+    coverageStats:
+      type: object
+      optional: true
+      properties:
+        fromExamples: { type: number }
+        generated: { type: number }
+        enumCoverage: { type: number }
+        boundaryCoverage: { type: number }
+
+  # === SECURITY ===
+  security:
+    rate_limit: { requests: 100, window: "1m" }
+
+  # === INVARIANTS ===
+  invariants:
+    # Full coverage mode includes statistics
+    - description: "coverage: full includes coverageStats"
+      condition: "result.coverageStats !== undefined || result.testCount === 1"
+    # Test count reflects examples plus generated
+    - description: "Test count is at least number of examples"
+      condition: "result.testCount >= 1"
+    # Idempotency: same spec + options produces same tests
+    - description: "Same inputs produce idempotent output"
+      condition: "generate(spec, options) === generate(spec, options)"
+
+  # === EFFECTS (for integration tests) ===
+  effects:
+    - { cache: { updated: "generated.tests.${specId}" } }
+    - { metrics: { gauge: "spec.coverage.generated_tests", value: "${result.testCount}" } }
+    - { scheduler: { job: "validate_generated_tests", delay: "1s" } }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "examples only (default)"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              name: { type: string }
+            examples:
+              success: [{ name: "works", given: { name: "test" }, then: {} }]
+          options: { coverage: examples }
+        then:
+          result.testCount: 1
+          result.coverageStats: "@undefined"
+
+      - name: "full coverage generates enum tests"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              status: { type: enum, values: [draft, published, archived] }
+            examples:
+              success: [{ name: "draft status", given: { status: "draft" }, then: {} }]
+          options: { coverage: full }
+        then:
+          result.testCount: "@gt(1)"
+          result.coverageStats.enumCoverage: "@gte(2)"  # published + archived
+          result.code: "@all(@contains('status=published'), @contains('status=archived'))"
+
+      - name: "full coverage adds numeric boundary tests"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              count: { type: number, min: 0, max: 100 }
+            examples:
+              success: [{ name: "mid value", given: { count: 50 }, then: {} }]
+          options: { coverage: full }
+        then:
+          result.coverageStats.boundaryCoverage: "@gte(2)"  # min + max
+          result.code: "@all(@contains('count at minimum (0)'), @contains('count at maximum (100)'))"
+
+      - name: "full coverage adds string length boundary tests"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              title: { type: string, max: 200 }
+            examples:
+              success: [{ name: "short title", given: { title: "test" }, then: {} }]
+          options: { coverage: full }
+        then:
+          result.coverageStats.boundaryCoverage: "@gte(1)"
+          result.code: "@contains('title at max length (200)')"
+
+      - name: "skips already covered enum values"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              status: { type: enum, values: [a, b] }
+            examples:
+              success:
+                - { name: "handles status=a", given: { status: "a" }, then: {} }
+                - { name: "handles status=b", given: { status: "b" }, then: {} }
+          options: { coverage: full }
+        then:
+          result.coverageStats.enumCoverage: 0  # All values already covered
+
+      - name: "reports coverage statistics"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              status: { type: enum, values: [a, b, c] }
+              count: { type: number, min: 0, max: 10 }
+            examples:
+              success: [{ name: "basic", given: {}, then: {} }]
+          options: { coverage: full }
+        then:
+          result.coverageStats: "@defined"
+          result.coverageStats.fromExamples: 1
+          result.coverageStats.generated: "@gt(0)"
+          result.coverageStats.enumCoverage: 3
+          result.coverageStats.boundaryCoverage: "@gte(2)"
+
+    errors:
+      - name: "spec without inputs for full coverage"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              success: [{ name: "basic", given: {}, then: {} }]
+          options: { coverage: full }
+        then:
+          result.coverageStats.generated: 0
+
+# =============================================================================
+# IMPROVEMENT 8: Assertions Array Format
+# =============================================================================
+# Problem: YAML doesn't allow duplicate keys, but specs need multiple assertions
+#          on the same result path. Currently silently broken:
+#            result.fields: "@contains('intent')"
+#            result.fields: "@contains('goal')"  # <- this overwrites previous!
+# Solution: Support assertions: array format in then: block
+
+spec.speccodex.schema.assertions:
+  inherits: spec.function
+  implementation: src/core/spec/schema.ts#ExampleSchema
+
+  # === STRATEGIC ===
+  goal: "Enable multiple assertions on same path without YAML duplicate key issues"
+  outcomes:
+    - "assertions: array for multiple checks"
+    - "Backward compatible with direct then: keys"
+    - "Clear error when duplicate keys detected"
+    - "Auto-migration tool for existing specs"
+
+  # === OPERATIONAL ===
+  intent: "Parse and validate assertions array format in examples"
+
+  inputs:
+    example:
+      type: object
+      required: true
+      description: "Example with then block"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "assertions array allows duplicate paths": true }
+    - { "direct then: keys still work": true }
+    - { "mixed format (then + assertions) works": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "assertions array format"
+        given:
+          example:
+            name: "test"
+            given: { filter: fields }
+            then:
+              result.valid: true
+            assertions:
+              - { path: "result.fields", matcher: "@hasItem({ name: 'intent' })" }
+              - { path: "result.fields", matcher: "@hasItem({ name: 'goal' })" }
+              - { path: "result.fields", matcher: "@hasItem({ name: 'inputs' })" }
+        then:
+          result.valid: true
+          result.assertions.length: 4  # 1 from then: + 3 from assertions:
+
+      - name: "direct then keys (backward compatible)"
+        given:
+          example:
+            name: "test"
+            given: {}
+            then:
+              result.valid: true
+              result.count: 5
+        then:
+          result.valid: true
+          result.assertions.length: 2
+
+      - name: "all assertions for same path"
+        given:
+          example:
+            name: "test"
+            given: {}
+            assertions:
+              - { path: "result.items", matcher: "@hasItem({ type: 'a' })" }
+              - { path: "result.items", matcher: "@hasItem({ type: 'b' })" }
+              - { path: "result.items", matcher: "@length(2)" }
+        then:
+          result.valid: true
+          result.pathCounts.result\.items: 3
+
+    errors:
+      - name: "example without then block"
+        given:
+          example:
+            name: "test"
+            given: { x: 1 }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_THEN"
+
+    warnings:
+      - name: "duplicate keys in then block detected"
+        given:
+          # NOTE: This example represents YAML that has duplicate keys
+          # We pass it as raw string since YAML parser would lose the duplicate
+          exampleYaml: |
+            name: "test"
+            given: {}
+            then:
+              result.x: "a"
+              result.x: "b"
+        then:
+          result.valid: true  # Still parses, but warns
+          result.warnings: "@hasItem({ code: 'DUPLICATE_KEY_DETECTED', path: 'result.x' })"
+
+# =============================================================================
+# IMPROVEMENT 9: JSONPath Support for Deep Assertions
+# =============================================================================
+# Problem: Can't easily assert on nested array elements
+# Solution: Support JSONPath-like syntax in assertion paths
+
+spec.speccodex.placeholders.jsonpath:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#expandPlaceholder
+
+  # === STRATEGIC ===
+  goal: "Enable path expressions for nested data assertions"
+  outcomes:
+    - "Support [*] for all array elements (generates forEach)"
+    - "Support [N] for specific array index"
+    - "Support deep property paths (a.b.c.d)"
+    - "Clear error messages for invalid paths"
+
+  # === OPERATIONAL ===
+  intent: "Parse and expand JSONPath expressions for test generation"
+
+  inputs:
+    path:
+      type: string
+      required: true
+      description: "JSONPath-like expression (supports [*] and [N])"
+    assertion:
+      type: object
+      required: true
+      description: "Placeholder assertion to apply"
+    rootVar:
+      type: string
+      default: "result"
+      description: "Root variable name in generated code"
+
+  outputs:
+    code:
+      type: string
+      description: "Generated JavaScript/TypeScript assertion code"
+    hasWildcard:
+      type: boolean
+      description: "Whether path contains [*] wildcard"
+    segments:
+      type: array
+      items:
+        type: object
+        properties:
+          type: { type: enum, values: [property, index, wildcard] }
+          value: { type: string }
+
+  # === INVARIANTS (dogfooding: using structured invariants!) ===
+  invariants:
+    # Forall segments, type must be valid
+    - forall:
+        variable: seg
+        in: result.segments
+        then: { "seg.type": "@oneOf(['property', 'index', 'wildcard'])" }
+    # Simple invariants
+    - { "[*] generates forEach loop": true }
+    - { "[N] generates direct index access": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "simple property path"
+        given:
+          path: "result.items"
+          assertion: { type: "assertion", asserts: "defined" }
+        then:
+          result.code: "@contains('expect(result.items).toBeDefined()')"
+          result.hasWildcard: false
+
+      - name: "wildcard generates forEach"
+        given:
+          path: "result.items[*].status"
+          assertion: { type: "assertion", asserts: "defined" }
+        then:
+          result.code: "@all(@contains('forEach'), @contains('expect(item.status)'))"
+          result.hasWildcard: true
+
+      - name: "specific index"
+        given:
+          path: "result.items[0].name"
+          assertion: { type: "assertion", asserts: "exists" }
+        then:
+          result.code: "@contains('result.items[0].name')"
+          result.hasWildcard: false
+
+      - name: "deep nested path"
+        given:
+          path: "data.users[0].profile.settings.theme"
+          assertion: { type: "assertion", asserts: "defined" }
+        then:
+          result.segments: "@length(6)"
+          result.code: "@contains('data.users[0].profile.settings.theme')"
+
+      - name: "wildcard with comparison assertion"
+        given:
+          path: "result.scores[*]"
+          assertion: { type: "assertion", asserts: "greaterThan", value: 0 }
+        then:
+          result.code: "@all(@contains('forEach'), @contains('toBeGreaterThan(0)'))"
+
+      - name: "parses path segments correctly"
+        given:
+          path: "result.items[*].data[0].value"
+          assertion: { type: "assertion", asserts: "defined" }
+        then:
+          result.segments: "@all(@hasItem({ type: 'property', value: 'result' }), @hasItem({ type: 'wildcard' }), @hasItem({ type: 'index', value: 0 }))"
+
+    errors:
+      - name: "invalid bracket syntax"
+        given:
+          path: "result.items[[invalid"
+        then:
+          result.valid: false
+          "result.errors[0].code": "INVALID_PATH"
+
+      - name: "invalid placeholder parameter"
+        then: { error: "INVALID_PLACEHOLDER_PARAM" }
+
+      - name: "invalid placeholder"
+        then: { error: "INVALID_PLACEHOLDER" }
+
+      - name: "fixture resolution error"
+        then: { error: "FIXTURE_RESOLUTION_ERROR" }
+
+      - name: "unknown placeholder"
+        then: { error: "UNKNOWN_PLACEHOLDER" }
+
+# =============================================================================
+# IMPROVEMENT 10: Explicit Spec Type
+# =============================================================================
+# Problem: Base specs (spec.function, spec.mutation, etc.) are detected by
+#          heuristic (missing intent/examples). This is fragile and unclear.
+# Solution: Explicit type: base field to mark abstract/template specs
+
+spec.speccodex.schema.type:
+  inherits: spec.function
+  implementation: src/core/spec/drift/unwired.ts#isBaseSpec
+
+  # === STRATEGIC ===
+  goal: "Enable explicit marking of base/abstract specs"
+  outcomes:
+    - "type: base marks specs as abstract templates"
+    - "type: leaf (default) marks specs as implementations"
+    - "Drift detection excludes base specs from coverage"
+    - "Clear semantics: base specs exist for inheritance only"
+
+  # === OPERATIONAL ===
+  intent: "Parse and validate spec type field"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Spec with optional type field"
+
+  outputs:
+    type:
+      type: enum
+      values: [base, leaf]
+      description: "Resolved spec type (defaults to leaf)"
+    isBase:
+      type: boolean
+      description: "Whether spec is a base/abstract spec"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "type: base specs are excluded from drift by default": true }
+    - { "type: leaf specs require implementation or show as unwired": true }
+    - { "missing type field defaults to leaf": true }
+    - { "base specs cannot have implementation field": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "explicit base spec"
+        given:
+          spec:
+            specId: "spec.function"
+            type: base
+            required_fields: [intent]
+        then:
+          result.type: "base"
+          result.isBase: true
+
+      - name: "explicit leaf spec"
+        given:
+          spec:
+            specId: "spec.product.create"
+            type: leaf
+            intent: "Create product"
+            implementation: "src/product.ts#create"
+        then:
+          result.type: "leaf"
+          result.isBase: false
+
+      - name: "implicit leaf (default)"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            # No type field
+        then:
+          result.type: "leaf"
+          result.isBase: false
+
+      - name: "base spec excluded from drift"
+        given:
+          spec:
+            specId: "spec.function"
+            type: base
+            required_fields: [intent]
+        then:
+          result.type: "base"
+          result.isBase: true
+
+      - name: "leaf spec with implementation"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            implementation: "src/product.ts#create"
+        then:
+          result.type: "leaf"
+          result.isBase: false
+
+    errors:
+      - name: "base spec with implementation (invalid)"
+        given:
+          spec:
+            specId: "spec.function"
+            type: base
+            implementation: "src/function.ts#fn"  # Invalid: base can't have impl
+        then:
+          result.valid: false
+          "result.errors[0].code": "BASE_SPEC_WITH_IMPLEMENTATION"
+          "result.errors[0].message": "@contains('Base specs cannot have implementation')"
+
+      - name: "invalid type value"
+        given:
+          spec:
+            specId: "spec.test"
+            type: "abstract"  # Invalid value
+            intent: "Test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "INVALID_SPEC_TYPE"
+          "result.errors[0].message": "@contains('must be base or leaf')"
+
+# =============================================================================
+# IMPROVEMENT 11: Implementation Signature Extraction
+# =============================================================================
+# Problem: Test generator doesn't know the actual function signature.
+#          Generates placeholder calls like `await help({...})` instead of
+#          calling the real function with correct argument structure.
+# Solution: Parse implementation file with AST to extract function signature
+
+spec.speccodex.generate.signature:
+  inherits: spec.function
+  implementation: src/core/spec/generators/signature-extractor.ts#extractFunctionSignature
+
+  # === STRATEGIC ===
+  goal: "Extract function signature from implementation for accurate test generation"
+  outcomes:
+    - "Extract function/method name from implementation path"
+    - "Extract parameter names and types from AST"
+    - "Extract return type from AST"
+    - "Handle exported functions, arrow functions, and methods"
+    - "Support Commander command factories (detect pattern)"
+
+  # === OPERATIONAL ===
+  intent: "Parse implementation file to extract function signature"
+
+  inputs:
+    implementationPath:
+      type: string
+      required: true
+      pattern: ".+\\.(ts|tsx|js|jsx)#.+"
+      description: "Path to implementation file with export name (e.g., 'src/fn.ts#myFunction')"
+    projectRoot:
+      type: string
+      description: "Project root for resolving paths"
+
+  outputs:
+    functionName:
+      type: string
+      description: "Name of the exported function"
+    parameters:
+      type: array
+      items:
+        type: object
+        properties:
+          name: { type: string }
+          type: { type: string }
+          optional: { type: boolean }
+          destructured: { type: boolean, description: "Whether parameter is destructured object" }
+    returnType:
+      type: string
+      description: "Return type of the function"
+    isAsync:
+      type: boolean
+      description: "Whether function is async"
+    callPattern:
+      type: enum
+      values: [direct, destructured, factory]
+      description: "How to call this function in tests"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "valid implementation path resolves to function": true }
+    - { "parameters include all function arguments": true }
+    - { "Commander commands detected by return type": true }
+    - { "destructured parameters expanded to individual fields": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "simple function"
+        given:
+          implementationPath: "src/utils/format.ts#formatDate"
+          # Implementation: export function formatDate(date: Date, format: string): string
+        then:
+          result.functionName: "formatDate"
+          result.parameters: "@all(@hasItem({ name: 'date', type: 'Date' }), @hasItem({ name: 'format', type: 'string' }))"
+          result.returnType: "string"
+          result.isAsync: false
+          result.callPattern: "direct"
+
+      - name: "async function with destructured args"
+        given:
+          implementationPath: "src/domain/products/mutations/create.ts#create"
+          # Implementation: export const create = makeAuthMutation(async (ctx, args: { url: string; title?: string }) => { ... })
+        then:
+          result.functionName: "create"
+          result.parameters: "@hasItem({ name: 'args', destructured: true })"
+          result.isAsync: true
+          result.callPattern: "destructured"
+
+      - name: "Commander command factory"
+        given:
+          implementationPath: "src/cli/commands/spec.ts#createSpecCommand"
+          # Implementation: export function createSpecCommand(): Command { ... }
+        then:
+          result.functionName: "createSpecCommand"
+          result.returnType: "Command"
+          result.isCommanderCommand: true
+          result.callPattern: "factory"
+
+      - name: "arrow function export"
+        given:
+          implementationPath: "src/utils/helpers.ts#calculateSum"
+          # Implementation: export const calculateSum = (a: number, b: number): number => a + b;
+        then:
+          result.functionName: "calculateSum"
+          result.parameters: "@all(@hasItem({ name: 'a', type: 'number' }), @hasItem({ name: 'b', type: 'number' }))"
+          result.returnType: "number"
+
+      - name: "extract destructured parameter fields"
+        given:
+          implementationPath: "src/api/handlers.ts#handleRequest"
+          # Implementation: export function handleRequest({ url, method, body }: RequestOptions): Response
+        then:
+          result.parameters: "@hasItem({ name: 'options', destructured: true })"
+          result.destructuredFields: "@all(@hasItem('url'), @hasItem('method'), @hasItem('body'))"
+
+    errors:
+      - name: "file not found"
+        given:
+          implementationPath: "src/nonexistent.ts#fn"
+        then:
+          result.valid: false
+          "result.errors[0].code": "IMPLEMENTATION_NOT_FOUND"
+
+      - name: "export not found"
+        given:
+          implementationPath: "src/utils/format.ts#nonexistentExport"
+        then:
+          result.valid: false
+          "result.errors[0].code": "EXPORT_NOT_FOUND"
+          "result.errors[0].message": "@contains('nonexistentExport')"
+
+      - name: "not a function export"
+        given:
+          implementationPath: "src/constants.ts#MAX_SIZE"
+          # Implementation: export const MAX_SIZE = 100;
+        then:
+          result.valid: false
+          "result.errors[0].code": "NOT_A_FUNCTION"
+
+      - name: "invalid path"
+        then: { error: "INVALID_PATH" }
+
+      - name: "unsupported declaration"
+        then: { error: "UNSUPPORTED_DECLARATION" }
+
+# =============================================================================
+# IMPROVEMENT 12: Implementation-Aware Test Generation
+# =============================================================================
+# Problem: Generated tests use spec ID as function name and flat arguments.
+#          Actual implementation may have different name and argument structure.
+# Solution: Use extracted signature to generate accurate function calls
+
+spec.speccodex.generate.implementation-aware:
+  inherits: spec.function
+  implementation: src/core/spec/generators/unit.ts#generateUnitTests
+
+  # === STRATEGIC ===
+  goal: "Generate tests that correctly call the actual implementation"
+  outcomes:
+    - "Import statement uses actual export name"
+    - "Function call uses correct argument structure"
+    - "Destructured parameters passed as object"
+    - "Type-aware assertions based on return type"
+    - "Commander commands get special test harness"
+
+  # === OPERATIONAL ===
+  intent: "Generate implementation-aware unit tests"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with implementation field"
+    options:
+      type: object
+      properties:
+        useSignature:
+          type: boolean
+          default: true
+          description: "Extract and use function signature from implementation"
+        projectRoot:
+          type: string
+          description: "Project root for resolving implementation path"
+
+  outputs:
+    code:
+      type: string
+      description: "Generated test code"
+    imports:
+      type: array
+      items: { type: string }
+      description: "Import statements generated"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "import matches actual export name": true }
+    - { "destructured args passed as object literal": true }
+    - { "direct args passed positionally": true }
+    - { "factory commands use parseAsync pattern": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "direct call style"
+        given:
+          spec:
+            specId: "spec.format.date"
+            intent: "Format date"
+            implementation: "src/utils/format.ts#formatDate"
+            inputs:
+              date: { type: object }
+              format: { type: string }
+            examples:
+              success:
+                - name: "formats ISO date"
+                  given: { date: "@now", format: "YYYY-MM-DD" }
+                  then: { result: "@matches('\\d{4}-\\d{2}-\\d{2}')" }
+        then:
+          result.code: "@all(@contains('import { formatDate } from'), @contains('formatDate(date, format)'))"
+          result.callStyle: "direct"
+          result.imports: "@hasItem(@contains('formatDate'))"
+
+      - name: "destructured call style"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            implementation: "src/domain/products/mutations/create.ts#create"
+            inputs:
+              url: { type: string, required: true }
+              title: { type: string }
+            examples:
+              success:
+                - name: "creates product"
+                  given: { url: "https://github.com", title: "GitHub" }
+                  then: { result.url: "https://github.com" }
+        then:
+          result.code: "@all(@contains('import { create } from'), @contains('create({ url, title })'))"
+          result.callStyle: "destructured"
+          result.imports: "@hasItem(@contains('create'))"
+
+      - name: "factory command tests"
+        given:
+          spec:
+            specId: "spec.cli.help"
+            intent: "Show help"
+            implementation: "src/cli/commands/spec.ts#createSpecCommand"
+            inputs:
+              topic: { type: string }
+              options: { type: object }
+            examples:
+              success:
+                - name: "shows topic list"
+                  given: { topic: null, options: {} }
+                  then: { result.stdout: "@contains('Help Topics')" }
+        then:
+          result.code: "@all(@contains('import { createSpecCommand } from'), @contains('createSpecCommand()'), @contains('parseAsync'))"
+          result.callStyle: "factory"
+          result.imports: "@hasItem(@contains('createSpecCommand'))"
+
+      - name: "fallback without implementation"
+        given:
+          spec:
+            specId: "spec.test.example"
+            intent: "Example test"
+            # No implementation field
+            inputs:
+              value: { type: string }
+            examples:
+              success:
+                - name: "works"
+                  given: { value: "test" }
+                  then: { result: "@defined" }
+        then:
+          result.code: "@contains('// TODO: Import the function under test')"
+          result.callStyle: "destructured"  # Default assumption
+          result.imports: "@length(0)"
+
+    errors:
+      - name: "invalid spec without intent"
+        given:
+          spec:
+            specId: "spec.test"
+            implementation: "src/test.ts#fn"
+        then:
+          result.valid: false
+          "result.errors[0].code": "INVALID_SPEC"
+
+      - name: "no examples"
+        then: { error: "NO_EXAMPLES" }
+
+      - name: "missing name"
+        then: { error: "MISSING_NAME" }
+
+      - name: "duplicate name"
+        then: { error: "DUPLICATE_NAME" }
+
+# =============================================================================
+# IMPROVEMENT 13: Factory Pattern Detection
+# =============================================================================
+# Problem: Some functions return objects that require further invocation
+#          (e.g., Commander commands, Express routers, builder patterns).
+#          Standard test generation doesn't know how to call these.
+# Solution: Signature extractor detects factory patterns by return type
+#
+# NOTE: This is NOT about generating CLI-specific tests. SpecCodex is
+# project-agnostic. The signature extractor detects factory patterns,
+# and projects can use that information in their own test templates.
+
+spec.speccodex.generate.factory-detection:
+  inherits: spec.function
+  implementation: src/core/spec/generators/signature-extractor.ts#isFactoryReturnType
+
+  # === STRATEGIC ===
+  goal: "Detect factory patterns in function signatures for test generation"
+  outcomes:
+    - "Detect Command return type (CLI frameworks)"
+    - "Detect Router return type (web frameworks)"
+    - "Detect Builder return type (builder patterns)"
+    - "Detect App return type (application factories)"
+    - "Set callPattern to 'factory' when detected"
+    - "Projects customize test templates based on callPattern"
+
+  # === OPERATIONAL ===
+  intent: "Detect factory pattern from function return type"
+
+  inputs:
+    returnType:
+      type: string
+      required: true
+      description: "Return type string from AST"
+
+  outputs:
+    isFactory:
+      type: boolean
+      description: "Whether the return type indicates a factory pattern"
+    callPattern:
+      type: enum
+      values: [direct, destructured, factory]
+      description: "How to call this function in tests"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "Command return type → isFactory: true": true }
+    - { "Router return type → isFactory: true": true }
+    - { "Builder return type → isFactory: true": true }
+    - { "App return type → isFactory: true": true }
+    - { "Factory return type → isFactory: true": true }
+    - { "Program return type → isFactory: true": true }
+    - { "string/number/void → isFactory: false": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "detects Commander command factory"
+        given:
+          returnType: "Command"
+        then:
+          result.isFactory: true
+          result.callPattern: "factory"
+
+      - name: "detects Express router factory"
+        given:
+          returnType: "Router"
+        then:
+          result.isFactory: true
+          result.callPattern: "factory"
+
+      - name: "detects builder pattern"
+        given:
+          returnType: "QueryBuilder<T>"
+        then:
+          result.isFactory: true
+          result.callPattern: "factory"
+
+      - name: "detects app factory"
+        given:
+          returnType: "Application"
+        then:
+          result.isFactory: true
+          result.callPattern: "factory"
+
+      - name: "regular function - direct call"
+        given:
+          returnType: "string"
+        then:
+          result.isFactory: false
+          result.callPattern: "direct"
+
+      - name: "async function - direct call"
+        given:
+          returnType: "Promise<void>"
+        then:
+          result.isFactory: false
+          result.callPattern: "direct"
+
+      - name: "function with object return"
+        given:
+          returnType: "{ id: string; name: string }"
+        then:
+          result.isFactory: false
+          result.callPattern: "direct"
+
+    errors:
+      - name: "empty return type"
+        given:
+          returnType: ""
+        then:
+          result.isFactory: false
+          result.callPattern: "direct"
+
+  # === DESIGN NOTES ===
+  # Why NOT a CLI-specific generator?
+  # - SpecCodex should be project-agnostic
+  # - Projects have different CLI frameworks (Commander, yargs, oclif, etc.)
+  # - Projects have different test harness patterns
+  # - The signature extractor provides the information (isFactory, callPattern)
+  # - Projects use that information in their own test templates
+  #
+  # Example: A project using Commander can check callPattern === 'factory'
+  # and generate their own test harness with captureOutput/runCommand helpers.

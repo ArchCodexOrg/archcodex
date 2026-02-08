@@ -1,0 +1,145 @@
+# ArchCodex Documentation Watch & CI Specifications
+#
+# Specs for watch mode and CI integration for documentation generation.
+# Implementations: src/cli/commands/doc-handlers.ts (runDocWatch, runDocVerify)
+
+version: "1.0"
+
+# =============================================================================
+# DOC WATCH: Watch Mode
+# =============================================================================
+
+spec.archcodex.cli.doc.watch:
+  inherits: spec.function
+  implementation: src/cli/commands/doc.ts#runDocWatch
+
+  # === STRATEGIC ===
+  goal: "Automatically regenerate documentation when source files change"
+  outcomes:
+    - "Watch registry YAML files for changes"
+    - "Watch spec YAML files for changes"
+    - "Regenerate affected ADRs/docs on change"
+    - "Debounce rapid changes"
+    - "Clear terminal option for clean output"
+
+  # === OPERATIONAL ===
+  intent: "Watch and regenerate documentation on file changes"
+
+  inputs:
+    type:
+      type: enum
+      values: [adr, spec, all]
+      default: all
+      description: "Type of documentation to watch"
+    options:
+      type: object
+      properties:
+        output: { type: string, description: "Output directory" }
+        debounce: { type: number, default: 300, description: "Debounce delay in ms" }
+        clear: { type: boolean, default: false, description: "Clear terminal between runs" }
+
+  outputs:
+    # Watch mode runs continuously, no return value
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "watch all documentation"
+        given:
+          type: "all"
+          options: { output: "docs/" }
+        then:
+          # Starts watching, outputs on change
+
+      - name: "watch ADRs only"
+        given:
+          type: "adr"
+          options: { output: "docs/adr/", clear: true }
+        then:
+          # Starts watching registry files
+
+      - name: "watch specs only"
+        given:
+          type: "spec"
+          options: { output: "docs/api/" }
+        then:
+          # Starts watching spec files
+
+# =============================================================================
+# DOC VERIFY: CI Integration
+# =============================================================================
+
+spec.archcodex.cli.doc.verify:
+  inherits: spec.function
+  implementation: src/cli/commands/doc.ts#runDocVerify
+
+  # === STRATEGIC ===
+  goal: "Verify generated documentation is up-to-date (for CI pipelines)"
+  outcomes:
+    - "Compare generated output with existing files"
+    - "Exit 0 if docs are current"
+    - "Exit 1 if docs are stale (with diff)"
+    - "Support both ADR and spec documentation"
+
+  # === OPERATIONAL ===
+  intent: "Check if documentation needs regeneration"
+
+  inputs:
+    type:
+      type: enum
+      values: [adr, spec, all]
+      default: all
+      description: "Type of documentation to verify"
+    options:
+      type: object
+      properties:
+        output: { type: string, required: true, description: "Directory containing docs to verify" }
+        json: { type: boolean, default: false, description: "Output as JSON" }
+        fix: { type: boolean, default: false, description: "Auto-fix by regenerating stale docs" }
+
+  outputs:
+    exitCode: { type: number, description: "0 if up-to-date, 1 if stale" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "docs are up-to-date"
+        given:
+          type: "adr"
+          options: { output: "docs/adr/" }
+        then:
+          result.exitCode: 0
+          result.errors: []
+          result.staleFiles: []
+
+      - name: "uses default type 'all'"
+        given:
+          # type omitted — should default to 'all'
+          options: { output: "docs/" }
+        then:
+          result.exitCode: 0
+
+      - name: "docs are stale"
+        given:
+          type: "adr"
+          options: { output: "docs/adr/" }
+        then:
+          result.exitCode: 1
+          result.staleFiles: "@length(@gte(1))"
+
+      - name: "auto-fix stale docs"
+        given:
+          type: "adr"
+          options: { output: "docs/adr/", fix: true }
+        then:
+          result.exitCode: 0
+          # Files regenerated
+
+    errors:
+      - name: "output directory not found"
+        given:
+          # type omitted — defaults to 'all'; error is from directory, not type
+          options: { output: "nonexistent/" }
+        then:
+          result.exitCode: 1
+          "result.errors[0].code": "DIR_NOT_FOUND"

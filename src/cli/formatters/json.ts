@@ -1,5 +1,6 @@
 /**
  * @arch archcodex.cli.formatter
+ * @intent:cli-output
  */
 import type { ValidationResult, BatchValidationResult } from '../../core/validation/types.js';
 import type { IFormatter, FormatOptions } from './types.js';

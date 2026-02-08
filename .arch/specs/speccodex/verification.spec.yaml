@@ -1,0 +1,656 @@
+# SpecCodex Verification Specifications
+#
+# Specs for verifying that implementations match their specs.
+# Uses unified verifyImplementation function for all verification aspects.
+
+version: "1.0"
+
+# =============================================================================
+# VERIFICATION: Implementation matches spec (unified)
+# =============================================================================
+# verifyImplementation checks existence, signature, errors, outputs, and
+# architecture in a single pass, returning a unified VerifyResult.
+
+spec.speccodex.verify:
+  inherits: spec.function
+  implementation: src/core/spec/verifier.ts#verifyImplementation
+
+  # === STRATEGIC ===
+  goal: "Verify implementation matches spec bidirectionally"
+  outcomes:
+    - "Check implementation exports match spec inputs"
+    - "Check implementation handles all spec error cases"
+    - "Check implementation outputs match spec outputs"
+    - "Check architecture tag matches spec.architectures"
+    - "Report drift between spec and implementation with severity"
+    - "Calculate input/output/error coverage metrics"
+
+  # === OPERATIONAL ===
+  intent: "Verify implementation matches spec"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "ResolvedSpec with inputs, outputs, examples, and implementation"
+    implementationContent:
+      type: string
+      required: true
+      description: "Source code of the implementation file"
+    implementationPath:
+      type: string
+      required: true
+      description: "Path to implementation file"
+    options:
+      type: object
+      properties:
+        checkArchitecture: { type: boolean, default: true, description: "Verify @arch tag" }
+        checkErrors: { type: boolean, default: true, description: "Verify error code handling" }
+        checkInputs: { type: boolean, default: true, description: "Verify input parameters" }
+        checkOutputs: { type: boolean, default: true, description: "Verify output fields" }
+
+  outputs:
+    valid:
+      type: boolean
+      description: "Whether verification passed (no error-severity drift)"
+    specId:
+      type: string
+      description: "ID from the spec being verified"
+    implementationPath:
+      type: string
+      description: "Path to the verified implementation"
+    drift:
+      type: array
+      items:
+        type: object
+        properties:
+          type:
+            type: enum
+            values: [missing_input, extra_input, missing_error, extra_error, architecture_mismatch, missing_output, extra_output, output_type_mismatch]
+          severity:
+            type: enum
+            values: [error, warning]
+          field: { type: string, optional: true }
+          errorCode: { type: string, optional: true }
+          expected: { type: string, optional: true }
+          actual: { type: string, optional: true }
+          message: { type: string }
+    errors:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+    warnings:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+    coverage:
+      type: object
+      properties:
+        inputsCovered: { type: number }
+        inputsTotal: { type: number }
+        errorsCovered: { type: number }
+        errorsTotal: { type: number }
+        outputsCovered: { type: number }
+        outputsTotal: { type: number }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "valid is true only when no error-severity drift items exist": true }
+    - { "extra implementation params are warnings, not errors": true }
+    - { "missing spec inputs in implementation are errors": true }
+    - { "coverage.inputsCovered <= coverage.inputsTotal": true }
+    - { "coverage.errorsCovered <= coverage.errorsTotal": true }
+    - { "coverage.outputsCovered <= coverage.outputsTotal": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "valid implementation - all inputs and errors covered"
+        given:
+          spec:
+            specId: "spec.test.fn"
+            node:
+              implementation: "src/fn.ts#fn"
+              inputs:
+                x: { type: number, required: true }
+              examples:
+                success:
+                  - { name: "basic", given: { x: 1 }, then: { result: 2 } }
+                errors:
+                  - { name: "negative", given: { x: -1 }, then: { error.code: "INVALID" } }
+          implementationContent: |
+            export function fn(x: number) {
+              if (x < 0) throw new ConvexError({ code: 'INVALID' });
+              return x * 2;
+            }
+          implementationPath: "src/fn.ts"
+        then:
+          result.valid: true
+          result.specId: "spec.test.fn"
+          result.implementationPath: "src/fn.ts"
+          result.drift: "@length(0)"
+          result.errors: []
+          result.warnings: []
+          result.coverage.inputsCovered: 1
+          result.coverage.inputsTotal: 1
+
+      - name: "matching inputs pass verification"
+        given:
+          spec:
+            specId: "spec.test.render"
+            node:
+              implementation: "src/components/Button.tsx#render"
+              inputs:
+                label: { type: string }
+          implementationContent: "export function render(label: string) { return label; }"
+          implementationPath: "src/components/Button.tsx"
+        then:
+          result.valid: true
+
+      - name: "extra implementation params are warnings not errors"
+        given:
+          spec:
+            specId: "spec.test.create"
+            node:
+              implementation: "src/domain/products/mutations/create.ts#create"
+              inputs:
+                url: { type: string }
+          implementationContent: "export function create(url: string, debug?: boolean) { return url; }"
+          implementationPath: "src/domain/products/mutations/create.ts"
+        then:
+          result.valid: true
+
+    errors:
+      - name: "missing input parameter"
+        given:
+          spec:
+            specId: "spec.test.fn"
+            node:
+              implementation: "src/test.ts#fn"
+              inputs:
+                url: { type: string, required: true }
+                title: { type: string, required: true }
+          implementationContent: "export function fn(url: string) { return url; }"
+          implementationPath: "src/test.ts"
+        then:
+          result.valid: false
+          "result.drift[0].type": "missing_input"
+
+      - name: "missing error handling"
+        given:
+          spec:
+            specId: "spec.test.fn"
+            node:
+              implementation: "src/test.ts#fn"
+              inputs:
+                url: { type: string }
+              examples:
+                errors:
+                  - name: "invalid url"
+                    given: { url: "" }
+                    then:
+                      error.code: "INVALID_URL"
+          implementationContent: "export function fn(url: string) { return url; }"
+          implementationPath: "src/test.ts"
+        then:
+          result.valid: false
+
+      - name: "architecture mismatch"
+        given:
+          spec:
+            specId: "spec.test.fn"
+            node:
+              implementation: "src/test.ts#fn"
+              architectures: ["archcodex.core.engine"]
+          implementationContent: "/** @arch archcodex.cli.command */\nexport function fn() {}"
+          implementationPath: "src/test.ts"
+        then:
+          result.valid: false
+
+    warnings:
+      - name: "extra implementation parameter"
+        given:
+          spec:
+            specId: "spec.test.fn"
+            node:
+              implementation: "src/test.ts#fn"
+              inputs:
+                url: { type: string }
+          implementationContent: "export function fn(url: string, debug?: boolean) { return url; }"
+          implementationPath: "src/test.ts"
+        then:
+          result.valid: true
+          "result.drift[0].type": "extra_input"
+          "result.drift[0].severity": "warning"
+
+---
+
+spec.speccodex.verify.format:
+  inherits: spec.function
+  implementation: src/core/spec/verifier.ts#formatVerifyResult
+
+  goal: "Format verification results for terminal display"
+  outcomes:
+    - "Show validation status (pass/fail)"
+    - "Show coverage summary (inputs/outputs/errors)"
+    - "List drift items with severity icons"
+
+  intent: "Format VerifyResult as human-readable terminal output"
+
+  inputs:
+    result:
+      type: object
+      required: true
+      description: "VerifyResult to format"
+
+  outputs:
+    result:
+      type: string
+      description: "Formatted terminal output"
+
+  invariants:
+    - "Output includes coverage summary"
+    - "Errors show failure icon"
+    - "Warnings show warning icon"
+
+  examples:
+    success:
+      - name: "format passing result"
+        given:
+          result:
+            valid: true
+            specId: "spec.test"
+            implementationPath: "src/test.ts"
+            drift: []
+            errors: []
+            warnings: []
+            coverage: { inputsCovered: 2, inputsTotal: 2, errorsCovered: 1, errorsTotal: 1, outputsCovered: 1, outputsTotal: 1 }
+        then:
+          result: "@defined"
+
+      - name: "format failing result"
+        given:
+          result:
+            valid: false
+            specId: "spec.test"
+            implementationPath: "src/test.ts"
+            drift:
+              - { type: "missing_input", severity: "error", field: "title", message: "Missing input" }
+            errors: []
+            warnings: []
+            coverage: { inputsCovered: 1, inputsTotal: 2, errorsCovered: 0, errorsTotal: 0, outputsCovered: 0, outputsTotal: 0 }
+        then:
+          result: "@contains('missing_input')"
+
+---
+
+spec.speccodex.verify.inferPath:
+  inherits: spec.function
+  implementation: src/core/spec/verifier.ts#inferImplementationPath
+
+  goal: "Infer implementation file path from spec file path"
+  outcomes:
+    - "Convert .spec.yaml path to .ts path"
+    - "Support colocated spec-implementation convention"
+
+  intent: "Infer implementation path from colocated spec file"
+
+  inputs:
+    specFilePath:
+      type: string
+      required: true
+      description: "Path to spec YAML file"
+
+  outputs:
+    result:
+      type: string
+      description: "Inferred implementation file path"
+
+  invariants:
+    - "Replaces .spec.yaml extension"
+    - "Result ends with .ts"
+
+  examples:
+    success:
+      - name: "infer from spec file"
+        given:
+          specFilePath: "src/core/spec/validator.spec.yaml"
+        then:
+          result: "@defined"
+
+# =============================================================================
+# DRIFT DETECTION 1: Find Unwired Specs
+# =============================================================================
+
+spec.speccodex.drift.unwired:
+  inherits: spec.function
+  implementation: src/core/spec/drift/unwired.ts#findUnwiredSpecs
+
+  # === STRATEGIC ===
+  goal: "Find specs that are not wired to implementations"
+  outcomes:
+    - "List specs without implementation field"
+    - "Distinguish base specs (no impl needed) from leaf specs"
+    - "Suggest implementation paths based on spec ID"
+    - "Track wiring coverage over time"
+
+  # === OPERATIONAL ===
+  intent: "Find specs missing implementation references"
+
+  inputs:
+    registry:
+      type: object
+      required: true
+      description: "Loaded spec registry"
+    options:
+      type: object
+      properties:
+        includeBase: { type: boolean, default: false, description: "Include base/abstract specs" }
+        pattern: { type: string, description: "Filter to specs matching pattern" }
+
+  outputs:
+    unwired:
+      type: array
+      items:
+        type: object
+        properties:
+          specId: { type: string }
+          isBase: { type: boolean }
+          suggestedPath: { type: string, optional: true }
+          hasExamples: { type: boolean }
+    coverage:
+      type: object
+      properties:
+        total: { type: number }
+        wired: { type: number }
+        unwired: { type: number }
+        percentage: { type: number }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "base specs are excluded by default": true }
+    - { "coverage.percentage is (wired / total) * 100": true }
+    - forall:
+        variable: spec
+        in: result.unwired
+        then: { "spec.specId": "@defined" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "all specs wired"
+        given:
+          registry:
+            nodes:
+              spec.test.a: { intent: "A", implementation: "src/a.ts#a" }
+              spec.test.b: { intent: "B", implementation: "src/b.ts#b" }
+        then:
+          result.unwired: []
+          result.coverage.percentage: 100
+
+      - name: "some specs unwired"
+        given:
+          registry:
+            nodes:
+              spec.test.a: { intent: "A", implementation: "src/a.ts#a" }
+              spec.test.b: { intent: "B" }
+              spec.test.c: { intent: "C" }
+        then:
+          result.unwired: "@length(2)"
+          result.coverage.percentage: "@approximately(33.3, 0.1)"
+
+      - name: "base specs excluded"
+        given:
+          registry:
+            nodes:
+              spec.function: { required_fields: [intent] }
+              spec.mutation: { inherits: spec.function }
+              spec.test.a: { inherits: spec.mutation, intent: "A" }
+          options: { includeBase: false }
+        then:
+          result.unwired: "@hasItem({ specId: 'spec.test.a' })"
+          result.unwired: "@not(@hasItem({ specId: 'spec.function' }))"
+
+      - name: "suggests implementation path"
+        given:
+          registry:
+            nodes:
+              spec.product.create: { intent: "Create product" }
+        then:
+          result.unwired: "@hasItem({ specId: 'spec.product.create', suggestedPath: '@contains(\"product\")' })"
+
+# =============================================================================
+# DRIFT DETECTION 2: Find Undocumented Implementations
+# =============================================================================
+
+spec.speccodex.drift.undocumented:
+  inherits: spec.function
+  implementation: src/core/spec/drift/undocumented.ts#findUndocumentedImplementations
+
+  # === STRATEGIC ===
+  goal: "Find implementations without corresponding specs"
+  outcomes:
+    - "Scan codebase for functions/mutations/queries"
+    - "Match against spec registry"
+    - "Report undocumented implementations"
+    - "Suggest spec IDs for undocumented code"
+
+  # === OPERATIONAL ===
+  intent: "Find implementation files without specs"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+    registry:
+      type: object
+      required: true
+    options:
+      type: object
+      properties:
+        patterns:
+          type: array
+          items: { type: string }
+          default: ["src/**/*.ts"]
+        exclude:
+          type: array
+          items: { type: string }
+          default: ["**/*.test.ts", "**/*.spec.ts", "**/node_modules/**"]
+
+  outputs:
+    undocumented:
+      type: array
+      items:
+        type: object
+        properties:
+          path: { type: string }
+          exports: { type: array, items: { type: string } }
+          suggestedSpecId: { type: string }
+          archType: { type: string, optional: true }
+    summary:
+      type: object
+      properties:
+        filesScanned: { type: number }
+        filesWithSpecs: { type: number }
+        filesWithoutSpecs: { type: number }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "test files are excluded": true }
+    - { "each undocumented file has suggestedSpecId": true }
+    - forall:
+        variable: file
+        in: result.undocumented
+        then: { "file.suggestedSpecId": "@defined" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "all implementations documented"
+        given:
+          projectRoot: "/test/project"
+          registry:
+            nodes:
+              spec.a: { implementation: "src/a.ts#a" }
+              spec.b: { implementation: "src/b.ts#b" }
+        then:
+          result.undocumented: []
+          result.summary: "@exists"
+
+      - name: "some undocumented"
+        given:
+          projectRoot: "/test/project"
+          registry:
+            nodes:
+              spec.a: { implementation: "src/a.ts#a" }
+              spec.b: { implementation: "src/b.ts#b" }
+        then:
+          result.undocumented: "@defined"
+
+      - name: "suggests spec ID from path"
+        given:
+          projectRoot: "/test/project"
+          registry: { nodes: {} }
+        then:
+          result.undocumented: "@defined"
+
+      - name: "detects architecture from file pattern"
+        given:
+          projectRoot: "/test/project"
+          registry: { nodes: {} }
+        then:
+          result.undocumented: "@defined"
+
+    errors:
+      - name: "missing project root"
+        given:
+          projectRoot: ""
+          registry: { nodes: {} }
+        then:
+          error: "MISSING_PROJECTROOT"
+
+# =============================================================================
+# DRIFT DETECTION 3: Full Drift Report
+# =============================================================================
+
+spec.speccodex.drift.report:
+  inherits: spec.function
+  implementation: src/core/spec/drift/report.ts#generateDriftReport
+
+  # === STRATEGIC ===
+  goal: "Generate comprehensive spec-implementation drift report"
+  outcomes:
+    - "Combine unwired + undocumented + signature drift"
+    - "Severity levels: error, warning, info"
+    - "Actionable recommendations"
+    - "Trend tracking over time"
+
+  # === OPERATIONAL ===
+  intent: "Generate full drift analysis report"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+    registry:
+      type: object
+      required: true
+    options:
+      type: object
+      properties:
+        includeSignatureCheck: { type: boolean, default: true }
+        includeBehaviorCheck: { type: boolean, default: false }
+        format: { type: enum, values: [json, markdown, terminal], default: terminal }
+
+  outputs:
+    valid:
+      type: boolean
+      description: "No errors found"
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          type: { type: enum, values: [unwired_spec, undocumented_impl, missing_file, missing_export, signature_mismatch, behavior_failure] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string, optional: true }
+          path: { type: string, optional: true }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+    summary:
+      type: object
+      properties:
+        errors: { type: number }
+        warnings: { type: number }
+        info: { type: number }
+        specCoverage: { type: number }
+        implCoverage: { type: number }
+    formattedOutput:
+      type: string
+      description: "Report in requested format"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "valid is false if errors > 0": true }
+    - { "issues are sorted by severity (errors first)": true }
+    - forall:
+        variable: issue
+        in: result.issues
+        then: { "issue.message": "@defined" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "clean codebase"
+        given:
+          projectRoot: "/test/project"
+          registry:
+            nodes:
+              spec.a: { intent: "A", implementation: "src/a.ts#a" }
+        then:
+          result.valid: true
+          result.issues: []
+          result.summary.errors: 0
+
+      - name: "issues found"
+        given:
+          projectRoot: "/test/project"
+          registry:
+            nodes:
+              spec.a: { intent: "A", implementation: "src/a.ts#a" }
+              spec.b: { intent: "B" }
+        then:
+          result.valid: false
+          result.issues: "@hasItem({ type: 'unwired_spec', specId: 'spec.b' })"
+
+      - name: "markdown format"
+        given:
+          projectRoot: "/test/project"
+          options: { format: markdown }
+          registry: { nodes: {} }
+        then:
+          result.formattedOutput: "@contains('# Drift Report')"
+
+      - name: "terminal format with colors"
+        given:
+          projectRoot: "/test/project"
+          options: { format: terminal }
+          registry:
+            nodes:
+              spec.a: { intent: "A" }
+        then:
+          result.formattedOutput: "@contains('WARNING')"
+
+    errors:
+      - name: "missing project root"
+        given:
+          projectRoot: ""
+          registry: { nodes: {} }
+        then:
+          error: "MISSING_PROJECTROOT"

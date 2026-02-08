@@ -1,0 +1,273 @@
+# Forbid Import Constraint Validator Specification
+#
+# Validates that forbidden modules are not imported in source files.
+# Uses SemanticModel for language-agnostic import checking.
+# Supports exact matches and prefix matching (e.g., "chalk" matches "chalk/red").
+
+version: "1.0"
+
+spec.archcodex.constraintForbidImport.validate:
+  inherits: spec.function
+  implementation: src/core/constraints/forbid-import.ts#ForbidImportValidator.validate
+
+  # === STRATEGIC ===
+  goal: "Detect and report forbidden module imports in source files"
+  outcomes:
+    - "Exact module name matches are detected (e.g., 'chalk')"
+    - "Sub-path imports are detected (e.g., 'chalk/red' when 'chalk' is forbidden)"
+    - "Dynamic imports are labeled differently from static imports"
+    - "Fix hints suggest approved alternatives when defined"
+    - "Structured suggestions and did-you-mean are provided for machine-readable fixes"
+
+  # === OPERATIONAL ===
+  intent: "Iterate file imports from SemanticModel, match against forbidden module list, and produce violations with suggestions and fix hints"
+
+  inputs:
+    constraint:
+      type: object
+      required: true
+      description: "The forbid_import constraint definition"
+      properties:
+        value:
+          type: array
+          description: "List of forbidden module names"
+        severity:
+          type: string
+          description: "error or warning"
+        alternative:
+          type: string
+          description: "Single alternative module suggestion"
+        alternatives:
+          type: array
+          description: "Structured alternative modules with exports"
+    context:
+      type: object
+      required: true
+      description: "Constraint context with parsed file"
+      properties:
+        parsedFile:
+          type: object
+          description: "SemanticModel with imports array"
+        constraintSource:
+          type: string
+          description: "Architecture ID defining this constraint"
+
+  outputs:
+    passed:
+      type: boolean
+      description: "True if no forbidden imports found"
+    violations:
+      type: array
+      description: "List of violations for each forbidden import found"
+
+  examples:
+    success:
+      - name: "no forbidden imports - clean file"
+        given:
+          constraint:
+            value: ["chalk", "ora"]
+            severity: "error"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "node:path", isDynamic: false, location: { line: 1, column: 1 } }
+                - { moduleSpecifier: "../utils/logger.js", isDynamic: false, location: { line: 2, column: 1 } }
+            constraintSource: "base.util"
+        then:
+          result.passed: true
+          result.violations: "@length(0)"
+
+      - name: "exact match forbidden import detected"
+        given:
+          constraint:
+            value: ["chalk"]
+            severity: "error"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "chalk", isDynamic: false, location: { line: 3, column: 1 } }
+            constraintSource: "archcodex.core.engine"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+      - name: "sub-path import matches forbidden module"
+        given:
+          constraint:
+            value: ["chalk"]
+            severity: "error"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "chalk/red", isDynamic: false, location: { line: 5, column: 1 } }
+            constraintSource: "archcodex.core.engine"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+      - name: "dynamic import labeled differently"
+        given:
+          constraint:
+            value: ["chalk"]
+            severity: "error"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "chalk", isDynamic: true, location: { line: 10, column: 5 } }
+            constraintSource: "base.util"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+      - name: "multiple forbidden imports produce multiple violations"
+        given:
+          constraint:
+            value: ["chalk", "ora", "commander"]
+            severity: "error"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "chalk", isDynamic: false, location: { line: 1, column: 1 } }
+                - { moduleSpecifier: "ora", isDynamic: false, location: { line: 2, column: 1 } }
+                - { moduleSpecifier: "node:fs", isDynamic: false, location: { line: 3, column: 1 } }
+            constraintSource: "archcodex.core.engine"
+        then:
+          result.passed: false
+          result.violations: "@length(2)"
+
+      - name: "violation message includes architecture source"
+        given:
+          constraint:
+            value: ["chalk"]
+            severity: "error"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "chalk", isDynamic: false, location: { line: 1, column: 1 } }
+            constraintSource: "archcodex.core.engine"
+        then:
+          result.violations: "@length(1)"
+
+      - name: "constraint with alternative provides fix hint"
+        given:
+          constraint:
+            value: ["chalk"]
+            severity: "error"
+            alternative: "src/utils/logger.ts"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "chalk", isDynamic: false, location: { line: 1, column: 1 } }
+            constraintSource: "base.util"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+    errors:
+      - name: "empty imports list produces no violations"
+        given:
+          constraint:
+            value: ["chalk"]
+            severity: "error"
+          context:
+            parsedFile:
+              imports: []
+            constraintSource: "base.util"
+        then:
+          result.passed: true
+          result.violations: "@length(0)"
+
+      - name: "empty forbidden list produces no violations"
+        given:
+          constraint:
+            value: []
+            severity: "error"
+          context:
+            parsedFile:
+              imports:
+                - { moduleSpecifier: "chalk", isDynamic: false, location: { line: 1, column: 1 } }
+            constraintSource: "base.util"
+        then:
+          result.passed: true
+          result.violations: "@length(0)"
+
+  invariants:
+    - description: "passed is true when violations is empty"
+      condition: "result.passed === true implies result.violations.length === 0"
+
+    - description: "passed is false when violations exist"
+      condition: "result.violations.length > 0 implies result.passed === false"
+
+    - description: "each violation has a line number from the import location"
+      condition: "result.violations.every(v => v.line !== null)"
+
+    - description: "violation count never exceeds import count"
+      condition: "result.violations.length <= context.parsedFile.imports.length"
+
+---
+
+spec.archcodex.constraintForbidImport.getFixHint:
+  inherits: spec.function
+  implementation: src/core/constraints/forbid-import.ts#ForbidImportValidator.getFixHint
+
+  # === STRATEGIC ===
+  goal: "Provide actionable fix hints for forbidden import violations"
+  outcomes:
+    - "Constraints with alternatives point to approved modules"
+    - "Layer violations suggest dependency injection"
+    - "Generic violations suggest removal"
+
+  # === OPERATIONAL ===
+  intent: "Generate a context-aware fix hint based on constraint alternatives and forbidden module patterns"
+
+  inputs:
+    constraint:
+      type: object
+      required: true
+      description: "The constraint definition"
+      properties:
+        value: { type: array }
+        alternative: { type: string }
+        alternatives: { type: array }
+
+  outputs:
+    hint:
+      type: string
+      description: "Human-readable fix suggestion"
+
+  examples:
+    success:
+      - name: "constraint with alternatives array points to modules"
+        given:
+          constraint:
+            value: ["chalk"]
+            alternatives:
+              - { module: "src/utils/logger.ts", export: "logger" }
+        then:
+          result: "@contains('approved alternative')"
+
+      - name: "constraint with single alternative"
+        given:
+          constraint:
+            value: ["chalk"]
+            alternative: "src/utils/logger.ts"
+        then:
+          result: "@contains('approved alternative')"
+
+      - name: "layer-related forbidden import suggests DI"
+        given:
+          constraint:
+            value: ["infrastructure/db"]
+        then:
+          result: "@contains('dependency injection')"
+
+      - name: "generic forbidden import suggests removal"
+        given:
+          constraint:
+            value: ["some-lib"]
+        then:
+          result: "@contains('Remove the import')"
+
+  invariants:
+    - description: "always returns a non-empty string"
+      condition: "result.length > 0"

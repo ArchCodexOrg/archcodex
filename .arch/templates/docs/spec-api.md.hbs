@@ -1,0 +1,40 @@
+## {{TITLE}}
+
+> {{INTENT}}
+
+{{#if DESCRIPTION}}
+{{DESCRIPTION}}
+
+{{/if}}
+{{#if SECURITY_SECTION}}
+### Security
+
+{{SECURITY_SECTION}}
+
+{{/if}}
+{{#if INPUTS_SECTION}}
+### Parameters
+
+{{INPUTS_SECTION}}
+
+{{/if}}
+{{#if OUTPUTS_SECTION}}
+### Returns
+
+{{OUTPUTS_SECTION}}
+
+{{/if}}
+{{#if EXAMPLE_CODE}}
+### Example
+
+```typescript
+{{EXAMPLE_CODE}}
+```
+
+{{/if}}
+{{#if IMPLEMENTATION_PATH}}
+### Implementation
+
+Source: [`{{IMPLEMENTATION_PATH}}`]({{IMPLEMENTATION_PATH}})
+
+{{/if}}

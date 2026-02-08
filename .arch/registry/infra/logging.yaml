@@ -5,6 +5,32 @@ archcodex.infra.logging:
   mixins:
     - tested
   description: Logging infrastructure
+  reference_implementations:
+    - src/utils/logger.ts
+  file_pattern: logger*.ts
+  default_path: src/utils
+  code_pattern: |-
+    /**
+     * @arch archcodex.infra.logging
+     *
+     * Structured logging with configurable levels.
+     */
+
+    export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+    export interface Logger {
+      debug(message: string, ...args: unknown[]): void;
+      info(message: string, ...args: unknown[]): void;
+      warn(message: string, ...args: unknown[]): void;
+      error(message: string, ...args: unknown[]): void;
+    }
+
+    /**
+     * Create a logger instance with the given minimum level.
+     */
+    export function createLogger(level: LogLevel = 'info'): Logger {
+      // ... structured logging implementation
+    }
   rationale: |
     Structured logging with levels (debug, info, warn, error).
     Provides consistent output formatting across the application.

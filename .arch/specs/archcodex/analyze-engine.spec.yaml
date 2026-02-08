@@ -1,0 +1,251 @@
+# Schema-Inferred Analysis Engine
+#
+# Orchestrator that runs all checkers against a loaded registry,
+# filters results, and produces an aggregated analysis report.
+
+version: "1.0"
+
+spec.archcodex.analyze:
+  inherits: spec.function
+  implementation: src/core/analysis/engine.ts#runAllAnalyses
+
+  # === STRATEGIC ===
+  goal: "Detect logic, security, data, and consistency issues from YAML schemas"
+  outcomes:
+    - "Run all registered checkers against spec and arch registries"
+    - "Filter results by category and severity"
+    - "Produce sorted, aggregated analysis report"
+    - "Enable targeted analysis of specific specs"
+
+  # === OPERATIONAL ===
+  intent: "Orchestrate schema-inferred analysis across all checker categories"
+
+  inputs:
+    specRegistry:
+      type: object
+      required: true
+      description: "Loaded SpecRegistry with nodes and mixins"
+    archRegistry:
+      type: object
+      required: true
+      description: "Loaded ArchCodex registry with nodes, mixins, intents"
+    componentGroups:
+      type: object
+      required: true
+      description: "Loaded component groups registry"
+    options:
+      type: object
+      description: "Filtering and configuration options"
+      properties:
+        categories:
+          type: array
+          items: { type: string }
+          description: "Filter to specific categories (default: all)"
+        severity:
+          type: enum
+          values: [error, warning, info]
+          description: "Minimum severity threshold (default: info)"
+        specIds:
+          type: array
+          items: { type: string }
+          description: "Filter to specific spec IDs"
+
+  outputs:
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          category: { type: enum, values: [logic, security, data, consistency, completeness, other] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string, optional: true }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+      description: "All detected issues, sorted by severity"
+    summary:
+      type: object
+      properties:
+        total: { type: number }
+        byCategory: { type: object }
+        bySeverity: { type: object }
+        specsAnalyzed: { type: number }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "Issues are sorted by severity (error first, then warning, then info)"
+      condition: >
+        for all i < issues.length - 1:
+        severityOrder(issues[i].severity) <= severityOrder(issues[i+1].severity)
+
+    - description: "Category filter is respected"
+      condition: >
+        if options.categories is set then
+        all issues have category in options.categories
+
+    - description: "Severity filter is respected"
+      condition: >
+        if options.severity is set then
+        all issues have severity >= options.severity threshold
+
+    - description: "Every issue has required fields"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@defined"
+          issue.category: "@defined"
+          issue.severity: "@defined"
+          issue.message: "@defined"
+
+    - description: "Summary total matches issues length"
+      condition: "result.summary.total === result.issues.length"
+
+    - description: "Summary byCategory counts sum to total"
+      condition: "sum(Object.values(result.summary.byCategory)) === result.summary.total"
+
+    - description: "Summary bySeverity counts sum to total"
+      condition: "sum(Object.values(result.summary.bySeverity)) === result.summary.total"
+
+  # === EXAMPLES ===
+  defaults: &empty_options
+    options: {}
+
+  examples:
+    success:
+      - name: "empty registry returns no issues"
+        given:
+          specRegistry: { nodes: {}, mixins: {} }
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          <<: *empty_options
+        then:
+          result.issues: "@empty"
+          result.summary.total: 0
+          result.summary.specsAnalyzed: 0
+
+      - name: "detects unauthenticated mutation with database effects"
+        given:
+          specRegistry:
+            nodes:
+              spec.widget.create:
+                intent: "Create widget"
+                security: { authentication: none }
+                effects:
+                  - { database: { table: widgets, operation: insert } }
+            mixins: {}
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          <<: *empty_options
+        then:
+          result.issues: "@hasItem({ id: 'SEC-1', severity: 'error' })"
+          result.summary.total: "@gt(0)"
+
+      - name: "category filter restricts results"
+        given:
+          specRegistry:
+            nodes:
+              spec.widget.create:
+                intent: "Create widget"
+                security: { authentication: none }
+                effects:
+                  - { database: { table: widgets, operation: insert } }
+            mixins: {}
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          options: { categories: [logic] }
+        then:
+          # Security issue should be filtered out since we only asked for logic
+          result.issues: "@empty"
+
+      - name: "severity filter restricts results"
+        given:
+          specRegistry:
+            nodes:
+              spec.widget.list:
+                intent: "List widgets"
+                outputs: { items: { type: array } }
+                # Missing invariants on mutation = warning, not error
+            mixins: {}
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          options: { severity: error }
+        then:
+          # Only errors returned, warnings filtered out
+          result.issues: "@empty"
+
+      - name: "specId filter limits analysis scope"
+        given:
+          specRegistry:
+            nodes:
+              spec.tag.create:
+                intent: "Create tag"
+                security: { authentication: none }
+                effects: [{ database: { table: tags, operation: insert } }]
+              spec.tag.delete:
+                intent: "Delete tag"
+                security: { authentication: required }
+            mixins: {}
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          options: { specIds: [spec.tag.delete] }
+        then:
+          # Only spec.tag.delete analyzed, so no SEC-1 from spec.tag.create
+          result.summary.specsAnalyzed: 1
+
+---
+
+spec.archcodex.analyze.format:
+  inherits: spec.function
+  implementation: src/core/analysis/engine.ts#formatAnalysisResult
+
+  goal: "Format analysis results for terminal or JSON output"
+  intent: "Format AnalysisResult for display"
+
+  inputs:
+    result:
+      type: object
+      required: true
+      description: "AnalysisResult to format"
+    format:
+      type: enum
+      values: [terminal, json, markdown]
+      default: terminal
+      description: "Output format"
+
+  outputs:
+    result:
+      type: string
+      description: "Formatted output string"
+
+  invariants:
+    - "Terminal format includes SEVERITY_ICONS mapping (ERR/WRN/INF)"
+    - "Output lines are joined and summary appends bySeverity counts"
+    - "Markdown format groups issues by category with ## headers"
+
+  examples:
+    success:
+      - name: "format empty result"
+        given:
+          result: { issues: [], summary: { total: 0, byCategory: {}, bySeverity: {}, specsAnalyzed: 0 } }
+          format: terminal
+        then:
+          result: "@contains('No issues found')"
+
+      - name: "format result with issues"
+        given:
+          result:
+            issues:
+              - { id: "SEC-1", category: security, severity: error, specId: "spec.x", message: "Unauthenticated write" }
+            summary: { total: 1, byCategory: { security: 1 }, bySeverity: { error: 1 }, specsAnalyzed: 1 }
+          format: terminal
+        then:
+          result: "@contains('SEC-1')"
+          result: "@contains('Unauthenticated write')"
+
+      - name: "uses terminal format by default"
+        given:
+          result: { issues: [], summary: { total: 0, byCategory: {}, bySeverity: {}, specsAnalyzed: 0 } }
+          # format omitted — should default to terminal
+        then:
+          result: "@contains('No issues found')"

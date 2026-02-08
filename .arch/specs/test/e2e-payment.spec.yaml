@@ -1,0 +1,495 @@
+version: "1.0"
+
+# ============================================================================
+# E2E Payment Processing Spec - Comprehensive stress test for SpecCodex
+# Uses ALL invariant patterns: condition, field assertions, forall, exists, @all
+# ============================================================================
+
+spec.test.processPayment:
+  type: test  # Example spec for demonstrating SpecCodex features
+  inherits: spec.mutation
+  architectures: [convex.mutation]
+
+  # === STRATEGIC ===
+  goal: "Process payments securely with fraud detection and multi-currency support"
+  outcomes:
+    - "Payment processed within 3 seconds"
+    - "Transaction fees calculated accurately"
+    - "Audit trail created for compliance"
+    - "Failed payments return actionable error codes"
+
+  # === OPERATIONAL ===
+  intent: "Process a payment transaction with validation, fraud checks, and fee calculation"
+  description: |
+    Handles payment processing for multiple currencies and payment methods.
+    Includes fraud detection, fee calculation, and comprehensive audit logging.
+    Supports credit cards, bank transfers, and digital wallets.
+
+  # === INPUTS ===
+  inputs:
+    amount:
+      type: number
+      required: true
+      min: 0.01
+      description: "Payment amount in the specified currency"
+      constraints:
+        - "@gt(0)"
+        - "@lte(1000000)"
+
+    currency:
+      type: enum
+      values: [USD, EUR, GBP]
+      required: true
+      description: "ISO 4217 currency code"
+
+    paymentMethod:
+      type: object
+      required: true
+      description: "Payment method details"
+      properties:
+        type:
+          type: enum
+          values: [credit_card, debit_card, bank_transfer, digital_wallet]
+          required: true
+        token:
+          type: string
+          required: true
+          description: "Tokenized payment credential"
+          pattern: "^tok_[a-zA-Z0-9]{24}$"
+        last4:
+          type: string
+          required: true
+          description: "Last 4 digits for display"
+          pattern: "^[0-9]{4}$"
+        expiryMonth:
+          type: number
+          min: 1
+          max: 12
+        expiryYear:
+          type: number
+          min: 2024
+          max: 2035
+
+    metadata:
+      type: object
+      required: false
+      description: "Optional payment metadata"
+      properties:
+        orderId:
+          type: string
+        customerId:
+          type: string
+        description:
+          type: string
+          max: 500
+        tags:
+          type: array
+          items: { type: string, max: 50 }
+
+    idempotencyKey:
+      type: string
+      required: true
+      description: "Unique key for idempotent retries"
+      pattern: "^[a-f0-9]{32}$"
+
+  # === OUTPUTS ===
+  outputs:
+    transactionId:
+      type: string
+      description: "Unique transaction identifier"
+      constraints:
+        - "@matches('^txn_[a-zA-Z0-9]{24}$')"
+
+    status:
+      type: enum
+      values: [pending, processing, completed, failed, refunded]
+      description: "Current transaction status"
+
+    processedAt:
+      type: number
+      description: "Unix timestamp of processing completion"
+      constraints:
+        - "@gt(0)"
+
+    fees:
+      type: object
+      description: "Fee breakdown"
+      properties:
+        amount:
+          type: number
+          description: "Total fee amount"
+          constraints:
+            - "@gte(0)"
+        currency:
+          type: string
+        percentage:
+          type: number
+          description: "Fee as percentage of transaction"
+          constraints:
+            - "@between(0, 10)"
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              amount: { type: number }
+
+    netAmount:
+      type: number
+      description: "Amount after fees deducted"
+      constraints:
+        - "@gte(0)"
+
+    riskScore:
+      type: number
+      description: "Fraud risk score (0-100)"
+      constraints:
+        - "@between(0, 100)"
+
+    receipt:
+      type: object
+      properties:
+        number: { type: string }
+        url: { type: string, validate: url }
+
+  # === SECURITY ===
+  security:
+    authentication: required
+    permissions: [payment.process, payment.read]
+    rate_limit: { requests: 30, window: "1m" }
+    encryption: required
+    pci_compliance: level_1
+
+  # === INVARIANTS - Using ALL patterns ===
+  invariants:
+    # --- Pattern 1: Simple field assertions with placeholders ---
+    - description: "Transaction ID follows expected format"
+      "result.transactionId": "@matches('^txn_[a-zA-Z0-9]{24}$')"
+
+    - description: "Risk score is within valid range"
+      "result.riskScore": "@between(0, 100)"
+
+    - description: "Net amount is non-negative"
+      "result.netAmount": "@gte(0)"
+
+    - description: "Fee percentage is reasonable"
+      "result.fees.percentage": "@all(@gte(0), @lte(10))"
+
+    # --- Pattern 2: Condition expressions with complex logic ---
+    - description: "Net amount equals input amount minus fees"
+      condition: "result.netAmount === input.amount - result.fees.amount"
+
+    - description: "Successful payments must have valid transaction ID"
+      condition: "result.status !== 'completed' || result.transactionId !== undefined"
+
+    - description: "Failed payments must have no fees charged"
+      condition: "result.status !== 'failed' || result.fees.amount === 0"
+
+    - description: "Processing timestamp is after current time"
+      condition: "result.processedAt >= Date.now() - 5000"
+
+    - description: "Fee amount matches percentage calculation"
+      condition: "Math.abs(result.fees.amount - (input.amount * result.fees.percentage / 100)) < 0.01"
+
+    # --- Pattern 3: forall for array validation ---
+    - description: "All fee breakdown items have valid amounts"
+      forall:
+        variable: fee
+        in: result.fees.breakdown
+        then: { "fee.amount": "@gte(0)" }
+
+    - description: "All fee breakdown items have names"
+      forall:
+        variable: fee
+        in: result.fees.breakdown
+        then: { "fee.name": "@exists" }
+
+    - description: "All metadata tags are non-empty strings"
+      forall:
+        variable: tag
+        in: input.metadata.tags
+        where: "input.metadata && input.metadata.tags"
+        then: { "tag": "@matches('^.+$')" }
+
+    # --- Pattern 4: exists for conditional checks ---
+    - description: "At least one fee breakdown item exists for completed payments"
+      exists:
+        variable: fee
+        in: result.fees.breakdown
+        where: { "fee.amount": "@gt(0)" }
+
+    # --- Pattern 5: Composite @all assertions ---
+    - description: "Fee amount is reasonable for the transaction"
+      "result.fees.amount": "@all(@gte(0), @lt(input.amount))"
+
+    # --- Additional complex invariants ---
+    - description: "Currency in fees matches input currency"
+      condition: "result.fees.currency === input.currency"
+
+    - description: "Pending status requires no receipt"
+      condition: "result.status !== 'pending' || result.receipt === undefined"
+
+    - description: "Completed payments always have receipt"
+      condition: "result.status !== 'completed' || (result.receipt && result.receipt.number)"
+
+    # --- Idempotency: scheduler effect requires idempotent behavior ---
+    - description: "Scheduled reconciliation job is idempotent (safe to retry)"
+      condition: "reconcilePayment(transactionId) is idempotent — repeated execution has no additional effect"
+
+  # === EFFECTS ===
+  effects:
+    - audit_log: { action: "payment.process", resourceType: "transaction" }
+    - database: { table: "transactions", operation: "insert" }
+    - database: { table: "ledger_entries", operation: "insert" }
+    - notification: { type: "payment_receipt", channel: "email" }
+    - scheduler: { job: "reconcilePayment", delay: "1h" }
+    - cache: { invalidated: "user_balance" }
+    - metrics: { counter: "payments_processed", tags: ["currency", "method"] }
+
+  # === YAML ANCHORS FOR REUSE ===
+  defaults:
+    valid_card: &valid_card
+      type: credit_card
+      token: "tok_abc123def456ghi789jkl0"
+      last4: "4242"
+      expiryMonth: 12
+      expiryYear: 2026
+
+    valid_bank: &valid_bank
+      type: bank_transfer
+      token: "tok_bank1234567890abcdef"
+      last4: "9876"
+
+    auth_context: &auth_context
+      user: "@authenticated"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "process USD credit card payment"
+        given:
+          <<: *auth_context
+          amount: 99.99
+          currency: USD
+          paymentMethod: *valid_card
+          idempotencyKey: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4"
+        then:
+          result.status: completed
+          result.transactionId: "@matches('^txn_')"
+          result.processedAt: "@gt(0)"
+          result.netAmount: "@lt(99.99)"
+          result.fees.amount: "@gt(0)"
+          result.fees.currency: USD
+          result.receipt.number: "@exists"
+
+      - name: "process EUR bank transfer"
+        given:
+          <<: *auth_context
+          amount: 500.00
+          currency: EUR
+          paymentMethod: *valid_bank
+          idempotencyKey: "f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3"
+          metadata:
+            orderId: "order_123"
+            description: "Monthly subscription"
+        then:
+          result.status: "@oneOf(['completed', 'pending'])"
+          result.transactionId: "@exists"
+          result.netAmount: "@gte(0)"
+
+      - name: "process GBP payment with metadata tags"
+        given:
+          <<: *auth_context
+          amount: 250.00
+          currency: GBP
+          paymentMethod: *valid_card
+          idempotencyKey: "1234567890abcdef1234567890abcdef"
+          metadata:
+            orderId: "gbp_order_456"
+            customerId: "cust_789"
+            tags: ["subscription", "monthly", "premium"]
+        then:
+          result.status: completed
+          result.riskScore: "@between(0, 50)"
+
+    errors:
+      - name: "reject invalid token format"
+        given:
+          <<: *auth_context
+          amount: 50.00
+          currency: USD
+          paymentMethod:
+            type: credit_card
+            token: "invalid_token"
+            last4: "1234"
+          idempotencyKey: "abcdef1234567890abcdef1234567890"
+        then:
+          error: "INVALID_PAYMENT_TOKEN"
+
+      - name: "reject unauthenticated request"
+        given:
+          user: "@no_access"
+          amount: 100.00
+          currency: USD
+          paymentMethod: *valid_card
+          idempotencyKey: "00000000000000000000000000000000"
+        then:
+          error: "NOT_AUTHENTICATED"
+
+      - name: "reject zero amount"
+        given:
+          <<: *auth_context
+          amount: 0
+          currency: USD
+          paymentMethod: *valid_card
+          idempotencyKey: "11111111111111111111111111111111"
+        then:
+          error: "INVALID_AMOUNT"
+
+      - name: "reject negative amount"
+        given:
+          <<: *auth_context
+          amount: -50.00
+          currency: EUR
+          paymentMethod: *valid_card
+          idempotencyKey: "22222222222222222222222222222222"
+        then:
+          error: "INVALID_AMOUNT"
+
+      - name: "reject expired card"
+        given:
+          <<: *auth_context
+          amount: 75.00
+          currency: USD
+          paymentMethod:
+            type: credit_card
+            token: "tok_expired1234567890abcdef"
+            last4: "5555"
+            expiryMonth: 1
+            expiryYear: 2020
+          idempotencyKey: "33333333333333333333333333333333"
+        then:
+          error: "CARD_EXPIRED"
+
+      - name: "reject unsupported currency"
+        given:
+          <<: *auth_context
+          amount: 100.00
+          currency: JPY
+          paymentMethod: *valid_card
+          idempotencyKey: "44444444444444444444444444444444"
+        then:
+          error: "UNSUPPORTED_CURRENCY"
+
+    boundaries:
+      - name: "minimum payment amount"
+        given:
+          <<: *auth_context
+          amount: 0.01
+          currency: USD
+          paymentMethod: *valid_card
+          idempotencyKey: "55555555555555555555555555555555"
+        then:
+          result.status: "@oneOf(['completed', 'pending'])"
+          result.netAmount: "@gte(0)"
+        property: "forall amounts >= 0.01, payment processing succeeds"
+
+      - name: "maximum payment amount"
+        given:
+          <<: *auth_context
+          amount: 1000000
+          currency: USD
+          paymentMethod: *valid_card
+          idempotencyKey: "66666666666666666666666666666666"
+        then:
+          result.status: "@oneOf(['completed', 'pending', 'processing'])"
+          result.riskScore: "@gte(50)"
+        property: "high-value payments trigger elevated risk scoring"
+
+      - name: "large metadata tags array"
+        given:
+          <<: *auth_context
+          amount: "@number(0.01, 10000)"
+          currency: EUR
+          paymentMethod: *valid_bank
+          idempotencyKey: "77777777777777777777777777777777"
+          metadata:
+            orderId: "@uuid"
+            tags: "@array(10, @string(20))"
+        then:
+          result: "@exists"
+        property: "forall valid inputs with many tags, processing completes"
+
+      - name: "complex metadata with nested order items"
+        given:
+          <<: *auth_context
+          amount: "@number(100, 5000)"
+          currency: GBP
+          paymentMethod: *valid_card
+          idempotencyKey: "88888888888888888888888888888888"
+          metadata:
+            orderId: "@uuid"
+            customerId: "@uuid"
+            description: "@string(200)"
+        then:
+          result.transactionId: "@exists"
+          result.status: "@oneOf(['completed', 'pending'])"
+        property: "forall valid complex metadata, payment processes correctly"
+
+    warnings:
+      - name: "high risk score triggers review"
+        given:
+          <<: *auth_context
+          amount: 9999.99
+          currency: USD
+          paymentMethod: *valid_card
+          idempotencyKey: "99999999999999999999999999999999"
+        then:
+          result.status: pending
+          result.riskScore: "@gt(70)"
+        warning: "High-value transaction flagged for manual review"
+
+  # === UI (for completeness) ===
+  ui:
+    trigger:
+      location: "checkout page"
+      element: "[data-payment-submit]"
+      action: click
+      label: "Complete Payment"
+      shortcut: "Cmd+Enter"
+
+    interaction:
+      optimistic: false
+      loading: "Full-screen overlay with progress indicator"
+      flow:
+        - "User enters payment details"
+        - "User clicks Complete Payment"
+        - "Loading overlay appears with progress"
+        - "Success confirmation or error message displayed"
+      states:
+        processing:
+          when: "isProcessing"
+          then: { disableSubmit: true, showSpinner: true }
+        error:
+          when: "hasError"
+          then: { showError: true, highlightFields: true }
+
+    feedback:
+      success: "Payment processed successfully! Check your email for receipt."
+      error: "Payment failed. Please check your details and try again."
+      loading:
+        indicator: "spinner"
+        ariaLive: "polite"
+
+    accessibility:
+      role: "form"
+      label: "Payment form"
+      focusTrap: true
+      keyboardNav:
+        - { key: "Enter", action: "submit" }
+        - { key: "Escape", action: "cancel" }
+      announcements:
+        - { when: "processing", message: "Processing payment...", priority: "polite" }
+        - { when: "success", message: "Payment successful", priority: "assertive" }
+        - { when: "error", message: "Payment failed", priority: "assertive" }

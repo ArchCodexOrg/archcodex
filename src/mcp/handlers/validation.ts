@@ -149,10 +149,9 @@ export async function handleRead(projectRoot: string, file: string, format?: str
   const patternRegistry = await loadPatternRegistry(projectRoot);
   const engine = new HydrationEngine(config, registry);
 
-  // For AI format, don't include file content - just the architectural context
-  // This significantly reduces output size and token usage
+  // Never include file content — archcodex_read returns only architectural data
   const effectiveFormat = (format as 'verbose' | 'terse' | 'ai') || 'ai';
-  const includeContent = effectiveFormat !== 'ai';
+  const includeContent = false;
 
   const result = await engine.hydrateFile(file, {
     format: effectiveFormat,
@@ -191,11 +190,6 @@ export async function handleRead(projectRoot: string, file: string, format?: str
     tokenCount: result.tokenCount,
     truncated: result.truncated,
   };
-
-  // Only include file content for non-AI formats
-  if (includeContent && result.content) {
-    response.fileContent = result.content;
-  }
 
   if (patternsOutput.length > 0) {
     response.relevantPatterns = patternsOutput;

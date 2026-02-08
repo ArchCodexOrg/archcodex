@@ -27,6 +27,53 @@ archcodex.common.errors:
         in_target_files: "src/**/*.ts"
       severity: warning
       why: Error codes should be used; unused codes indicate dead code
+  reference_implementations:
+    - src/utils/errors.ts
+  file_pattern: errors.ts
+  code_pattern: |-
+    /**
+     * @arch archcodex.common.errors
+     *
+     * Error types and codes for the application.
+     * All errors should extend the base error class.
+     */
+
+    /** Base error class with structured error codes. */
+    export class AppError extends Error {
+      constructor(
+        public readonly code: string,
+        message: string,
+        public readonly details?: Record<string, unknown>
+      ) {
+        super(message);
+        this.name = 'AppError';
+        Error.captureStackTrace(this, this.constructor);
+      }
+
+      toJSON(): Record<string, unknown> {
+        return {
+          name: this.name,
+          code: this.code,
+          message: this.message,
+          details: this.details,
+        };
+      }
+    }
+
+    /** Domain-specific error subclass. */
+    export class DomainError extends AppError {
+      constructor(code: string, message: string, details?: Record<string, unknown>) {
+        super(code, message, details);
+        this.name = 'DomainError';
+      }
+    }
+
+    /** Standard error codes. */
+    export const ErrorCodes = {
+      NOT_FOUND: 'E001',
+      INVALID_INPUT: 'E002',
+      PERMISSION_DENIED: 'E003',
+    } as const;
   hints:
     - Define error codes as constants
     - Error classes should be simple and serializable

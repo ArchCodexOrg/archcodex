@@ -1,0 +1,199 @@
+# Scaffold Engine Specification
+#
+# File generation engine that scaffolds new source files from templates.
+# Supports TypeScript, Python, and Go with Handlebars-style variable substitution,
+# reference implementation skeleton extraction, and configurable output paths.
+
+version: "1.0"
+
+spec.archcodex.scaffoldEngine.scaffold:
+  inherits: spec.function
+  implementation: src/core/scaffold/engine.ts#ScaffoldEngine.scaffold
+
+  # === STRATEGIC ===
+  goal: "Generate new source files from architecture templates with correct @arch tags and structure"
+  outcomes:
+    - "Developers get correctly structured files for any architecture"
+    - "Generated files include @arch tag, class name, and date"
+    - "Reference implementations produce skeleton code (TypeScript only)"
+    - "Multi-language support: TypeScript, Python, Go"
+    - "Existing files are protected unless overwrite is explicitly requested"
+
+  # === OPERATIONAL ===
+  intent: "Resolve template, build variables, apply substitution, determine output path, and write the scaffolded file"
+
+  inputs:
+    options:
+      type: object
+      required: true
+      description: "ScaffoldOptions with archId, name, outputPath, template, variables, overwrite, language"
+      properties:
+        archId:
+          type: string
+          required: true
+          description: "Architecture ID (e.g. 'archcodex.core.engine')"
+        name:
+          type: string
+          required: true
+          description: "Name for the generated class/component"
+        outputPath:
+          type: string
+          required: false
+          description: "Output directory path (uses architecture default_path or index suggested_path if omitted)"
+        template:
+          type: string
+          required: false
+          description: "Template name to use (uses default language template if omitted)"
+        variables:
+          type: object
+          required: false
+          description: "Additional template variables as key-value pairs"
+        overwrite:
+          type: boolean
+          required: false
+          description: "Whether to overwrite existing files (default: false)"
+        language:
+          type: enum
+          values: [typescript, python, go]
+          required: false
+          description: "Target language. Inferred from outputPath extension if not specified, defaults to TypeScript"
+    index:
+      type: object
+      required: false
+      description: "Optional Index for template and path resolution from findByArchId"
+
+  outputs:
+    success:
+      type: boolean
+      description: "Whether scaffolding succeeded"
+    filePath:
+      type: string
+      description: "Absolute path to the generated file (present on success)"
+    content:
+      type: string
+      description: "The generated file content (present on success)"
+    error:
+      type: string
+      description: "Error message (present on failure)"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "scaffolds TypeScript file with default template"
+        given:
+          options:
+            archId: "archcodex.core.engine"
+            name: "CacheManager"
+            outputPath: "src/core/cache"
+        then:
+          result.success: true
+          result.filePath: "@defined"
+          result.content: "@all(@contains('@arch archcodex.core.engine'), @contains('CacheManager'), @contains('export class CacheManager'))"
+
+      - name: "scaffolds Python file when language specified"
+        given:
+          options:
+            archId: "app.util"
+            name: "Validator"
+            outputPath: "src/utils"
+            language: "python"
+        then:
+          result.success: true
+          result.content: "@all(@contains('# @arch app.util'), @contains('class Validator'))"
+
+      - name: "scaffolds Go file when language specified"
+        given:
+          options:
+            archId: "app.core"
+            name: "Handler"
+            outputPath: "pkg/handlers"
+            language: "go"
+        then:
+          result.success: true
+          result.content: "@all(@contains('// @arch app.core'), @contains('type Handler struct'), @contains('package'))"
+
+      - name: "infers language from .py output path extension"
+        given:
+          options:
+            archId: "app.util"
+            name: "Helper"
+            outputPath: "src/utils/helper.py"
+        then:
+          result.success: true
+          result.content: "@contains('class Helper')"
+
+      - name: "applies custom variables"
+        given:
+          options:
+            archId: "archcodex.core.engine"
+            name: "Widget"
+            outputPath: "src/core"
+            variables:
+              CUSTOM_VAR: "custom_value"
+        then:
+          result.success: true
+
+      - name: "overwrites existing file when overwrite is true"
+        given:
+          options:
+            archId: "archcodex.core.engine"
+            name: "Existing"
+            outputPath: "src/core"
+            overwrite: true
+        then:
+          result.success: true
+
+    errors:
+      - name: "fails when file already exists and overwrite is false"
+        given:
+          options:
+            archId: "archcodex.core.engine"
+            name: "Existing"
+            outputPath: "src/core"
+            overwrite: false
+        then:
+          result.success: false
+          result.error: "@all(@contains('already exists'), @contains('--overwrite'))"
+
+      - name: "fails when custom template not found"
+        given:
+          options:
+            archId: "archcodex.core.engine"
+            name: "Widget"
+            outputPath: "src/core"
+            template: "nonexistent-template"
+        then:
+          result.success: false
+          result.error: "@contains('Failed to load template')"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "success true implies filePath and content are present"
+      condition: "if result.success then result.filePath is defined and result.content is defined"
+
+    - description: "success false implies error is present"
+      condition: "if !result.success then result.error is defined"
+
+    - description: "generated content always contains the @arch tag"
+      condition: "if result.success then result.content contains archId"
+
+    - description: "generated content always contains the class/component name"
+      condition: "if result.success then result.content contains options.name"
+
+    - description: "filePath is always absolute when present"
+      condition: "if result.filePath then result.filePath starts with '/'"
+
+    - description: "TypeScript files use .ts extension"
+      condition: >
+        if result.success and language is typescript
+        then result.filePath ends with '.ts'
+
+    - description: "Python files use .py extension"
+      condition: >
+        if result.success and language is python
+        then result.filePath ends with '.py'
+
+    - description: "Go files use .go extension"
+      condition: >
+        if result.success and language is go
+        then result.filePath ends with '.go'

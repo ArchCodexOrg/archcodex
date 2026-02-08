@@ -2,9 +2,6 @@
  * @arch archcodex.test.unit
  * @intent:cli-output
  */
-/**
- * @arch archcodex.test.unit
- */
 import { describe, it, expect } from 'vitest';
 import { FeatureEngine } from '../../../../src/core/scaffold/feature-engine.js';
 import type { FeatureDefinition } from '../../../../src/core/registry/schema.js';

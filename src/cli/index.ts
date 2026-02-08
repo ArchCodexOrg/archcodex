@@ -12,6 +12,7 @@ import { createFetchCommand } from './commands/fetch.js';
 import { createDiscoverCommand } from './commands/discover.js';
 import { createScaffoldCommand } from './commands/scaffold.js';
 import { createInitCommand } from './commands/init.js';
+import { createInitHooksCommand } from './commands/init-hooks.js';
 import { createAuditCommand } from './commands/audit.js';
 import { createVerifyCommand } from './commands/verify.js';
 import { createReindexCommand } from './commands/reindex.js';
@@ -47,8 +48,15 @@ import { createTestPatternCommand } from './commands/test-pattern.js';
 import { createPromoteCommand } from './commands/promote.js';
 import { createPlanContextCommand } from './commands/plan-context.js';
 import { createValidatePlanCommand } from './commands/validate-plan.js';
+import { createContextCommand } from './commands/context.js';
+import { createMapCommand } from './commands/map.js';
+import { createPromptCommand } from './commands/prompt.js';
+import { createSpecCommand } from './commands/spec/index.js';
+import { createDocCommand } from './commands/doc.js';
+import { createFeatureAuditCommand } from './commands/feature-audit.js';
+import { createAnalyzeCommand } from './commands/analyze.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const VERSION = JSON.parse(readFileSync(resolve(__dirname, '../../../package.json'), 'utf-8')).version;
+const VERSION = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8')).version;
 /** Create the CLI program. */
 export function createCli(): Command {
   const program = new Command()
@@ -59,12 +67,12 @@ export function createCli(): Command {
       formatHelp: () => getEssentialsHelp(VERSION),
     });
   [createCheckCommand, createReadCommand, createResolveCommand, createFetchCommand, createDiscoverCommand, createScaffoldCommand,
-   createInitCommand, createAuditCommand, createVerifyCommand, createReindexCommand, createGardenCommand, createWhyCommand,
+   createInitCommand, createInitHooksCommand, createAuditCommand, createVerifyCommand, createReindexCommand, createGardenCommand, createWhyCommand,
    createHealthCommand, createGraphCommand, createWatchCommand, createDiffCommand, createDiffArchCommand, createMigrateCommand,
    createFeedbackCommand, createSyncIndexCommand, createSimulateCommand, createLearnCommand, createNeighborhoodCommand,
    createTagCommand, createInferCommand, createBootstrapCommand, createSchemaCommand, createDecideCommand,
    createMigrateRegistryCommand, createIntentsCommand, createActionCommand, createFeatureCommand, createTypesCommand,
    createEssentialsCommand, createHelpCommand, createSimilarityCommand, createSessionContextCommand, createImpactCommand,
-   createTestPatternCommand, createPromoteCommand, createPlanContextCommand, createValidatePlanCommand].forEach((cmd) => program.addCommand(cmd()));
+   createTestPatternCommand, createPromoteCommand, createPlanContextCommand, createValidatePlanCommand, createContextCommand, createMapCommand, createPromptCommand, createSpecCommand, createDocCommand, createFeatureAuditCommand, createAnalyzeCommand].forEach((cmd) => program.addCommand(cmd()));
   return program;
 }

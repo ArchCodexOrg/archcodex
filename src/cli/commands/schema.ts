@@ -415,9 +415,7 @@ async function handleQuery(query: string, format: string, projectRoot: string): 
       }
       return;
     }
-  } catch {
-    // Registry not available
-  }
+  } catch { /* registry not available, fall back to suggestions */ }
 
   // Not found - suggest similar
   console.log(`\x1b[33mNo match for "${query}"\x1b[0m`);

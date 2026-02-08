@@ -149,7 +149,7 @@ export async function findSimilarBlocks(
 
       // Clean up source file to free memory
       project.removeSourceFile(sourceFile);
-    } catch {
+    } catch { /* TypeScript parse error */
       // Skip files that can't be parsed
     }
   }

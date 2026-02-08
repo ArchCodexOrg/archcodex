@@ -1,5 +1,5 @@
 /**
- * @arch archcodex.infra.adapter
+ * @arch archcodex.infra.config
  *
  * Loader for .archconfig credentials file.
  * Supports loading API keys from ~/.archconfig or .archconfig in project root.
@@ -72,9 +72,7 @@ export async function loadArchConfig(projectRoot?: string): Promise<ArchConfig> 
     try {
       const content = await readFile(homeConfig, 'utf-8');
       Object.assign(config, parseConfigFile(content));
-    } catch {
-      // Ignore errors reading home config
-    }
+    } catch { /* ignore errors reading home config */ }
   }
 
   // Check project root (higher priority, overrides home)
@@ -84,9 +82,7 @@ export async function loadArchConfig(projectRoot?: string): Promise<ArchConfig> 
       try {
         const content = await readFile(projectConfig, 'utf-8');
         Object.assign(config, parseConfigFile(content));
-      } catch {
-        // Ignore errors reading project config
-      }
+      } catch { /* ignore errors reading project config */ }
     }
   }
 

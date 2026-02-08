@@ -30,28 +30,34 @@ const TOPICS: Record<string, {
       { name: 'infer', summary: 'Suggest architecture for existing files', example: 'infer src/utils/helper.ts' },
       { name: 'decide', summary: 'Interactive decision tree', example: 'decide --start' },
       { name: 'tag', summary: 'Add @arch tag to file', example: 'tag src/file.ts domain.service' },
+      { name: 'action', summary: 'Get guidance for common tasks with checklists', example: 'action "add entry action"' },
+      { name: 'feature', summary: 'Multi-file scaffolding for features', example: 'feature --list' },
     ],
-    seeAlso: ['validating', 'understanding'],
+    seeAlso: ['validating', 'understanding', 'wiring'],
   },
   validating: {
     description: 'Checking code against architectural constraints',
-    tip: 'validate-plan → [write code] → check',
+    tip: 'validate-plan → [write code] → check → feature-audit',
     commands: [
       { name: 'check', summary: 'Validate constraints (post-edit)', example: 'check src/services/*.ts' },
       { name: 'validate-plan', summary: 'Pre-flight check before writing code', example: 'validate-plan --stdin' },
+      { name: 'feature-audit', summary: 'Verify feature wiring across layers', example: 'feature-audit --mutation duplicateOrder --entity orders' },
       { name: 'verify', summary: 'LLM behavioral verification', example: 'verify src/payment/processor.ts' },
       { name: 'intents', summary: 'Validate intent usage & list definitions', example: 'intents --validate' },
       { name: 'test-pattern', summary: 'Test regex before committing', example: 'test-pattern "console\\.log" "src/**/*.ts"' },
       { name: 'watch', summary: 'Re-validate on file changes', example: 'watch "src/**/*.ts"' },
     ],
-    seeAlso: ['understanding', 'refactoring'],
+    seeAlso: ['understanding', 'refactoring', 'wiring'],
   },
   understanding: {
     description: 'Learning what constraints apply and why',
-    tip: 'session-context (broad) or plan-context (scoped) → read (per-file)',
+    tip: 'context (unified) or session-context (broad) or plan-context (scoped) → read (per-file)',
     commands: [
+      { name: 'context', summary: 'Unified context (module + entity + constraints)', example: 'context --module src/core/db/' },
       { name: 'session-context', summary: 'Prime context (call at session start)', example: 'session-context --with-patterns' },
       { name: 'plan-context', summary: 'Scoped context for a directory/task', example: 'plan-context src/core/health/' },
+      { name: 'entity-context', summary: 'Entity schema + relationships + UI components', example: 'entity-context products' },
+      { name: 'map', summary: 'Query architecture map with role-based grouping', example: 'map --module src/core/db/' },
       { name: 'read', summary: 'Read one file with constraints', example: 'read src/service.ts --format ai' },
       { name: 'why', summary: 'Explain constraint origins', example: 'why src/service.ts forbid_import:axios' },
       { name: 'neighborhood', summary: 'Show import boundaries', example: 'neighborhood src/core/engine.ts' },
@@ -59,7 +65,7 @@ const TOPICS: Record<string, {
       { name: 'resolve', summary: 'Show flattened architecture', example: 'resolve domain.service' },
       { name: 'schema', summary: 'Available rules, mixins, examples', example: 'schema --examples' },
     ],
-    seeAlso: ['creating', 'validating'],
+    seeAlso: ['creating', 'validating', 'wiring'],
   },
   refactoring: {
     description: 'Changing architectures and previewing impact',
@@ -77,6 +83,7 @@ const TOPICS: Record<string, {
     description: 'Monitoring architecture quality and maintenance',
     commands: [
       { name: 'health', summary: 'Architecture health dashboard (use --no-layers if slow)', example: 'health --json' },
+      { name: 'analyze', summary: 'Schema-inferred analysis (48 checks across 6 categories)', example: 'analyze --category security' },
       { name: 'audit', summary: 'Review all overrides', example: 'audit --suggest-intents' },
       { name: 'promote', summary: 'Promote overrides to intents', example: 'promote forbid_pattern:console --intent cli-output' },
       { name: 'garden', summary: 'Analyze patterns & index quality', example: 'garden' },
@@ -84,7 +91,7 @@ const TOPICS: Record<string, {
       { name: 'types', summary: 'Find duplicate/similar types', example: 'types src/models' },
       { name: 'similarity', summary: 'Find duplicate code blocks', example: 'similarity blocks --threshold 80' },
     ],
-    seeAlso: ['setup', 'refactoring'],
+    seeAlso: ['setup', 'refactoring', 'speccodex'],
   },
   setup: {
     description: 'Project initialization and configuration',
@@ -97,15 +104,60 @@ const TOPICS: Record<string, {
     ],
     seeAlso: ['creating', 'health'],
   },
+  wiring: {
+    description: 'UI component awareness and feature wiring verification',
+    tip: 'action (checklist) → feature-audit (verify) or spec scaffold-touchpoints (spec)',
+    commands: [
+      { name: 'feature-audit', summary: 'Comprehensive feature verification across layers', example: 'feature-audit --mutation duplicateProduct --entity products' },
+      { name: 'action', summary: 'Get task checklist with component group expansion', example: 'action "add product action"' },
+      { name: 'entity-context', summary: 'Get entity schema with UI component groups', example: 'entity-context products' },
+      { name: 'spec scaffold-touchpoints', summary: 'Generate spec with UI touchpoints', example: 'spec scaffold-touchpoints --specId spec.product.duplicate --entity products' },
+    ],
+    seeAlso: ['validating', 'speccodex', 'creating'],
+  },
+  speccodex: {
+    description: 'Specification by Example - deterministic test generation',
+    tip: 'spec init → spec schema → spec generate → spec verify',
+    commands: [
+      { name: 'spec init', summary: 'Initialize SpecCodex with base specs', example: 'spec init' },
+      { name: 'spec list', summary: 'List all specs in registry', example: 'spec list' },
+      { name: 'spec resolve', summary: 'Show fully resolved spec with mixins', example: 'spec resolve spec.product.create' },
+      { name: 'spec check', summary: 'Validate spec files', example: 'spec check .arch/specs/**/*.yaml' },
+      { name: 'spec schema', summary: 'Show spec field reference', example: 'spec schema --examples' },
+      { name: 'spec generate', summary: 'Generate tests from spec', example: 'spec generate spec.product.create --type unit' },
+      { name: 'spec generate ui', summary: 'Generate UI/interaction tests', example: 'spec generate spec.item.duplicate --type ui --framework playwright' },
+      { name: 'spec verify', summary: 'Verify implementation matches spec', example: 'spec verify spec.product.create' },
+      { name: 'spec drift', summary: 'Find gaps between specs and code', example: 'spec drift' },
+      { name: 'spec discover', summary: 'Find specs by intent', example: 'spec discover "save a url"' },
+      { name: 'spec placeholder', summary: 'Expand @ placeholders', example: 'spec placeholder "@string(100)"' },
+      { name: 'spec fixture', summary: 'List/show project fixtures', example: 'spec fixture --list' },
+      { name: 'spec doc', summary: 'Generate docs from spec', example: 'spec doc spec.product.create --type all' },
+    ],
+    seeAlso: ['validating', 'creating', 'documentation'],
+  },
+  documentation: {
+    description: 'Generate documentation from architectures and specs',
+    tip: 'doc adr/spec → doc watch --type all (dev) or doc verify (CI)',
+    commands: [
+      { name: 'doc adr <archId>', summary: 'Generate ADR for architecture', example: 'doc adr domain.service' },
+      { name: 'doc adr --all', summary: 'Generate all ADRs with index', example: 'doc adr --all -o docs/adr/' },
+      { name: 'doc watch', summary: 'Watch & regenerate on changes', example: 'doc watch --type all -o docs/' },
+      { name: 'doc verify', summary: 'CI: check docs are up-to-date', example: 'doc verify --type all -o docs/' },
+      { name: 'doc templates', summary: 'List/init custom templates', example: 'doc templates --init' },
+      { name: 'spec doc', summary: 'Generate docs from single spec', example: 'spec doc spec.product.create' },
+    ],
+    seeAlso: ['understanding', 'speccodex'],
+  },
 };
 
 /** Essential commands shown in default help */
 const ESSENTIALS = [
+  { name: 'context --module <dir>', summary: 'Unified context (module + entity + constraints)' },
   { name: 'session-context', summary: 'Prime context at session start (call first)' },
   { name: 'plan-context <dir>', summary: 'Scoped context for multi-file planning' },
   { name: 'check <files>', summary: 'Validate constraints after edits' },
+  { name: 'analyze', summary: 'Schema-inferred analysis (logic, security, data issues)' },
   { name: 'discover "concept"', summary: 'Find architecture for new files' },
-  { name: 'read <file> --format ai', summary: 'Read one file with constraints' },
 ];
 
 export function createHelpCommand(): Command {
@@ -204,7 +256,7 @@ function showFullHelp(): void {
     lines.push('');
   }
 
-  lines.push(chalk.dim('Other commands: action, feature, fetch, learn, essentials'));
+  lines.push(chalk.dim('Other commands: fetch, learn, essentials'));
   lines.push('');
   lines.push(chalk.dim('Run \'archcodex <command> --help\' for command-specific options'));
   lines.push('');

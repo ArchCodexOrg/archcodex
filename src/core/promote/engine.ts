@@ -288,7 +288,7 @@ export class PromoteEngine {
     let content: string;
     try {
       content = await fs.readFile(intentsPath, 'utf-8');
-    } catch {
+    } catch { /* intents.yaml does not exist yet */
       // File doesn't exist, create it
       content = 'intents:\n';
     }

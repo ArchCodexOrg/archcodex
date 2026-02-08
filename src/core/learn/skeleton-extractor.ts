@@ -155,7 +155,7 @@ export class SkeletonExtractor {
 
         // Clean up
         this.project.removeSourceFile(sourceFile);
-      } catch {
+      } catch { /* TypeScript parse failed */
         // Fall back to basic extraction on parse error
       }
     }

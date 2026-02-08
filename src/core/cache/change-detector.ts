@@ -59,7 +59,7 @@ export class ChangeDetector {
           }
 
           return { file, status: 'unchanged' as const };
-        } catch {
+        } catch { /* file read error */
           // File read error - treat as new/changed
           return { file, status: 'new' as const };
         }
@@ -96,7 +96,7 @@ export class ChangeDetector {
         try {
           const content = await readFile(`${this.projectRoot}/${file}`);
           checksums.set(file, computeChecksum(content));
-        } catch {
+        } catch { /* file read error, skip */
           // Skip files that can't be read
         }
       })

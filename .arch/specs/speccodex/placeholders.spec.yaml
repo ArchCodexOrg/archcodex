@@ -1,0 +1,335 @@
+# SpecCodex Placeholder System Specification
+#
+# Expands @ placeholders in spec examples into concrete test values and assertions.
+# Core building block for all test generation.
+
+version: "1.0"
+
+spec.speccodex.placeholder.expand:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#expandPlaceholder
+
+  goal: "Expand a single @ placeholder string into a concrete value or assertion"
+  outcomes:
+    - "Recognize value generators (@string, @url, @number, @now, @uuid, @array)"
+    - "Recognize assertion placeholders (@exists, @defined, @contains, @gt, @lt, etc.)"
+    - "Recognize built-in fixtures (@authenticated, @no_access, @admin_user)"
+    - "Fall back to fixture registry for unknown @ references"
+    - "Return structured PlaceholderResult or PlaceholderError"
+
+  intent: "Parse a placeholder string and return its expanded result with type information"
+
+  inputs:
+    placeholder:
+      type: string
+      required: true
+      description: "Placeholder string starting with @ (e.g., '@string(100)', '@exists')"
+    context:
+      type: object
+      required: true
+      description: "PlaceholderContext with optional fixtureRegistry and mode"
+
+  outputs:
+    result:
+      type: object
+      description: "PlaceholderResult (type: value|assertion|user) or PlaceholderError (code + message)"
+
+  invariants:
+    - "All valid placeholders start with @"
+    - "Non-@ strings are never treated as placeholders"
+    - "Built-in placeholders take precedence over fixtures"
+    - "Value generators return type: 'value' with concrete value"
+    - "Assertions return type: 'assertion' with asserts field"
+    - "User fixtures return type: 'user' with id and permissions"
+    - "Unknown placeholders without fixture registry return UNKNOWN_PLACEHOLDER error"
+    - "Invalid parameters return INVALID_PLACEHOLDER_PARAM error"
+    - "Composite assertions (@all, @any, @not) recursively expand nested placeholders"
+
+  examples:
+    success:
+      - name: "expands @string(N) to string of length N"
+        given:
+          placeholder: "@string(10)"
+          context: {}
+        then:
+          result: "@exists"
+          result.type: "value"
+          result.value: "@length(10)"
+
+      - name: "expands @exists to assertion"
+        given:
+          placeholder: "@exists"
+          context: {}
+        then:
+          result.type: "assertion"
+          result.asserts: "exists"
+
+      - name: "expands @contains to assertion with pattern"
+        given:
+          placeholder: "@contains('hello')"
+          context: {}
+        then:
+          result.type: "assertion"
+          result.asserts: "contains"
+          result.value: "hello"
+
+      - name: "expands @authenticated to user fixture"
+        given:
+          placeholder: "@authenticated"
+          context: {}
+        then:
+          result.type: "user"
+          result.id: "@defined"
+
+      - name: "expands @gt(N) to comparison assertion"
+        given:
+          placeholder: "@gt(5)"
+          context: {}
+        then:
+          result.type: "assertion"
+          result.asserts: "greaterThan"
+
+      - name: "falls back to fixture registry for custom fixtures"
+        given:
+          placeholder: "@validEntry"
+          context:
+            fixtureRegistry:
+              fixtures:
+                validEntry:
+                  mode: "generate"
+                  value: { id: "entry_123" }
+        then:
+          result.type: "value"
+
+    errors:
+      - name: "unknown placeholder without fixture registry"
+        given:
+          placeholder: "@unknownThing"
+          context: {}
+        then:
+          error.code: "UNKNOWN_PLACEHOLDER"
+
+      - name: "invalid parameter in @string"
+        given:
+          placeholder: "@string(abc)"
+          context: {}
+        then:
+          error.code: "INVALID_PLACEHOLDER_PARAM"
+
+      - name: "invalid placeholder"
+        then: { error: "INVALID_PLACEHOLDER" }
+
+      - name: "fixture resolution error"
+        then: { error: "FIXTURE_RESOLUTION_ERROR" }
+
+---
+
+spec.speccodex.placeholder.isPlaceholder:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#isPlaceholder
+
+  goal: "Detect whether a value is a placeholder string"
+  outcomes:
+    - "Return true for strings starting with @"
+    - "Return false for non-strings and non-@ strings"
+
+  intent: "Type guard to check if a value should be expanded as a placeholder"
+
+  inputs:
+    value:
+      type: object
+      required: true
+      description: "Any value to check (unknown type)"
+
+  outputs:
+    result:
+      type: boolean
+
+  invariants:
+    - "Returns true only for strings starting with @"
+    - "Returns false for numbers, booleans, objects, arrays, null, undefined"
+    - "Returns false for empty strings"
+    - "Returns false for strings not starting with @"
+
+  examples:
+    success:
+      - name: "recognizes @exists"
+        given:
+          value: "@exists"
+        then:
+          result: true
+
+      - name: "recognizes @string(10)"
+        given:
+          value: "@string(10)"
+        then:
+          result: true
+
+      - name: "rejects plain string"
+        given:
+          value: "hello"
+        then:
+          result: false
+
+      - name: "rejects number"
+        given:
+          value: 42
+        then:
+          result: false
+
+---
+
+spec.speccodex.placeholder.expandAll:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#expandPlaceholders
+
+  goal: "Recursively expand all placeholders in a nested object/array structure"
+  outcomes:
+    - "Walk object tree and expand all string values that are placeholders"
+    - "Collect errors from failed expansions"
+    - "Return transformed object with expanded values"
+
+  intent: "Batch-expand all placeholders in a spec example's given/then blocks"
+
+  inputs:
+    obj:
+      type: object
+      required: true
+      description: "Nested object/array with placeholder strings"
+    context:
+      type: object
+      required: true
+      description: "PlaceholderContext for expansion"
+
+  outputs:
+    result:
+      type: object
+      description: "Transformed object with placeholders replaced by PlaceholderResults"
+    errors:
+      type: array
+      description: "Array of PlaceholderErrors from failed expansions"
+
+  invariants:
+    - "Non-placeholder strings are returned unchanged"
+    - "Nested objects are walked recursively"
+    - "Arrays are walked element by element"
+    - "Errors are collected, not thrown"
+    - "Partial expansion succeeds (some placeholders may fail)"
+
+  examples:
+    success:
+      - name: "expands nested object"
+        given:
+          obj:
+            name: "@string(5)"
+            valid: true
+          context: {}
+        then:
+          result: "@exists"
+          errors: "@empty"
+
+      - name: "collects errors for invalid placeholders"
+        given:
+          obj:
+            bad: "@unknownPlaceholder"
+          context: {}
+        then:
+          errors: "@length(@gt(0))"
+
+---
+
+spec.speccodex.placeholder.assertionToExpect:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#assertionToExpect
+
+  goal: "Convert a PlaceholderResult assertion into a test framework expect() call"
+  outcomes:
+    - "Map assertion types to framework-specific expect calls"
+    - "Handle composite assertions (@all, @any) recursively"
+    - "Support vitest and jest assertion APIs"
+
+  intent: "Generate the expect() code string for a placeholder assertion result"
+
+  inputs:
+    result:
+      type: object
+      required: true
+      description: "PlaceholderResult with type: 'assertion'"
+    varName:
+      type: string
+      required: true
+      description: "Variable name to use in expect() call"
+
+  outputs:
+    result:
+      type: string
+      description: "Generated expect() code (e.g., 'expect(result).not.toBeNull()')"
+
+  invariants:
+    - "@exists maps to expect(var).not.toBeNull()"
+    - "@defined maps to expect(var).toBeDefined()"
+    - "@contains('x') maps to expect(var).toContain('x')"
+    - "@gt(N) maps to expect(var).toBeGreaterThan(N)"
+    - "@lt(N) maps to expect(var).toBeLessThan(N)"
+    - "@length(N) maps to expect(var).toHaveLength(N)"
+    - "@hasItem({...}) maps to expect.arrayContaining"
+    - "@all(a, b) generates multiple expect lines"
+
+  examples:
+    success:
+      - name: "exists assertion"
+        given:
+          result: { type: "assertion", asserts: "exists" }
+          varName: "result"
+        then:
+          result: "@contains('toBeNull')"
+
+      - name: "contains assertion"
+        given:
+          result: { type: "assertion", asserts: "contains", pattern: "hello" }
+          varName: "output"
+        then:
+          result: "@contains('toContain')"
+          result: "@contains('hello')"
+
+---
+
+spec.speccodex.placeholder.list:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#listPlaceholders
+
+  goal: "List all available placeholder types with descriptions"
+  outcomes:
+    - "Return array of placeholder definitions"
+    - "Include name, syntax, description, and category for each"
+
+  intent: "Provide reference data for spec placeholder --list command"
+
+  outputs:
+    result:
+      type: array
+      description: "Array of placeholder definitions with name, syntax, description, category"
+
+  invariants:
+    - "Includes all value generators (string, url, number, array, now, uuid)"
+    - "Includes all assertion types (exists, defined, contains, gt, lt, etc.)"
+    - "Includes all built-in fixtures (authenticated, no_access, admin_user)"
+    - "Includes composite assertions (all, any, not)"
+    - "Result is never empty"
+
+  examples:
+    success:
+      - name: "returns non-empty list"
+        given: {}
+        then:
+          result: "@length(@gt(10))"
+
+      - name: "includes @exists"
+        given: {}
+        then:
+          result: "@hasItem({ placeholder: '@exists' })"
+
+      - name: "includes @string"
+        given: {}
+        then:
+          result: "@hasItem({ placeholder: '@string' })"

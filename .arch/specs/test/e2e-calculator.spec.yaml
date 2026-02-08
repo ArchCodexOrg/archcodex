@@ -1,0 +1,49 @@
+version: "1.0"
+
+spec.test.calculator.add:
+  inherits: spec.function
+  implementation: tests/spec/e2e/calculator.ts#add
+
+  goal: "Add two numbers together"
+  outcomes:
+    - "Returns the sum of two numbers"
+  intent: "Perform addition of two numeric values"
+
+  inputs:
+    a: { type: number, required: true }
+    b: { type: number, required: true }
+
+  outputs:
+    result:
+      type: number
+      description: "Sum of the two input numbers"
+
+  invariants:
+    - { "result": "@defined" }
+    - condition: "result === input.a + input.b"
+
+  effects:
+    - { metrics: { counter: "calculations_performed" } }
+
+  examples:
+    success:
+      - name: "positive numbers"
+        given: { a: 5, b: 3 }
+        then: { result: 8 }
+      - name: "negative numbers"
+        given: { a: -5, b: -3 }
+        then: { result: -8 }
+      - name: "mixed signs"
+        given: { a: 10, b: -4 }
+        then: { result: 6 }
+    errors:
+      - name: "non-numeric input"
+        given: { a: "five", b: 3 }
+        then:
+          result.valid: false
+          result.error: "INVALID_INPUT"
+    boundaries:
+      - name: "large numbers"
+        a: 999999999
+        b: 1
+        then: { result: 1000000000 }

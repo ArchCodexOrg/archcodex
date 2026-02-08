@@ -299,7 +299,7 @@ async function extractArchitectures(
       } else {
         untaggedFiles.push(relativePath);
       }
-    } catch {
+    } catch { /* file read error */
       // Skip unreadable files
     }
   }

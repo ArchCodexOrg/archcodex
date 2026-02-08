@@ -1,0 +1,224 @@
+# UI Touchpoints Schema Specification
+#
+# Adds touchpoints to the spec ui section for explicit UI wiring checklists.
+# Each touchpoint represents a UI location where a feature must be wired.
+
+version: "1.0"
+
+spec.archcodex.uiTouchpoints:
+  inherits: spec.function
+  implementation: src/core/spec/schema.ts#UITouchpointSchema
+
+  # === STRATEGIC ===
+  goal: "Enable explicit tracking of UI wiring across multiple components"
+  outcomes:
+    - "Specs can enumerate all UI locations for a feature"
+    - "Test generation verifies each touchpoint is wired"
+    - "Agents can track completion of UI wiring tasks"
+    - "Prevents missed UI integrations in multi-component features"
+
+  # === OPERATIONAL ===
+  intent: "Define UI touchpoints schema for spec ui section"
+
+  inputs:
+    touchpoint:
+      type: object
+      properties:
+        component:
+          type: string
+          required: true
+          description: "Component name or path where feature must appear"
+        location:
+          type: string
+          description: "UI location within component (e.g., 'context menu', 'toolbar', 'inline')"
+        handler:
+          type: string
+          description: "Expected handler function name (e.g., 'handleDuplicate')"
+        wired:
+          type: boolean
+          default: false
+          description: "Agent tracks completion status"
+        priority:
+          type: enum
+          values: [required, optional]
+          default: required
+          description: "Whether this touchpoint is required or optional"
+
+  outputs:
+    validation:
+      type: object
+      properties:
+        valid: { type: boolean }
+        errors: { type: array, items: { type: string } }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "valid touchpoint with all fields"
+        given:
+          touchpoint:
+            component: "ProductCard"
+            location: "context menu"
+            handler: "handleDuplicate"
+            wired: false
+        then:
+          result.validation.valid: true
+          result.validation.errors: "@empty"
+
+      - name: "minimal touchpoint with only component"
+        given:
+          touchpoint:
+            component: "ProductCard"
+        then:
+          result.validation.valid: true
+
+      - name: "touchpoint with optional priority"
+        given:
+          touchpoint:
+            component: "ProductBulkToolbar"
+            location: "bulk actions"
+            handler: "handleBulkDuplicate"
+            priority: "optional"
+        then:
+          result.validation.valid: true
+
+    errors:
+      - name: "missing component field"
+        given:
+          touchpoint:
+            location: "context menu"
+            handler: "handleDuplicate"
+        then:
+          result.validation.valid: false
+          result.validation.errors: "@contains('component is required')"
+
+      - name: "invalid priority value"
+        given:
+          touchpoint:
+            component: "ProductCard"
+            priority: "high"
+        then:
+          result.validation.valid: false
+          result.validation.errors: "@contains('priority')"
+
+  # === SPEC USAGE EXAMPLE ===
+  # How this appears in a full spec:
+  #
+  # spec.product.duplicate:
+  #   ui:
+  #     trigger:
+  #       location: "context menu"
+  #       label: "Duplicate"
+  #
+  #     touchpoints:  # NEW
+  #       - component: ProductCard
+  #         location: context menu
+  #         handler: handleDuplicate
+  #       - component: ProductListItem
+  #         location: context menu
+  #         handler: handleDuplicate
+  #       - component: ProductGrid
+  #         location: context menu
+  #         handler: handleDuplicate
+  #       - component: ProductBanner
+  #         location: context menu
+  #         handler: handleDuplicate
+  #       - component: ProductPreview
+  #         location: context menu
+  #         handler: handleDuplicate
+  #       - component: ProductBulkToolbar
+  #         location: bulk actions
+  #         handler: handleBulkDuplicate
+  #         priority: optional
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "component field is always required"
+      condition: "touchpoint.component !== undefined && touchpoint.component !== ''"
+    - description: "wired defaults to false"
+      condition: "touchpoint.wired === undefined implies touchpoint.wired === false"
+    - description: "priority defaults to required"
+      condition: "touchpoint.priority === undefined implies touchpoint.priority === 'required'"
+
+---
+# UI Touchpoint Test Generation Specification
+
+spec.archcodex.uiTouchpoints.testGeneration:
+  inherits: spec.function
+  implementation: src/core/spec/generators/ui.ts#generateTouchpointTests
+
+  intent: "Generate verification tests for UI touchpoints"
+
+  inputs:
+    touchpoints:
+      type: array
+      items:
+        type: object
+        properties:
+          component: { type: string }
+          location: { type: string }
+          handler: { type: string }
+
+  outputs:
+    tests:
+      type: string
+      description: "Generated Playwright/Testing Library test code"
+    testCount:
+      type: number
+      description: "Number of tests generated"
+
+  examples:
+    success:
+      - name: "generates test for each touchpoint"
+        given:
+          touchpoints:
+            - component: "ProductCard"
+              handler: "handleDuplicate"
+            - component: "ProductListItem"
+              handler: "handleDuplicate"
+        then:
+          result.testCount: 2
+          result.tests: "@contains('ProductCard')"
+          result.tests: "@contains('ProductListItem')"
+          result.tests: "@contains('handleDuplicate')"
+
+      - name: "generates describe block for touchpoints"
+        given:
+          touchpoints:
+            - component: "ProductCard"
+              location: "context menu"
+              handler: "handleDuplicate"
+        then:
+          result.tests: "@contains('UI Touchpoints')"
+          result.tests: "@contains('context menu')"
+
+    errors:
+      - name: "no ui section in spec"
+        given:
+          spec: { id: "spec.test", examples: {} }
+        then:
+          error: "NO_UI_SECTION"
+
+      - name: "invalid spec format"
+        given:
+          spec: { malformed: true }
+        then:
+          error: "INVALID_SPEC"
+
+      - name: "no tests generated"
+        given:
+          touchpoints: []
+        then:
+          error: "NO_TESTS_GENERATED"
+
+    boundaries:
+      - name: "empty touchpoints returns no tests"
+        given:
+          touchpoints: []
+        then:
+          result.testCount: 0
+          result.tests: "@empty"
+
+  invariants:
+    - description: "test count matches touchpoint count"
+      condition: "result.testCount === touchpoints.length"

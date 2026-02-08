@@ -1,0 +1,116 @@
+version: "1.0"
+
+spec.test.placeholders:
+  inherits: spec.function
+  implementation: tests/spec/e2e/placeholders.ts#processData
+
+  goal: "Test all placeholder types"
+  outcomes:
+    - "All standard placeholder types expand correctly"
+    - "Assertion placeholders generate correct test code"
+  intent: "Validate various placeholder expansions"
+
+  inputs:
+    data: { type: object, required: true }
+
+  outputs:
+    result:
+      type: object
+      description: "Processed data with expanded placeholders"
+
+  examples:
+    success:
+      # Value generators in given
+      - name: "string placeholder in given"
+        given:
+          data: { text: "@string(10)" }
+        then:
+          result.length: "@length(10)"
+
+      # Assertion placeholders in then
+      - name: "length placeholder"
+        given:
+          data: { items: ["a", "b", "c"] }
+        then:
+          result.items: "@length(3)"
+
+      - name: "hasItem with string"
+        given:
+          data: { items: ["a", "b", "c"] }
+        then:
+          result.items: "@hasItem('b')"
+
+      - name: "hasItem with object"
+        given:
+          data: { items: [{ id: 1, name: "test" }] }
+        then:
+          result.items: "@hasItem({ id: 1 })"
+
+      - name: "hasProperties placeholder"
+        given:
+          data: { user: { name: "test", active: true } }
+        then:
+          result.user: "@hasProperties({ name: 'test' })"
+
+      - name: "contains placeholder"
+        given:
+          data: { text: "hello world" }
+        then:
+          result.text: "@contains('world')"
+
+      - name: "gt and lt placeholders"
+        given:
+          data: { count: 5 }
+        then:
+          result.count: "@gt(0)"
+
+      - name: "exists placeholder"
+        given:
+          data: { value: "test" }
+        then:
+          result.value: "@exists"
+
+      - name: "defined placeholder"
+        given:
+          data: { value: "" }
+        then:
+          result.value: "@defined"
+
+      - name: "matches regex placeholder"
+        given:
+          data: { email: "test@example.com" }
+        then:
+          result.email: "@matches('^[^@]+@[^@]+$')"
+
+      - name: "oneOf placeholder"
+        given:
+          data: { status: "active" }
+        then:
+          result.status: '@oneOf(["active", "pending", "done"])'
+
+      # Composite assertions
+      - name: "all placeholder with compatible assertions"
+        given:
+          data: { items: ["a", "b", "c"] }
+        then:
+          result.items: "@all(@length(3), @hasItem('b'))"
+
+      # Time placeholders in given
+      - name: "now placeholder"
+        given:
+          data: { timestamp: "@now" }
+        then:
+          result.timestamp: "@gt(0)"
+
+      - name: "now with offset"
+        given:
+          data: { pastTime: "@now(-1d)" }
+        then:
+          result.pastTime: "@gt(0)"
+
+      # URL placeholder
+      - name: "url placeholder in given"
+        given:
+          data: { url: "@url(50)" }
+        then:
+          result.url: "@contains('https://')"

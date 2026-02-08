@@ -7,6 +7,7 @@
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { logger } from '../utils/logger.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -33,6 +34,21 @@ import {
   normalizeStringList,
 } from './utils.js';
 
+// Type-safe argument extraction
+import {
+  getString,
+  getBoolean,
+  getNumber,
+  getStringArray,
+  getArray,
+  getRaw,
+  hasArg,
+} from './arg-parser.js';
+
+// Tool definitions (extracted for maintainability)
+import { coreToolDefinitions } from './tool-definitions.js';
+import { extendedToolDefinitions } from './tool-definitions-extended.js';
+
 // Handlers
 import {
   handleHelp,
@@ -58,15 +74,16 @@ import {
   handleWhy,
   handleDecide,
   handleScaffold,
+  handleEntityContext,
+  handleArchitectureMap,
+  handleUnifiedContext,
+  handleSpecInit,
+  handleSpecScaffoldTouchpoints,
+  handleFeatureAudit,
+  handleAnalyze,
 } from './handlers/index.js';
 
 const defaultProjectRoot = getDefaultProjectRoot();
-
-// Common projectRoot property for tool schemas (usually not needed - auto-detected from file path)
-const projectRootProperty = {
-  type: 'string',
-  description: 'Project root path (optional - auto-detected from file path by finding .arch/ directory)',
-};
 
 /**
  * Create and start the MCP server.
@@ -77,634 +94,9 @@ async function main() {
     { capabilities: { tools: {}, prompts: {} } }
   );
 
-  // List available tools
+  // List available tools (definitions extracted to tool-definitions.ts)
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: 'archcodex_help',
-        description: '❓ Get help on ArchCodex commands - start here if unsure what to do',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            topic: {
-              type: 'string',
-              enum: ['creating', 'validating', 'understanding', 'refactoring', 'health', 'setup'],
-              description: 'Help topic (omit for topic list, or use "full" for all commands)',
-            },
-            full: {
-              type: 'boolean',
-              description: 'Show all commands grouped by topic',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_schema',
-        description: 'Discover available options for creating/updating architectures (rules, conditions, mixins, architectures, examples, recipes)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            filter: {
-              type: 'string',
-              enum: ['all', 'rules', 'fields', 'conditions', 'mixins', 'architectures'],
-              description: 'Filter to specific category (default: all)',
-            },
-            examples: {
-              type: 'string',
-              enum: ['all', 'architectures', 'constraints', 'recipes'],
-              description: 'Get working YAML examples for a category',
-            },
-            recipe: {
-              type: 'string',
-              description: 'Get a specific recipe by name (e.g., "domain-service", "repository", "controller")',
-            },
-            template: {
-              type: 'boolean',
-              description: 'Get the scaffold-able architecture template',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_check',
-        description: `✓ Validate files against architecture rules. Supports BATCH MODE with glob patterns.
-
-SINGLE FILE: {"files": ["src/service.ts"]}
-BATCH MODE: {"files": ["src/**/*.ts"]} to check many files at once
-WITH PROJECT: {"files": ["src/**/*.ts"], "project": true} for cross-file validation`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            files: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'File paths or glob patterns (e.g., ["src/**/*.ts"]). Use absolute paths for auto project detection.',
-            },
-            file: {
-              type: 'string',
-              description: 'Single file path (alias for files with one item). Use absolute paths for auto project detection.',
-            },
-            path: {
-              type: 'string',
-              description: 'Alias for file parameter',
-            },
-            strict: {
-              type: 'boolean',
-              description: 'Treat warnings as errors',
-            },
-            project: {
-              type: 'boolean',
-              description: 'Enable project-level validation (cross-file constraints, layer boundaries)',
-            },
-            registry: {
-              type: 'string',
-              description: 'Custom registry file or directory path (e.g., ".arch/registry/cli/command.yaml")',
-            },
-            registryPattern: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Load only matching registry patterns (e.g., ["cli/**", "core/*"])',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_read',
-        description: `Read a file with hydrated architectural constraints, hints, and allowed imports.
-
-WHEN TO USE: Only when you need per-file detail not covered by session_context or plan_context.
-SKIP IF: You already called session_context or plan_context and know the constraints.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            file: {
-              type: 'string',
-              description: 'File path to read (absolute or relative). Alias: path',
-            },
-            path: {
-              type: 'string',
-              description: 'Alias for file parameter',
-            },
-            format: {
-              type: 'string',
-              enum: ['verbose', 'terse', 'ai'],
-              description: 'Output format (default: ai)',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_discover',
-        description: '🆕 Call this BEFORE creating new files to find the right @arch tag for your intent',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            query: {
-              type: 'string',
-              description: 'Natural language description of what you want to build',
-            },
-            limit: {
-              type: 'number',
-              description: 'Maximum results (default: 5)',
-            },
-            autoSync: {
-              type: 'boolean',
-              description: 'Automatically sync index if stale (default: uses discovery.auto_sync from config)',
-            },
-          },
-          required: ['query'],
-        },
-      },
-      {
-        name: 'archcodex_resolve',
-        description: 'Get flattened architecture with all inherited constraints, mixins, and hints',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            archId: {
-              type: 'string',
-              description: 'Architecture ID to resolve',
-            },
-          },
-          required: ['archId'],
-        },
-      },
-      {
-        name: 'archcodex_neighborhood',
-        description: `Get import boundaries for a specific file (what can/cannot be imported, current imports with status).
-
-WHEN TO USE: When adding imports to a file and need per-file forbidden/allowed list.
-SKIP IF: plan_context already gave you layer boundaries and forbid rules for the scope.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            file: {
-              type: 'string',
-              description: 'File path to analyze',
-            },
-          },
-          required: ['file'],
-        },
-      },
-      {
-        name: 'archcodex_diff_arch',
-        description: 'Compare two architectures to see constraint differences',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            from: {
-              type: 'string',
-              description: 'Source architecture ID',
-            },
-            to: {
-              type: 'string',
-              description: 'Target architecture ID',
-            },
-          },
-          required: ['from', 'to'],
-        },
-      },
-      {
-        name: 'archcodex_health',
-        description: 'Get architectural health metrics (override debt, coverage, recommendations)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            expiringDays: {
-              type: 'number',
-              description: 'Days threshold for expiring overrides (default: 30)',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_sync_index',
-        description: 'Check and sync discovery index with registry (find missing/orphaned entries)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            check: {
-              type: 'boolean',
-              description: 'Only check staleness, do not update (default: true)',
-            },
-            force: {
-              type: 'boolean',
-              description: 'Force regeneration even if up to date',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_consistency',
-        description: 'Check cross-file consistency - find missing methods/exports compared to similar files with same architecture',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            file: {
-              type: 'string',
-              description: 'File to analyze for consistency issues',
-            },
-            threshold: {
-              type: 'number',
-              description: 'Minimum similarity to consider files comparable (0-1, default: 0.6)',
-            },
-            sameArchOnly: {
-              type: 'boolean',
-              description: 'Only compare files with same architecture (default: true)',
-            },
-          },
-          required: ['file'],
-        },
-      },
-      {
-        name: 'archcodex_intents',
-        description: 'Discover and validate semantic intent annotations (@intent:name)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            action: {
-              type: 'string',
-              enum: ['list', 'show', 'usage', 'validate', 'suggest'],
-              description: 'Action to perform (default: list). Use "suggest" to get intent suggestions for a file path or architecture.',
-            },
-            name: {
-              type: 'string',
-              description: 'Intent name (required for "show" action)',
-            },
-            file: {
-              type: 'string',
-              description: 'File path (for "validate" or "suggest" action)',
-            },
-            archId: {
-              type: 'string',
-              description: 'Architecture ID (for "suggest" action)',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_action',
-        description: `🎯 CALL FIRST when user says "I want to add/create/implement X" - Returns architecture, checklist, intents, and file patterns for common tasks.
-
-WHEN TO USE:
-- User wants to add a new component/feature/module
-- You need guidance on what architecture and patterns to use
-- Before creating multiple related files
-
-WORKFLOW:
-1. archcodex_action (match query) → Get architecture + checklist
-2. If action has linkedFeature → use archcodex_feature for multi-file scaffold
-3. Create files with the recommended @arch tag
-4. archcodex_check to validate`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            query: {
-              type: 'string',
-              description: 'What you want to do (e.g., "add a view", "create endpoint", "add validation rule")',
-            },
-            action: {
-              type: 'string',
-              enum: ['match', 'list', 'show'],
-              description: 'Action to perform: "match" (default) finds actions matching query, "list" shows all actions, "show" shows details for a specific action',
-            },
-            name: {
-              type: 'string',
-              description: 'Action name (required for "show" action)',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_feature',
-        description: `📦 Multi-file scaffolding - Use when archcodex_action returns a linkedFeature to create multiple related files together.
-
-WHEN TO USE:
-- Creating a feature that requires multiple coordinated files (e.g., handler + test, component + styles + story)
-- The archcodex_action response shows linkedFeature with components
-- You want to ensure all parts of a feature follow the same patterns
-
-WORKFLOW:
-1. archcodex_feature (list) → See available feature templates
-2. archcodex_feature (preview, feature: "name", name: "MyFeature") → See files that would be created
-3. Create the files based on the preview with proper @arch tags`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            action: {
-              type: 'string',
-              enum: ['list', 'show', 'preview'],
-              description: 'Action to perform: "list" shows all features, "show" shows details, "preview" shows what files would be created',
-            },
-            feature: {
-              type: 'string',
-              description: 'Feature template name (required for "show" and "preview")',
-            },
-            name: {
-              type: 'string',
-              description: 'Name for the new feature (required for "preview")',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_types',
-        description: `🔍 Type consistency analysis - Find duplicate and similar type definitions that should be consolidated.
-
-WHEN TO USE:
-- Before creating a new interface/type - check if similar one exists
-- During refactoring - find types that drifted apart and should be unified
-- Periodic codebase health check - part of garden analysis
-
-WHAT IT DETECTS:
-- Exact duplicates: Same name, same structure in different files
-- Renamed duplicates: Different names but identical structure (copy-paste)
-- Similar types (>80%): Types that drifted apart and may need consolidation
-
-USE CASES:
-- "I'm adding UserProfile type" → Check if similar type already exists
-- "These two files have similar interfaces" → Confirm and get consolidation suggestions`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            files: {
-              oneOf: [
-                { type: 'string', description: 'Single file pattern' },
-                { type: 'array', items: { type: 'string' }, description: 'Multiple file patterns' },
-              ],
-              description: 'File patterns to scan (accepts string or array of strings; default: all TypeScript files)',
-            },
-            threshold: {
-              type: 'number',
-              description: 'Minimum similarity percentage for "similar" types (default: 80)',
-            },
-            includePrivate: {
-              type: 'boolean',
-              description: 'Include non-exported types (default: false)',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_scaffold',
-        description: '🆕 Generate a new file from architecture template with proper @arch tag and structure',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            archId: {
-              type: 'string',
-              description: 'Architecture ID (e.g., domain.service)',
-            },
-            name: {
-              type: 'string',
-              description: 'Name for the class/component',
-            },
-            output: {
-              type: 'string',
-              description: 'Output directory',
-            },
-            template: {
-              type: 'string',
-              description: 'Custom template file',
-            },
-            dryRun: {
-              type: 'boolean',
-              description: 'Preview without writing files',
-            },
-          },
-          required: ['archId', 'name'],
-        },
-      },
-      {
-        name: 'archcodex_infer',
-        description: '🔍 Suggest architecture for file(s) based on content analysis - useful for untagged or legacy files',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            files: {
-              oneOf: [
-                { type: 'string', description: 'Single file path or glob pattern' },
-                { type: 'array', items: { type: 'string' }, description: 'Multiple file paths or glob patterns' },
-              ],
-              description: 'File paths or glob patterns (accepts string or array of strings)',
-            },
-            untaggedOnly: {
-              type: 'boolean',
-              description: 'Only analyze files without @arch tags',
-            },
-          },
-          required: ['files'],
-        },
-      },
-      {
-        name: 'archcodex_why',
-        description: '❓ Explain why a constraint applies to a file - traces inheritance chain to show source',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            file: {
-              type: 'string',
-              description: 'File path to analyze',
-            },
-            constraint: {
-              type: 'string',
-              description: 'Specific constraint to explain (e.g., forbid_import:axios)',
-            },
-          },
-          required: ['file'],
-        },
-      },
-      {
-        name: 'archcodex_decide',
-        description: '🌳 Navigate decision tree to find the right architecture - answers yes/no questions to reach a recommendation',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            action: {
-              type: 'string',
-              enum: ['start', 'answer', 'show-tree'],
-              description: 'Action: start new session, answer question, or show tree structure',
-            },
-            answer: {
-              type: 'boolean',
-              description: 'Answer to current question (true=yes, false=no)',
-            },
-            sessionId: {
-              type: 'string',
-              description: 'Session ID for multi-turn navigation (returned from previous call)',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_session_context',
-        description: `🚀 CALL AT SESSION START to prime context with architecture summaries - reduces subsequent tool calls by providing compact overview of all constraints affecting files in scope.
-
-DEFAULTS: Compact output with deduplicated constraints and layer boundaries (optimized for agents).
-Use 'full: true' for verbose JSON output.
-
-WHEN TO USE:
-- At the start of a coding session to understand the codebase constraints
-- Before working on multiple files in a directory
-- When you want to minimize per-file archcodex_read calls
-
-RETURNS (compact format):
-- Layer boundaries (what can import what)
-- Shared constraints (deduplicated across all architectures)
-- Per-architecture unique constraints, hints, patterns
-- Untagged files that need attention
-- Canonical patterns (with withPatterns: true) to avoid creating duplicates`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            patterns: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Glob patterns for files to analyze (default: ["src/**/*.ts", "src/**/*.tsx"])',
-            },
-            full: {
-              type: 'boolean',
-              description: 'Use verbose JSON output instead of compact format (default: false)',
-            },
-            withPatterns: {
-              type: 'boolean',
-              description: 'Include canonical patterns from .arch/patterns.yaml (reusable implementations)',
-            },
-            withDuplicates: {
-              type: 'boolean',
-              description: 'Keep duplicate constraints per architecture instead of deduplicating (default: false)',
-            },
-            withoutLayers: {
-              type: 'boolean',
-              description: 'Exclude layer boundary map from output (default: false)',
-            },
-            scope: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Filter to specific directory paths',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_plan_context',
-        description: `🗺️ CALL AT PLAN START - Gets scope-aware architecture context with layer boundaries, deduplicated constraints, and canonical patterns in a single call.
-
-WHEN TO USE:
-- Starting plan mode - get all constraints for the area you'll be working in
-- Working on a specific directory or set of files
-- Before designing multi-file changes
-
-REPLACES multiple calls to: session_context + read + neighborhood + impact
-
-OUTPUT (~400 tokens for typical scope):
-- Layer boundaries (what can/cannot be imported)
-- Shared constraints (deduplicated across architectures)
-- Per-architecture unique rules, hints, and reference implementations
-- Relevant canonical patterns (to avoid code duplication)`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            scope: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Paths to include: directories (expanded to **/*.ts), files (used directly), or globs. Auto-detects based on extension. Examples: ["src/core/", "src/utils/helper.ts", "**/*.test.ts"]',
-            },
-            files: {
-              type: 'array',
-              items: { type: 'string' },
-              description: '(Deprecated - use scope instead) Specific files. The scope parameter now auto-detects files vs directories.',
-            },
-          },
-        },
-      },
-      {
-        name: 'archcodex_validate_plan',
-        description: `✅ Validate a proposed change set BEFORE execution - catches architectural violations during planning.
-
-WHEN TO USE:
-- After designing changes but BEFORE writing code
-- To verify imports, layer boundaries, and naming patterns are correct
-- To check if new files have the right @arch tag
-
-ACCEPTS:
-- List of file changes (create/modify/delete) with proposed imports and patterns
-- Returns violations, warnings, and impacted files`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            changes: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  path: { type: 'string', description: 'File path (relative to project root)' },
-                  action: { type: 'string', enum: ['create', 'modify', 'delete', 'rename'], description: 'Type of change' },
-                  archId: { type: 'string', description: 'Architecture ID for new files (required for create)' },
-                  newImports: { type: 'array', items: { type: 'string' }, description: 'New imports being added' },
-                  codePatterns: { type: 'array', items: { type: 'string' }, description: 'Code patterns that will appear' },
-                  newPath: { type: 'string', description: 'New path for rename actions' },
-                },
-                required: ['path', 'action'],
-              },
-              description: 'List of proposed file changes',
-            },
-          },
-          required: ['changes'],
-        },
-      },
-      {
-        name: 'archcodex_impact',
-        description: `⚠️ Call BEFORE refactoring - shows what files import this file and what would break.
-
-WHEN TO USE:
-- Before modifying exports or renaming functions
-- Before deleting or moving files
-- To understand how changes propagate through the codebase
-
-RETURNS:
-- Direct importers (files that directly import this file)
-- Total dependents (transitive imports up to configurable depth)
-- Warning if high-impact change (>10 dependents)
-- Architecture IDs of affected files`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            projectRoot: projectRootProperty,
-            file: {
-              type: 'string',
-              description: 'File to analyze impact for',
-            },
-            depth: {
-              type: 'number',
-              description: 'Max depth for transitive dependents (default: 2)',
-            },
-          },
-          required: ['file'],
-        },
-      },
-    ],
+    tools: [...coreToolDefinitions, ...extendedToolDefinitions],
   }));
 
   // Handle tool calls
@@ -715,26 +107,32 @@ RETURNS:
     // Support various parameter names: file, path, files (agents use different names)
     // Also support both string and object formats (with path property)
     const filePaths: string[] = [];
-    if (args?.file) {
+    if (hasArg(args, 'file')) {
       try {
-        filePaths.push(normalizeFilePath(args.file as string | Record<string, unknown>));
-      } catch {
-        // Skip invalid file format for project detection
-      }
+        filePaths.push(normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>));
+      } catch { /* skip invalid file format for project detection */ }
     }
-    if (args?.path) {
+    if (hasArg(args, 'path')) {
       try {
-        filePaths.push(normalizeFilePath(args.path as string | Record<string, unknown>));
-      } catch {
-        // Skip invalid path format for project detection
-      }
+        filePaths.push(normalizeFilePath(getRaw(args, 'path') as string | Record<string, unknown>));
+      } catch { /* skip invalid path format for project detection */ }
     }
-    if (Array.isArray(args?.files)) {
+    if (Array.isArray(getRaw(args, 'files'))) {
       try {
-        filePaths.push(...normalizeFilePaths(args.files as (string | Record<string, unknown>)[]));
-      } catch {
-        // Skip invalid files format for project detection
-      }
+        filePaths.push(...normalizeFilePaths(getRaw(args, 'files') as (string | Record<string, unknown>)[]));
+      } catch { /* skip invalid files format for project detection */ }
+    }
+    // Support scope parameter (used by plan_context)
+    if (Array.isArray(getRaw(args, 'scope'))) {
+      try {
+        filePaths.push(...normalizeFilePaths(getRaw(args, 'scope') as (string | Record<string, unknown>)[]));
+      } catch { /* skip invalid scope format for project detection */ }
+    }
+    // Support module parameter (used by map)
+    if (hasArg(args, 'module')) {
+      try {
+        filePaths.push(normalizeFilePath(getRaw(args, 'module') as string | Record<string, unknown>));
+      } catch { /* skip invalid module format for project detection */ }
     }
 
     // Reject relative paths - require absolute paths for reliable project detection
@@ -754,22 +152,22 @@ RETURNS:
     }
 
     // Try all file paths to find project root (not just the first)
-    const root = await resolveProjectRootFromFiles(defaultProjectRoot, filePaths, args?.projectRoot as string | undefined);
+    const root = await resolveProjectRootFromFiles(defaultProjectRoot, filePaths, getString(args, 'projectRoot'));
 
     try {
       switch (name) {
         case 'archcodex_help':
           return handleHelp({
-            topic: args?.topic as string | undefined,
-            full: args?.full as boolean | undefined,
+            topic: getString(args, 'topic'),
+            full: getBoolean(args, 'full'),
           });
 
         case 'archcodex_schema':
           return await handleSchema(root, {
-            filter: args?.filter as string | undefined,
-            examples: args?.examples as string | undefined,
-            recipe: args?.recipe as string | undefined,
-            template: args?.template as boolean | undefined,
+            filter: getString(args, 'filter'),
+            examples: getString(args, 'examples'),
+            recipe: getString(args, 'recipe'),
+            template: getBoolean(args, 'template'),
           });
 
         case 'archcodex_check': {
@@ -778,55 +176,55 @@ RETURNS:
           // - file: can be string OR object
           // - path: can be string OR object (alias for file)
           let checkFiles: string[] | undefined;
-          if (args?.files) {
-            checkFiles = normalizeFilesList(args.files as string | Record<string, unknown> | (string | Record<string, unknown>)[]);
-          } else if (args?.file) {
-            checkFiles = [normalizeFilePath(args.file as string | Record<string, unknown>)];
-          } else if (args?.path) {
-            checkFiles = [normalizeFilePath(args.path as string | Record<string, unknown>)];
+          if (hasArg(args, 'files')) {
+            checkFiles = normalizeFilesList(getRaw(args, 'files') as string | Record<string, unknown> | (string | Record<string, unknown>)[]);
+          } else if (hasArg(args, 'file')) {
+            checkFiles = [normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>)];
+          } else if (hasArg(args, 'path')) {
+            checkFiles = [normalizeFilePath(getRaw(args, 'path') as string | Record<string, unknown>)];
           }
-          const registryPattern = args?.registryPattern
-            ? normalizeStringList(args.registryPattern as string | string[] | undefined)
+          const registryPattern = hasArg(args, 'registryPattern')
+            ? normalizeStringList(getRaw(args, 'registryPattern') as string | string[] | undefined)
             : undefined;
           return await handleCheck(root, checkFiles, {
-            strict: args?.strict as boolean | undefined,
-            project: args?.project as boolean | undefined,
-            registry: args?.registry as string | undefined,
+            strict: getBoolean(args, 'strict'),
+            project: getBoolean(args, 'project'),
+            registry: getString(args, 'registry'),
             registryPattern: registryPattern && registryPattern.length > 0 ? registryPattern : undefined,
           });
         }
 
         case 'archcodex_read': {
           // Support both 'file' and 'path' parameter names (string or object)
-          const readFile = normalizeFilePath((args?.file || args?.path) as string | Record<string, unknown>);
-          return await handleRead(root, readFile, args?.format as string);
+          const readFile = normalizeFilePath((getRaw(args, 'file') || getRaw(args, 'path')) as string | Record<string, unknown>);
+          return await handleRead(root, readFile, getString(args, 'format'));
         }
 
         case 'archcodex_discover':
-          return await handleDiscover(root, args?.query as string, {
-            limit: args?.limit as number | undefined,
-            autoSync: args?.autoSync as boolean | undefined,
+          return await handleDiscover(root, getString(args, 'query') as string, {
+            limit: getNumber(args, 'limit'),
+            autoSync: getBoolean(args, 'autoSync'),
           });
 
         case 'archcodex_resolve':
-          return await handleResolve(root, args?.archId as string);
+          return await handleResolve(root, getString(args, 'archId') as string);
 
         case 'archcodex_neighborhood': {
-          const neighborhoodFile = normalizeFilePath(args?.file as string | Record<string, unknown>);
+          const neighborhoodFile = normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>);
           return await handleNeighborhood(root, neighborhoodFile);
         }
 
         case 'archcodex_diff_arch':
-          return await handleDiffArch(root, args?.from as string, args?.to as string);
+          return await handleDiffArch(root, getString(args, 'from') as string, getString(args, 'to') as string);
 
         case 'archcodex_health':
-          return await handleHealth(root, args?.expiringDays as number | undefined);
+          return await handleHealth(root, getNumber(args, 'expiringDays'));
 
         case 'archcodex_sync_index':
-          return await handleSyncIndex(root, args?.check as boolean | undefined, args?.force as boolean);
+          return await handleSyncIndex(root, getBoolean(args, 'check'), getBoolean(args, 'force'));
 
         case 'archcodex_consistency': {
-          const consistencyFile = args?.file ? normalizeFilePath(args.file as string | Record<string, unknown>) : undefined;
+          const consistencyFile = hasArg(args, 'file') ? normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>) : undefined;
           if (!consistencyFile) {
             return {
               content: [{
@@ -838,107 +236,169 @@ RETURNS:
             };
           }
           return await handleConsistency(root, consistencyFile, {
-            threshold: args?.threshold as number | undefined,
-            sameArchOnly: args?.sameArchOnly as boolean | undefined,
+            threshold: getNumber(args, 'threshold'),
+            sameArchOnly: getBoolean(args, 'sameArchOnly'),
           });
         }
 
         case 'archcodex_intents': {
-          const intentsFile = args?.file ? normalizeFilePath(args.file as string | Record<string, unknown>) : undefined;
+          const intentsFile = hasArg(args, 'file') ? normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>) : undefined;
           return await handleIntents(root, {
-            action: args?.action as string | undefined,
-            name: args?.name as string | undefined,
+            action: getString(args, 'action'),
+            name: getString(args, 'name'),
             file: intentsFile,
-            archId: args?.archId as string | undefined,
+            archId: getString(args, 'archId'),
           });
         }
 
         case 'archcodex_action':
           return await handleAction(root, {
-            query: args?.query as string | undefined,
-            action: args?.action as string | undefined,
-            name: args?.name as string | undefined,
+            query: getString(args, 'query'),
+            action: getString(args, 'action'),
+            name: getString(args, 'name'),
           });
 
         case 'archcodex_feature':
           return await handleFeature(root, {
-            action: args?.action as string | undefined,
-            feature: args?.feature as string | undefined,
-            name: args?.name as string | undefined,
+            action: getString(args, 'action'),
+            feature: getString(args, 'feature'),
+            name: getString(args, 'name'),
           });
 
         case 'archcodex_types': {
-          const typesFiles = args?.files
-            ? normalizeFilesList(args.files as string | Record<string, unknown> | (string | Record<string, unknown>)[])
+          const typesFiles = hasArg(args, 'files')
+            ? normalizeFilesList(getRaw(args, 'files') as string | Record<string, unknown> | (string | Record<string, unknown>)[])
             : [];
           return await handleTypes(root, {
             files: typesFiles.length > 0 ? typesFiles : undefined,
-            threshold: args?.threshold as number | undefined,
-            includePrivate: args?.includePrivate as boolean | undefined,
+            threshold: getNumber(args, 'threshold'),
+            includePrivate: getBoolean(args, 'includePrivate'),
           });
         }
 
         case 'archcodex_scaffold':
           return await handleScaffold(root, {
-            archId: args?.archId as string,
-            name: args?.name as string,
-            output: args?.output as string | undefined,
-            template: args?.template as string | undefined,
-            dryRun: args?.dryRun as boolean | undefined,
+            archId: getString(args, 'archId') as string,
+            name: getString(args, 'name') as string,
+            output: getString(args, 'output'),
+            template: getString(args, 'template'),
+            dryRun: getBoolean(args, 'dryRun'),
           });
 
         case 'archcodex_infer': {
-          const inferFiles = args?.files
-            ? normalizeFilesList(args.files as string | Record<string, unknown> | (string | Record<string, unknown>)[])
+          const inferFiles = hasArg(args, 'files')
+            ? normalizeFilesList(getRaw(args, 'files') as string | Record<string, unknown> | (string | Record<string, unknown>)[])
             : [];
           return await handleInfer(root, {
             files: inferFiles,
-            untaggedOnly: args?.untaggedOnly as boolean | undefined,
+            untaggedOnly: getBoolean(args, 'untaggedOnly'),
           });
         }
 
         case 'archcodex_why': {
-          const whyFile = normalizeFilePath(args?.file as string | Record<string, unknown>);
+          const whyFile = normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>);
           return await handleWhy(root, {
             file: whyFile,
-            constraint: args?.constraint as string | undefined,
+            constraint: getString(args, 'constraint'),
           });
         }
 
         case 'archcodex_decide':
           return await handleDecide(root, {
-            action: args?.action as string | undefined,
-            answer: args?.answer as boolean | undefined,
-            sessionId: args?.sessionId as string | undefined,
+            action: getString(args, 'action'),
+            answer: getBoolean(args, 'answer'),
+            sessionId: getString(args, 'sessionId'),
           });
 
         case 'archcodex_session_context':
           return await handleSessionContext(root, {
-            patterns: args?.patterns as string[] | undefined,
-            full: args?.full as boolean | undefined,
-            withPatterns: args?.withPatterns as boolean | undefined,
-            withDuplicates: args?.withDuplicates as boolean | undefined,
-            withoutLayers: args?.withoutLayers as boolean | undefined,
-            scope: args?.scope as string[] | undefined,
+            patterns: getStringArray(args, 'patterns'),
+            full: getBoolean(args, 'full'),
+            withPatterns: getBoolean(args, 'withPatterns'),
+            withDuplicates: getBoolean(args, 'withDuplicates'),
+            withoutLayers: getBoolean(args, 'withoutLayers'),
+            scope: getStringArray(args, 'scope'),
           });
 
         case 'archcodex_impact': {
-          const impactFile = normalizeFilePath(args?.file as string | Record<string, unknown>);
+          const impactFile = normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>);
           return await handleImpact(root, {
             file: impactFile,
-            depth: args?.depth as number | undefined,
+            depth: getNumber(args, 'depth'),
           });
         }
 
         case 'archcodex_plan_context':
           return await handlePlanContext(root, {
-            scope: args?.scope as string[] | undefined,
-            files: args?.files as string[] | undefined,
+            scope: getStringArray(args, 'scope'),
+            files: getStringArray(args, 'files'),
           });
 
         case 'archcodex_validate_plan':
           return await handleValidatePlan(root, {
-            changes: args?.changes as Array<{ path: string; action: string; archId?: string; newImports?: string[]; codePatterns?: string[]; newPath?: string }>,
+            changes: getArray<{ path: string; action: string; archId?: string; newImports?: string[]; codePatterns?: string[]; newPath?: string }>(args, 'changes') ?? [],
+          });
+
+        case 'archcodex_entity_context':
+          return await handleEntityContext(root, {
+            entity: (getRaw(args, 'entity') ?? getRaw(args, 'name')) as string | string[] | undefined,
+            operation: getString(args, 'operation'),
+            format: getString(args, 'format') as 'yaml' | 'json' | 'compact' | undefined,
+            refresh: getBoolean(args, 'refresh'),
+            explicitProjectRoot: hasArg(args, 'projectRoot'),
+            maxFiles: getNumber(args, 'maxFiles'),
+            verbose: getBoolean(args, 'verbose'),
+          });
+
+        case 'archcodex_map': {
+          const mapFile = hasArg(args, 'file') ? normalizeFilePath(getRaw(args, 'file') as string | Record<string, unknown>) : undefined;
+          return await handleArchitectureMap(root, {
+            entity: getString(args, 'entity'),
+            architecture: getString(args, 'architecture'),
+            file: mapFile,
+            module: getString(args, 'module'),
+            depth: getNumber(args, 'depth'),
+            refresh: getBoolean(args, 'refresh'),
+          });
+        }
+
+        case 'archcodex_context':
+          return await handleUnifiedContext(root, {
+            module: getString(args, 'module'),
+            entity: getString(args, 'entity'),
+            format: getString(args, 'format') as 'compact' | 'full' | 'json' | undefined,
+            sections: getArray<'project-rules' | 'modification-order' | 'boundaries' | 'entities' | 'impact' | 'constraints'>(args, 'sections'),
+            confirm: getBoolean(args, 'confirm'),
+            summary: getBoolean(args, 'summary'),
+            brief: getBoolean(args, 'brief'),
+          });
+
+        case 'archcodex_spec_init':
+          return await handleSpecInit(root, {
+            force: getBoolean(args, 'force'),
+            minimal: getBoolean(args, 'minimal'),
+            projectRoot: root,
+          });
+
+        case 'archcodex_spec_scaffold_touchpoints':
+          return await handleSpecScaffoldTouchpoints(root, {
+            specId: getString(args, 'specId') as string,
+            entity: getString(args, 'entity') as string,
+            operation: getString(args, 'operation'),
+          });
+
+        case 'archcodex_feature_audit':
+          return await handleFeatureAudit(root, {
+            mutation: getString(args, 'mutation'),
+            entity: getString(args, 'entity'),
+            verbose: getBoolean(args, 'verbose'),
+          });
+
+        case 'archcodex_analyze':
+          return await handleAnalyze(root, {
+            category: getString(args, 'category'),
+            severity: getString(args, 'severity'),
+            specIds: getStringArray(args, 'specIds'),
           });
 
         default:
@@ -1047,7 +507,7 @@ Use \`archcodex_check\` to validate:
         };
 
       case 'archcodex_before_edit': {
-        const file = args?.file as string;
+        const file = getString(args, 'file');
         if (!file) {
           return {
             messages: [{
@@ -1094,4 +554,7 @@ Remember to run \`archcodex_check\` after making changes.`,
   await server.connect(transport);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  logger.error('MCP server failed to start', err instanceof Error ? err : undefined);
+  process.exit(1);
+});

@@ -1,0 +1,135 @@
+version: "1.0"
+
+spec.test.agent.processOrder:
+  type: test
+  inherits: spec.mutation
+  architectures: [convex.mutation]
+
+  intent: "Process a customer order with validation and fulfillment"
+  goal: "Demonstrate full spec lifecycle with all sections"
+  outcomes:
+    - "Order is validated and persisted"
+    - "Payment is processed"
+    - "Fulfillment job is scheduled"
+    - "Customer receives confirmation"
+
+  inputs:
+    orderId:
+      type: id
+      table: orders
+      required: true
+    items:
+      type: array
+      items:
+        type: object
+        properties:
+          productId: { type: string }
+          quantity: { type: number, min: 1 }
+      required: true
+    shippingAddress:
+      type: object
+      properties:
+        street: { type: string, max: 200 }
+        city: { type: string }
+        zipCode: { type: string, pattern: "^[0-9]{5}$" }
+      required: true
+    paymentMethod:
+      type: enum
+      values: [credit_card, paypal, bank_transfer]
+      required: true
+
+  outputs:
+    success: { type: boolean }
+    orderNumber: { type: string }
+    totalAmount: { type: number }
+    estimatedDelivery: { type: string }
+    errors: { type: array, items: { type: string } }
+
+  security:
+    authentication: required
+    permissions: [order.process]
+    rate_limit: { requests: 10, window: "1m" }
+
+  invariants:
+    - condition: "!result.success || result.totalAmount > 0"
+    - { "result.orderNumber": "@matches('^ORD-[0-9]+$')" }
+    - condition: "result.success === true || result.errors.length > 0"
+    - forall:
+        variable: item
+        in: input.items
+        then: { "item.quantity": "@gte(1)" }
+
+  effects:
+    - audit_log: { action: "order.process", resourceType: "order" }
+    - database: { table: "orders", operation: "update" }
+    - notification: { type: "order_confirmation", channel: "email" }
+    - scheduler: { job: "fulfillOrder", delay: "0s" }
+    - metrics: { counter: "orders_processed" }
+
+  ui:
+    trigger:
+      location: "checkout page"
+      element: "[data-checkout-submit]"
+      action: "click"
+      label: "Place Order"
+    interaction:
+      optimistic: false
+      loading: "Full-screen spinner with order summary"
+      flow:
+        - "User reviews order"
+        - "User clicks Place Order"
+        - "Loading state shown"
+        - "Confirmation or error displayed"
+    feedback:
+      success: "Order placed successfully!"
+      error: "Failed to process order. Please try again."
+
+  examples:
+    success:
+      - name: "process valid order"
+        given:
+          user: "@authenticated"
+          orderId: "@string(24)"
+          items:
+            - { productId: "prod_123", quantity: 2 }
+            - { productId: "prod_456", quantity: 1 }
+          shippingAddress: { street: "123 Main St", city: "NYC", zipCode: "10001" }
+          paymentMethod: "credit_card"
+        then:
+          result.success: true
+          result.orderNumber: "@matches('^ORD-[0-9]+$')"
+          result.totalAmount: "@gt(0)"
+          result.errors: "@empty"
+
+    errors:
+      - name: "invalid zip code"
+        given:
+          user: "@authenticated"
+          orderId: "@string(24)"
+          items: [{ productId: "prod_123", quantity: 1 }]
+          shippingAddress: { street: "123 Main St", city: "NYC", zipCode: "invalid" }
+          paymentMethod: "credit_card"
+        then:
+          error: "VALIDATION_ERROR"
+
+      - name: "unauthenticated rejected"
+        given:
+          user: "@no_access"
+          orderId: "@string(24)"
+          items: [{ productId: "prod_123", quantity: 1 }]
+          shippingAddress: { street: "123 Main St", city: "NYC", zipCode: "10001" }
+          paymentMethod: "credit_card"
+        then:
+          error: "NOT_AUTHENTICATED"
+
+    boundaries:
+      - name: "large order"
+        given:
+          user: "@authenticated"
+          orderId: "@string(24)"
+          items: "@array(50, { productId: '@string(10)', quantity: '@number(1, 100)' })"
+          shippingAddress: { street: "@string(100)", city: "@string(50)", zipCode: "12345" }
+          paymentMethod: "paypal"
+        then:
+          result: "@exists"
+        property: "forall valid orders, processing completes"

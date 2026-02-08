@@ -42,6 +42,30 @@ export type {
   DecideOptions,
 } from './context.js';
 
+// Entity context handler
+export { handleEntityContext } from './entity-context.js';
+export type { EntityContextOptions } from './entity-context.js';
+
 // Scaffold handlers
 export { handleScaffold } from './scaffold.js';
 export type { ScaffoldOptions } from './scaffold.js';
+
+// Architecture map handler
+export { handleArchitectureMap } from './architecture-map.js';
+export type { ArchitectureMapOptions } from './architecture-map.js';
+
+// Unified context handler
+export { handleUnifiedContext } from './unified-context.js';
+export type { UnifiedContextOptions } from './unified-context.js';
+
+// Spec handlers
+export { handleSpecInit, handleSpecScaffoldTouchpoints } from './spec.js';
+export type { SpecInitMcpOptions, SpecScaffoldTouchpointsOptions } from './spec.js';
+
+// Feature audit handler
+export { handleFeatureAudit } from './feature-audit.js';
+export type { FeatureAuditOptions } from './feature-audit.js';
+
+// Analysis handler
+export { handleAnalyze } from './analyze.js';
+export type { AnalyzeOptions as AnalyzeToolOptions } from './analyze.js';

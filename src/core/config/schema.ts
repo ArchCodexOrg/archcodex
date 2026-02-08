@@ -282,6 +282,20 @@ export const HealthConfigSchema = z.object({
   exclude_inherited_similarity: z.boolean().default(true),
 });
 
+/** Configurable regex patterns for deep code analysis. Empty = rule disabled. */
+export const AnalysisDeepPatternsSchema = z.object({
+  auth_check: z.array(z.string()).default([]),
+  ownership_check: z.array(z.string()).default([]),
+  permission_call: z.string().default(''),
+  soft_delete_filter: z.array(z.string()).default([]),
+  db_query: z.array(z.string()).default([]),
+  db_get: z.array(z.string()).default([]),
+});
+/** Spec analysis settings. */
+export const AnalysisConfigSchema = z.object({
+  deep_patterns: withDefaults(AnalysisDeepPatternsSchema),
+  tool_entities: z.array(z.string()).default(['archcodex', 'speccodex', 'test']),
+});
 /** Complete config.yaml schema. */
 export const ConfigSchema = z.object({
   version: z.string().default('1.0'),
@@ -300,13 +314,13 @@ export const ConfigSchema = z.object({
   discovery: withDefaults(DiscoverySettingsSchema),
   table_detection: withDefaults(TableDetectionSettingsSchema),
   health: withDefaults(HealthConfigSchema),
+  analysis: withDefaults(AnalysisConfigSchema),
 });
 
 // Type exports (inferred from schemas)
 export type UntaggedPolicy = z.infer<typeof UntaggedPolicySchema>;
 export type FileScanPatterns = z.infer<typeof FileScanPatternsSchema>;
 export type FilePolicies = z.infer<typeof FilePoliciesSchema>;
-export type ExitCodes = z.infer<typeof ExitCodesSchema>;
 export type MissingWhyBehavior = z.infer<typeof MissingWhyBehaviorSchema>;
 export type ValidationSettings = z.infer<typeof ValidationSettingsSchema>;
 export type HydrationFormat = z.infer<typeof HydrationFormatSchema>;
@@ -316,10 +330,8 @@ export type PointerSettings = z.infer<typeof PointerSettingsSchema>;
 export type OverrideSettings = z.infer<typeof OverrideSettingsSchema>;
 export type OutputFormat = z.infer<typeof OutputFormatSchema>;
 export type PrecommitSettings = z.infer<typeof PrecommitSettingsSchema>;
-export type LLMProviderType = z.infer<typeof LLMProviderTypeSchema>;
 export type LLMProviderConfig = z.infer<typeof LLMProviderConfigSchema>;
 export type LLMSettings = z.infer<typeof LLMSettingsSchema>;
-export type NonApplicableConstraintBehavior = z.infer<typeof NonApplicableConstraintBehaviorSchema>;
 export type LanguageSettings = z.infer<typeof LanguageSettingsSchema>;
 export type LanguagesConfig = z.infer<typeof LanguagesConfigSchema>;
 export type PackageConfig = z.infer<typeof PackageConfigSchema>;
@@ -331,7 +343,7 @@ export type InferenceSettings = z.infer<typeof InferenceSettingsSchema>;
 export type UndefinedIntentBehavior = z.infer<typeof UndefinedIntentBehaviorSchema>;
 export type IntentSettings = z.infer<typeof IntentSettingsSchema>;
 export type DiscoverySettings = z.infer<typeof DiscoverySettingsSchema>;
-export type TableDetectionMode = z.infer<typeof TableDetectionModeSchema>;
 export type TableDetectionSettings = z.infer<typeof TableDetectionSettingsSchema>;
 export type HealthConfig = z.infer<typeof HealthConfigSchema>;
+export type AnalysisDeepPatterns = z.infer<typeof AnalysisDeepPatternsSchema>;
 export type Config = z.infer<typeof ConfigSchema>;

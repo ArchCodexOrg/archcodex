@@ -314,7 +314,7 @@ export class ProjectValidator {
     let resolution;
     try {
       resolution = this.getResolvedArchitecture(result.archId);
-    } catch {
+    } catch { /* architecture not found in registry */
       return result;
     }
 
@@ -615,7 +615,7 @@ export class ProjectValidator {
               why: config.why,
             });
           }
-        } catch {
+        } catch { /* file analysis or similarity computation failed */
           // Skip files that fail analysis
           continue;
         }
@@ -647,7 +647,7 @@ export class ProjectValidator {
       let resolution: ResolutionResult;
       try {
         resolution = this.getResolvedArchitecture(archId);
-      } catch {
+      } catch { /* architecture not found in registry */
         continue;
       }
 
@@ -691,7 +691,7 @@ export class ProjectValidator {
       let resolution: ResolutionResult;
       try {
         resolution = this.getResolvedArchitecture(archId);
-      } catch {
+      } catch { /* architecture not found in registry */
         continue;
       }
 

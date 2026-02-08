@@ -1,0 +1,89 @@
+---
+
+# Context extraction architectures - synthesized mental models for LLMs
+
+archcodex.core.context.extractor:
+  inherits: archcodex.core.engine
+  description: Schema extractors - extract entity schemas from ORMs (Convex, Prisma, etc.)
+  rationale: |
+    Schema extractors parse ORM-specific schema definitions and convert them to a
+    unified format for context synthesis. Each extractor handles one ORM/framework.
+
+    Extractors may:
+    - Execute scripts in the user's project via child_process
+    - Write temporary files for inter-process communication
+    - Use ORM-specific introspection APIs
+
+    Use for: Files that extract schema from specific ORMs (Convex, Prisma, Drizzle, TypeORM).
+    Don't use for: Context synthesis, formatting, or behavior detection (use core.engine).
+  reference_implementations:
+    - src/core/context/extraction/convex.ts
+  file_pattern: ${name}.ts
+  default_path: src/core/context/extraction
+  constraints:
+    - rule: require_pattern
+      value: "implements ISchemaExtractor"
+      severity: warning
+      why: Extractors must implement the ISchemaExtractor interface for consistency
+      alternatives:
+        - module: src/core/context/extraction/types
+          export: ISchemaExtractor
+          description: Interface that all schema extractors must implement
+    - rule: require_pattern
+      value: "readonly source ="
+      severity: warning
+      why: Extractors must declare their source identifier (e.g., 'convex', 'prisma')
+    - rule: max_file_lines
+      value: 800
+      exclude_comments: true
+      severity: warning
+      why: Extractors may have complex parsing logic, but keep them focused
+  hints:
+    - text: "Extractors must implement ISchemaExtractor interface"
+      example: code://src/core/context/extraction/convex.ts
+    - "Use process.stdout.write() for script output, not console.log"
+    - "Clean up temporary files in finally blocks"
+    - "Handle ES module default exports (schema.default || schema)"
+    - "Use Convex extractor as reference for new ORM extractors"
+    - "Script-based extraction is preferred for accuracy over regex parsing"
+  code_pattern: |-
+    import * as path from 'node:path';
+    import { spawn } from 'node:child_process';
+    import { writeFile, unlink } from 'node:fs/promises';
+    import { fileExists } from '../../../utils/file-system.js';
+    import type {
+      ISchemaExtractor,
+      ExtractionOptions,
+      SchemaExtractionResult,
+    } from './types.js';
+
+    /**
+     * Schema paths to check for this ORM.
+     */
+    const SCHEMA_PATHS = [
+      'path/to/schema.ts',
+    ];
+
+    /**
+     * Extraction script that runs in the user's project.
+     */
+    const EXTRACTION_SCRIPT = `
+      // Script to extract schema using ORM's introspection API
+      // Output JSON to stdout via process.stdout.write()
+    `;
+
+    export class XxxSchemaExtractor implements ISchemaExtractor {
+      readonly source = 'xxx' as const;
+
+      async canExtract(projectRoot: string): Promise<boolean> {
+        // Check if schema file exists
+      }
+
+      async extract(options: ExtractionOptions): Promise<SchemaExtractionResult> {
+        // Execute extraction script and parse results
+      }
+    }
+
+    export function createXxxExtractor(): ISchemaExtractor {
+      return new XxxSchemaExtractor();
+    }

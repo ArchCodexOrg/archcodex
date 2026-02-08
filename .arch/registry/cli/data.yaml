@@ -3,6 +3,29 @@
 archcodex.cli.data:
   inherits: archcodex.cli
   description: Companion data files with exported constants and templates
+  reference_implementations:
+    - src/cli/commands/init-templates.ts
+    - src/cli/commands/init-hooks-templates.ts
+    - src/cli/commands/schema-helpers.ts
+  file_pattern: "*-templates.ts"
+  default_path: src/cli/commands
+  code_pattern: |-
+    /**
+     * @arch archcodex.cli.data
+     *
+     * Constants and templates for the xxx command.
+     */
+
+    /** Template for generating .arch/config.yaml */
+    export const CONFIG_TEMPLATE = `
+    version: "1.0"
+    # ... template content
+    `;
+
+    /** Map of default values */
+    export const DEFAULTS: Record<string, string> = {
+      key: 'value',
+    };
   rationale: |
     Files that export string constants, template literals, or static configuration data.
     These support command files by extracting large data blobs to stay under line limits.

@@ -1,0 +1,236 @@
+# Scaffold Touchpoints Specification
+#
+# Auto-populates ui.touchpoints in specs when scaffolding for entities
+# that have matching component groups. Ensures UI wiring checklist is
+# generated automatically based on component group definitions.
+
+version: "1.0"
+
+spec.archcodex.scaffoldTouchpoints:
+  inherits: spec.function
+  implementation: src/core/spec/scaffold-touchpoints.ts#generateTouchpointsFromEntity
+
+  # === STRATEGIC ===
+  goal: "Automatically generate UI touchpoints checklist when scaffolding specs"
+  outcomes:
+    - "Specs scaffolded for entities with component groups include touchpoints"
+    - "Each component in the group becomes a touchpoint entry"
+    - "Handler names are derived from the spec's action/operation"
+    - "Reduces manual work and prevents missed UI integrations"
+
+  # === OPERATIONAL ===
+  intent: "Generate ui.touchpoints from component groups for spec scaffolding"
+
+  inputs:
+    entity:
+      type: string
+      required: true
+      description: "Entity name to look up component groups (e.g., 'products')"
+    operation:
+      type: string
+      description: "Operation name for handler derivation (e.g., 'duplicate' -> 'handleDuplicate')"
+    projectRoot:
+      type: string
+      required: true
+      description: "Project root for loading component groups"
+
+  outputs:
+    touchpoints:
+      type: array
+      items:
+        type: object
+        properties:
+          component: { type: string, description: "Component name from group" }
+          location: { type: string, description: "Default location (context menu)" }
+          handler: { type: string, description: "Derived handler name" }
+          wired: { type: boolean, default: false }
+          priority: { type: enum, values: [required, optional], default: required }
+    componentGroup:
+      type: string
+      optional: true
+      description: "Matched component group name (for reference)"
+    warning:
+      type: string
+      optional: true
+      description: "Warning from component group definition"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generates touchpoints for products entity"
+        given:
+          entity: "products"
+          operation: "duplicate"
+          projectRoot: "/path/to/project"
+        then:
+          result.componentGroup: "product-cards"
+          result.touchpoints: "@length(5)"
+          result.touchpoints[0].component: "ProductCard"
+          result.touchpoints[0].handler: "handleDuplicate"
+          result.touchpoints[0].location: "context menu"
+          result.touchpoints[0].wired: false
+
+      - name: "generates touchpoints without operation"
+        given:
+          entity: "products"
+          projectRoot: "/path/to/project"
+        then:
+          result.touchpoints: "@length(5)"
+          result.touchpoints[0].handler: "@undefined"
+
+      - name: "includes warning from component group"
+        given:
+          entity: "products"
+          operation: "delete"
+          projectRoot: "/path/to/project"
+        then:
+          result.warning: "@contains('5 components')"
+
+      - name: "entity without warning returns null warning"
+        given:
+          entity: "products"
+          operation: "list"
+          projectRoot: "/path/to/project"
+        then:
+          result.warning: "@undefined"
+
+    boundaries:
+      - name: "entity without component group returns empty"
+        given:
+          entity: "users"
+          operation: "create"
+          projectRoot: "/path/to/project"
+        then:
+          result.touchpoints: "@empty"
+          result.componentGroup: "@undefined"
+
+      - name: "handles missing component-groups.yaml"
+        given:
+          entity: "products"
+          projectRoot: "/path/without/config"
+        then:
+          result.touchpoints: "@empty"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "touchpoints count matches component group size"
+      condition: "result.componentGroup !== undefined implies result.touchpoints.length === componentGroups[result.componentGroup].components.length"
+    - description: "all touchpoints have wired=false initially"
+      condition: "forall tp in result.touchpoints: tp.wired === false"
+    - description: "handler is derived from operation if provided"
+      condition: "operation !== undefined implies forall tp: tp.handler === 'handle' + capitalize(operation)"
+
+  # === EFFECTS ===
+  effects:
+    - file_read: { path: ".arch/component-groups.yaml" }
+
+---
+# Handler Name Derivation
+
+spec.archcodex.scaffoldTouchpoints.deriveHandler:
+  inherits: spec.function
+  implementation: src/core/spec/scaffold-touchpoints.ts#deriveHandlerName
+
+  intent: "Derive handler function name from operation"
+
+  inputs:
+    operation:
+      type: string
+      required: true
+      description: "Operation name (e.g., 'duplicate', 'archive', 'bulkDelete')"
+
+  outputs:
+    handler:
+      type: string
+      description: "Derived handler name (e.g., 'handleDuplicate', 'handleArchive')"
+
+  examples:
+    success:
+      - name: "simple operation"
+        given:
+          operation: "duplicate"
+        then:
+          result.handler: "handleDuplicate"
+
+      - name: "camelCase operation"
+        given:
+          operation: "bulkDelete"
+        then:
+          result.handler: "handleBulkDelete"
+
+      - name: "PascalCase operation"
+        given:
+          operation: "Archive"
+        then:
+          result.handler: "handleArchive"
+
+  invariants:
+    - description: "handler always starts with 'handle'"
+      condition: "result.handler.startsWith('handle')"
+    - description: "second character is uppercase"
+      condition: "result.handler[6] === result.handler[6].toUpperCase()"
+
+---
+# Spec Scaffold Integration
+
+spec.archcodex.scaffoldTouchpoints.integration:
+  inherits: spec.function
+  implementation: src/core/spec/scaffold-touchpoints.ts#generateSpecWithTouchpoints
+
+  intent: "Integrate touchpoints generation into spec scaffolding workflow"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec identifier (e.g., 'orders.duplicateOrder')"
+    entity:
+      type: string
+      description: "Entity to look up component groups"
+    operation:
+      type: string
+      description: "Operation for handler derivation (defaults from spec name)"
+    projectRoot:
+      type: string
+      required: true
+
+  outputs:
+    spec:
+      type: object
+      description: "Generated spec with ui.touchpoints populated"
+
+  examples:
+    success:
+      - name: "scaffold spec with auto-touchpoints"
+        given:
+          specId: "orders.duplicateOrder"
+          entity: "products"
+          projectRoot: "/path/to/project"
+        then:
+          result.spec.ui.touchpoints: "@length(5)"
+          result.spec.ui.touchpoints[0].handler: "handleDuplicate"
+
+      - name: "derives operation from spec name"
+        given:
+          specId: "orders.archiveOrder"
+          entity: "products"
+          projectRoot: "/path/to/project"
+          # operation not provided, derived from "archiveOrder"
+        then:
+          result.spec.ui.touchpoints[0].handler: "handleArchive"
+
+    errors:
+      - name: "missing spec ID"
+        given:
+          specId: ""
+          projectRoot: "/path/to/project"
+        then:
+          error: "MISSING_SPECID"
+
+    boundaries:
+      - name: "no entity specified skips touchpoints"
+        given:
+          specId: "utils.formatDate"
+          projectRoot: "/path/to/project"
+        then:
+          result.spec.ui.touchpoints: "@undefined"

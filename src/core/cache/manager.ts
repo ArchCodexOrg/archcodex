@@ -70,7 +70,7 @@ export class CacheManager {
 
       this.cache = loaded;
       this.stats.totalCached = Object.keys(this.cache.files).length;
-    } catch {
+    } catch { /* file not found or corrupt JSON */
       // Invalid cache file, start fresh
       this.cache = this.createEmptyCache();
     }

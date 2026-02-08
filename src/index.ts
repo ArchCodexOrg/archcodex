@@ -11,6 +11,9 @@ export * from './core/config/index.js';
 // Registry
 export * from './core/registry/index.js';
 
+// Spec (SpecCodex)
+export * from './core/spec/index.js';
+
 // Arch Tag Parsing
 export * from './core/arch-tag/index.js';
 

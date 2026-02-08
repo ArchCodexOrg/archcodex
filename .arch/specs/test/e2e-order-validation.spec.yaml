@@ -1,0 +1,227 @@
+version: "1.0"
+
+spec.test.validateOrder:
+  type: base  # Example spec for demonstrating SpecCodex features
+  inherits: spec.function
+  goal: "Validate order business rules across line items, quantities, and pricing"
+  intent: "Validate an order with multiple line items, ensuring all items meet business rules"
+
+  inputs:
+    orderId: {type: string, required: true, description: "Unique order identifier"}
+    items:
+      type: array
+      required: true
+      description: "Array of line items in the order"
+      items:
+        type: object
+        properties:
+          productId: {type: string, required: true, description: "Product identifier"}
+          quantity: {type: number, required: true, description: "Number of units ordered"}
+          price: {type: number, required: true, description: "Unit price of the product"}
+    customerId: {type: string, required: true, description: "Customer identifier"}
+
+  outputs:
+    valid: {type: boolean, description: "Whether the order passes all validation rules"}
+    errors: {type: array, items: {type: string}, description: "List of validation error messages"}
+    totalAmount: {type: number, description: "Total order amount (sum of quantity * price for all items)"}
+
+  security:
+    authentication: required
+    rate_limit: {requests: 100, window: "1m"}
+
+  invariants:
+    - description: "Order must be valid when all items meet requirements"
+      condition: "result.valid === true || result.errors.length > 0"
+
+    - description: "All items must have positive quantity (>= 1)"
+      forall:
+        variable: item
+        in: input.items
+        then: { "item.quantity": "@gte(1)" }
+
+    - description: "All items must have positive price"
+      forall:
+        variable: item
+        in: input.items
+        then: { "item.price": "@gt(0)" }
+
+    - description: "At least one item must exist in the order"
+      exists:
+        variable: item
+        in: input.items
+        where: { "item.productId": "@exists" }
+
+    - description: "Total amount must be non-negative"
+      condition: "result.totalAmount >= 0"
+
+    - description: "Total amount matches sum of line item totals"
+      condition: "result.totalAmount === input.items.reduce((sum, item) => sum + (item.quantity * item.price), 0)"
+
+  defaults: &auth_user
+    user: "@authenticated"
+
+  examples:
+    success:
+      - name: "Valid order with single item"
+        given:
+          <<: *auth_user
+          orderId: "order_001"
+          customerId: "cust_123"
+          items:
+            - productId: "prod_A"
+              quantity: 2
+              price: 29.99
+        then:
+          result.valid: true
+          result.errors: "@length(0)"
+          result.totalAmount: 59.98
+
+      - name: "Valid order with multiple items"
+        given:
+          <<: *auth_user
+          orderId: "order_002"
+          customerId: "cust_456"
+          items:
+            - productId: "prod_A"
+              quantity: 2
+              price: 29.99
+            - productId: "prod_B"
+              quantity: 5
+              price: 15.00
+            - productId: "prod_C"
+              quantity: 1
+              price: 49.95
+        then:
+          result.valid: true
+          result.errors: "@length(0)"
+          result.totalAmount: "@gte(100)"
+
+    errors:
+      - name: "Invalid order - item with zero quantity"
+        given:
+          <<: *auth_user
+          orderId: "order_003"
+          customerId: "cust_789"
+          items:
+            - productId: "prod_A"
+              quantity: 0
+              price: 29.99
+        then:
+          result.valid: false
+          result.errors: "@length(@gte(1))"
+
+      - name: "Invalid order - item with negative price"
+        given:
+          <<: *auth_user
+          orderId: "order_004"
+          customerId: "cust_101"
+          items:
+            - productId: "prod_A"
+              quantity: 2
+              price: -10.00
+        then:
+          result.valid: false
+          result.errors: "@length(@gte(1))"
+
+      - name: "Invalid order - empty items array"
+        given:
+          <<: *auth_user
+          orderId: "order_005"
+          customerId: "cust_202"
+          items: []
+        then:
+          result.valid: false
+          result.errors: "@contains('At least one item is required')"
+
+      - name: "Invalid order - negative quantity"
+        given:
+          <<: *auth_user
+          orderId: "order_006"
+          customerId: "cust_303"
+          items:
+            - productId: "prod_A"
+              quantity: -5
+              price: 29.99
+        then:
+          result.valid: false
+          result.errors: "@length(@gte(1))"
+
+      - name: "Unauthenticated request"
+        given:
+          user: null
+          orderId: "order_007"
+          customerId: "cust_404"
+          items:
+            - productId: "prod_A"
+              quantity: 1
+              price: 29.99
+        then:
+          error: "NOT_AUTHENTICATED"
+
+      - name: "Permission denied - no access"
+        given:
+          user: "@no_access"
+          orderId: "order_008"
+          customerId: "cust_404"
+          items:
+            - productId: "prod_A"
+              quantity: 1
+              price: 29.99
+        then:
+          error: "PERMISSION_DENIED"
+
+    boundaries:
+      - name: "Valid order at boundary - single item with quantity 1"
+        given:
+          <<: *auth_user
+          orderId: "order_boundary_001"
+          customerId: "cust_boundary"
+          items:
+            - productId: "prod_A"
+              quantity: 1
+              price: 0.01
+        then:
+          result.valid: true
+          result.totalAmount: 0.01
+        property: "forall valid orders, validation completes successfully"
+
+      - name: "Valid order with large quantities"
+        given:
+          <<: *auth_user
+          orderId: "order_boundary_002"
+          customerId: "cust_boundary_2"
+          items:
+            - productId: "prod_A"
+              quantity: 1000
+              price: 999.99
+        then:
+          result.valid: true
+          result.totalAmount: "@gte(999900)"
+        property: "forall high-value orders, total amount is calculated correctly"
+
+  effects:
+    - audit_log: {action: "order.validate", resourceType: "order"}
+    - side_effect: "Log validation results for compliance"
+
+  ui:
+    trigger:
+      location: "checkout form"
+      element: "[data-order-submit]"
+      label: "Validate & Place Order"
+      icon: "check"
+    interaction:
+      flow:
+        - "User enters order details"
+        - "System validates each item"
+        - "Items must have quantity >= 1 and price > 0"
+        - "At least one item required"
+        - "Success: Order summary displayed"
+        - "Error: Validation messages shown inline"
+      optimistic: false
+      loading: "Validation spinner"
+    accessibility:
+      role: "button"
+      label: "Validate order"
+    feedback:
+      success: "Order is valid and ready for checkout"
+      error: "Please fix the highlighted items and try again"

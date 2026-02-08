@@ -1,0 +1,138 @@
+# SpecCodex Base Definitions
+#
+# Base specs that other specs inherit from. Defines common structures
+# and provides sensible defaults for different spec types.
+#
+# Usage: spec.product.create: { inherits: spec.mutation, ... }
+
+version: "1.0"
+
+# === BASE SPEC ===
+# All specs inherit from this implicitly
+spec.base:
+  type: base
+  intent: "Base specification defining common fields"
+  description: "Base specification - all specs inherit from this"
+  required_fields: [intent]
+  optional_fields:
+    - version
+    - inherits
+    - mixins
+    - architectures
+    - parent
+    - depends_on
+    - goal
+    - outcomes
+    - security
+    - inputs
+    - invariants
+    - examples
+    - effects
+    - implementation
+
+# === FUNCTION SPEC ===
+# For pure functions (no side effects, no auth)
+spec.function:
+  type: base
+  inherits: spec.base
+  intent: "Pure function with no side effects or authentication"
+  description: "Pure function specification"
+  defaults:
+    security: { authentication: none }
+
+# === MUTATION SPEC ===
+# For authenticated write operations
+spec.mutation:
+  type: base
+  inherits: spec.base
+  intent: "Authenticated write operation"
+  description: "Authenticated mutation specification"
+  defaults:
+    security:
+      authentication: required
+      rate_limit: { requests: 60, window: "15m" }
+  required_examples:
+    errors:
+      - { pattern: "unauthenticated", then: { error: "NOT_AUTHENTICATED" } }
+
+# === QUERY SPEC ===
+# For authenticated read operations
+spec.query:
+  type: base
+  inherits: spec.base
+  intent: "Authenticated read operation"
+  description: "Authenticated query specification"
+  defaults:
+    security:
+      authentication: required
+  # Queries typically don't need auth error examples (handled at framework level)
+
+# === ACTION SPEC ===
+# For external API calls and side effects
+spec.action:
+  type: base
+  inherits: spec.base
+  intent: "External API call or side effect"
+  description: "External action specification (API calls, AI, etc.)"
+  defaults:
+    security:
+      authentication: required
+      rate_limit: { requests: 30, window: "15m" }
+  required_examples:
+    errors:
+      - { pattern: "rate_limited", then: { error: "RATE_LIMITED" } }
+      - { pattern: "external_failure", then: { error: "EXTERNAL_ERROR" } }
+
+# === HOOK SPEC ===
+# For React hooks
+spec.hook:
+  type: base
+  inherits: spec.base
+  intent: "React hook for state or effect management"
+  description: "React hook specification"
+  defaults:
+    security: { authentication: none }
+
+# === COMPONENT SPEC ===
+# For React components
+spec.component:
+  type: base
+  inherits: spec.base
+  intent: "React UI component"
+  description: "React component specification"
+  defaults:
+    security: { authentication: none }
+  optional_fields:
+    - props
+    - variants
+    - accessibility
+
+# === UNIT SPEC ===
+# For utility functions
+spec.unit:
+  type: base
+  inherits: spec.function
+  intent: "Utility or helper function"
+  description: "Unit/utility function specification"
+
+# === TYPE SPEC ===
+# For type/schema definitions (documents data shape, no implementation)
+spec.type:
+  type: base
+  inherits: spec.base
+  intent: "Type or schema definition"
+  description: "Defines the shape of data structures (template variables, configs, etc.)"
+  # Types don't have implementations or examples - they document fields
+  required_fields: [goal, fields]
+  optional_fields:
+    - description
+    - extends
+
+# === TEST SPEC ===
+# For test fixture specs (used for testing SpecCodex itself)
+spec.test:
+  type: base
+  inherits: spec.base
+  intent: "Test fixture specification"
+  description: "Test specs used for verifying SpecCodex features - not meant to have real implementations"
+  # Test specs demonstrate features and don't require implementations

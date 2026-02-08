@@ -2,10 +2,6 @@
  * @arch archcodex.test.unit
  * @intent:cli-output
  */
-/**
- * @arch archcodex.core.domain.constraint
- * @intent:tested
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IntentAnalyzer } from '../../../../src/core/health/intent-analyzer.js';
 import type { ScanResult } from '../../../../src/core/health/scanner.js';

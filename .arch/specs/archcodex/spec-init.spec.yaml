@@ -1,0 +1,103 @@
+# SpecCodex Init Command Specification
+#
+# Initialize SpecCodex in a project by creating base specs, mixins,
+# and example files.
+
+version: "1.0"
+
+spec.archcodex.cli.spec.init:
+  inherits: spec.function
+  implementation: src/cli/commands/spec/init.ts#runSpecInit
+
+  # === STRATEGIC ===
+  goal: "Help users quickly set up SpecCodex in their project"
+  outcomes:
+    - "Create .arch/specs/ directory structure"
+    - "Provide reusable base specs and mixins"
+    - "Include example spec to learn from"
+    - "Update config.yaml with speccodex settings"
+    - "Skip files that already exist (unless --force)"
+
+  # === OPERATIONAL ===
+  intent: "Initialize SpecCodex configuration and templates in a project"
+
+  inputs:
+    options:
+      type: object
+      properties:
+        force: { type: boolean, default: false, description: "Overwrite existing files" }
+        minimal: { type: boolean, default: false, description: "Only create essential files" }
+        projectRoot: { type: string, description: "Project root (defaults to cwd)" }
+
+  outputs:
+    success: { type: boolean }
+    filesCreated: { type: array, items: { type: string }, description: "List of created file paths" }
+    filesSkipped: { type: array, items: { type: string }, description: "List of skipped (existing) files" }
+    errors: { type: array }
+
+  # === EFFECTS ===
+  effects:
+    - file_write: { path: ".arch/specs/_base.yaml", description: "Base specs (spec.function, spec.mutation, spec.query)" }
+    - file_write: { path: ".arch/specs/_mixins.yaml", description: "Reusable mixins (requires_auth, logs_audit, rate_limited)" }
+    - file_write: { path: ".arch/specs/example.spec.yaml", description: "Example spec demonstrating all features" }
+    - file_write: { path: ".arch/config.yaml", description: "Updates with speccodex section (if not present)" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "initialize in empty project"
+        given:
+          options: {}
+        then:
+          result.success: true
+          result.errors: []
+          result.filesCreated: "@length(@gte(3))"
+          result.filesSkipped: []
+
+      - name: "initialize with existing specs (no force)"
+        given:
+          options: { force: false }
+          # Assume .arch/specs/_base.yaml already exists
+        then:
+          result.success: true
+          result.filesSkipped: "@contains('.arch/specs/_base.yaml')"
+
+      - name: "force overwrite existing"
+        given:
+          options: { force: true }
+        then:
+          result.success: true
+          result.filesCreated: "@length(@gte(3))"
+          result.filesSkipped: []
+
+      - name: "minimal mode"
+        given:
+          options: { minimal: true }
+        then:
+          result.success: true
+          # Minimal only creates _base.yaml and _mixins.yaml
+          result.filesCreated: "@length(2)"
+
+    errors:
+      - name: "no .arch directory"
+        given:
+          options: {}
+          # Project has no .arch/ directory
+        then:
+          error: "ARCH_NOT_INITIALIZED"
+          error.message: "@contains('archcodex init')"
+
+      - name: "implementation not found"
+        given:
+          options: {}
+        then:
+          error: "IMPLEMENTATION_NOT_FOUND"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "Never overwrites without --force"
+      condition: "if file.exists && !options.force then file in result.filesSkipped"
+    - description: "Creates specs directory if needed"
+      condition: "result.success implies .arch/specs/ exists"
+    - description: "Base specs always inherit correctly"
+      condition: "_base.yaml contains 'spec.function' and 'spec.mutation'"

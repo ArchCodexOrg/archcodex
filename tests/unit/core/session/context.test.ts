@@ -294,4 +294,208 @@ describe('getSessionContext', () => {
       result.architecturesInScope[1]?.fileCount ?? 0
     );
   });
+
+  it('should deduplicate shared constraints across multiple architectures', async () => {
+    vi.mocked(globFiles).mockResolvedValue([
+      '/test/project/src/a.ts',
+      '/test/project/src/b.ts',
+    ]);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce('/**\n * @arch arch.one\n */')
+      .mockResolvedValueOnce('/**\n * @arch arch.two\n */');
+    vi.mocked(loadRegistry).mockResolvedValue({
+      nodes: {
+        base: { description: 'Base' },
+        'arch.one': {
+          inherits: 'base',
+          description: 'Arch One',
+          constraints: [
+            { rule: 'forbid_import', value: ['axios', 'chalk'], severity: 'error' },
+            { rule: 'forbid_pattern', value: ['console.log'], severity: 'warning' },
+          ],
+          hints: ['Keep it simple', 'Unique to one'],
+        },
+        'arch.two': {
+          inherits: 'base',
+          description: 'Arch Two',
+          constraints: [
+            { rule: 'forbid_import', value: ['axios'], severity: 'error' },
+            { rule: 'forbid_pattern', value: ['console.log'], severity: 'warning' },
+          ],
+          hints: ['Keep it simple', 'Unique to two'],
+        },
+      },
+      mixins: {},
+    });
+
+    const result = await getSessionContext(projectRoot, [], { deduplicate: true });
+
+    // Shared constraints should be extracted
+    expect(result.sharedConstraints).toBeDefined();
+    expect(result.sharedConstraints!.length).toBeGreaterThan(0);
+
+    // 'axios' is shared by both, should be in shared forbid
+    const sharedForbid = result.sharedConstraints!.find(s => s.type === 'forbid');
+    expect(sharedForbid).toBeDefined();
+    expect(sharedForbid!.values).toContain('axios');
+
+    // 'chalk' is only in arch.one, should remain per-arch
+    const archOne = result.architecturesInScope.find(a => a.archId === 'arch.one');
+    expect(archOne).toBeDefined();
+    expect(archOne!.forbid).toContain('chalk');
+    expect(archOne!.forbid).not.toContain('axios'); // moved to shared
+  });
+
+  it('should not deduplicate when only one architecture', async () => {
+    vi.mocked(readFile).mockResolvedValue('/**\n * @arch test.arch\n */');
+
+    const result = await getSessionContext(projectRoot, [], { deduplicate: true });
+
+    // Only one architecture, so no shared constraints
+    expect(result.sharedConstraints).toBeUndefined();
+  });
+
+  it('should use default exclude patterns when config has no scan settings', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      version: '1.0',
+    });
+
+    const result = await getSessionContext(projectRoot, []);
+
+    expect(result).toBeDefined();
+    // Should still work with default patterns
+  });
+
+  it('should handle scope filtering with trailing slashes', async () => {
+    vi.mocked(globFiles).mockResolvedValue([
+      '/test/project/src/core/a.ts',
+      '/test/project/src/cli/b.ts',
+    ]);
+
+    const result = await getSessionContext(projectRoot, [], { scope: ['src/core/'] });
+
+    // Only files starting with 'src/core' should be included
+    expect(result.filesScanned).toBeLessThanOrEqual(2);
+  });
+
+  it('should not include layers when withLayers is not set', async () => {
+    const result = await getSessionContext(projectRoot, []);
+
+    expect(result.layers).toBeUndefined();
+  });
+
+  it('should not include patterns when withPatterns is not set', async () => {
+    const result = await getSessionContext(projectRoot, []);
+
+    expect(result.canonicalPatterns).toBeUndefined();
+    expect(loadPatternRegistry).not.toHaveBeenCalled();
+  });
+
+  it('should handle config with empty layers array', async () => {
+    vi.mocked(loadConfig).mockResolvedValue({
+      version: '1.0',
+      layers: [],
+      files: { scan: { include: ['**/*.ts'], exclude: ['**/node_modules/**'] } },
+    });
+
+    const result = await getSessionContext(projectRoot, [], { withLayers: true });
+
+    expect(result.layers).toBeDefined();
+    expect(result.layers).toHaveLength(0);
+  });
+});
+
+describe('buildArchitectureSummary edge cases', () => {
+  it('should handle architecture with require_decorator constraint', () => {
+    const registry = makeRegistry({
+      base: { description: 'Base', constraints: [], hints: [] },
+      'deco.arch': {
+        inherits: 'base',
+        description: 'Decorated arch',
+        constraints: [
+          { rule: 'require_decorator', value: '@Injectable', severity: 'error' },
+        ],
+        hints: [],
+      },
+    });
+
+    const summary = buildArchitectureSummary('deco.arch', ['src/a.ts'], registry);
+    expect(summary.require).toContain('@Injectable');
+  });
+
+  it('should handle architecture with forbid_call constraint', () => {
+    const registry = makeRegistry({
+      base: { description: 'Base', constraints: [], hints: [] },
+      'call.arch': {
+        inherits: 'base',
+        description: 'No calls arch',
+        constraints: [
+          { rule: 'forbid_call', value: 'eval', severity: 'error' },
+        ],
+        hints: [],
+      },
+    });
+
+    const summary = buildArchitectureSummary('call.arch', ['src/a.ts'], registry);
+    expect(summary.forbid).toContain('eval');
+  });
+
+  it('should handle architecture with scalar constraint values (non-array)', () => {
+    const registry = makeRegistry({
+      base: { description: 'Base', constraints: [], hints: [] },
+      'scalar.arch': {
+        inherits: 'base',
+        description: 'Scalar constraint arch',
+        constraints: [
+          { rule: 'forbid_import', value: 'lodash', severity: 'error' },
+          { rule: 'require_import', value: 'logger', severity: 'warning' },
+          { rule: 'forbid_pattern', value: 'console.log', severity: 'warning' },
+        ],
+        hints: [],
+      },
+    });
+
+    const summary = buildArchitectureSummary('scalar.arch', ['src/a.ts'], registry);
+    expect(summary.forbid).toContain('lodash');
+    expect(summary.require).toContain('logger');
+    expect(summary.patterns).toContain('console.log');
+  });
+
+  it('should handle architecture with no constraints', () => {
+    const registry = makeRegistry({
+      base: { description: 'Base', constraints: [], hints: [] },
+      'empty.arch': {
+        inherits: 'base',
+        description: 'Empty arch',
+        constraints: [],
+        hints: [],
+      },
+    });
+
+    const summary = buildArchitectureSummary('empty.arch', ['src/a.ts'], registry);
+    expect(summary.forbid).toEqual([]);
+    expect(summary.patterns).toEqual([]);
+    expect(summary.require).toEqual([]);
+    expect(summary.hints).toEqual([]);
+  });
+
+  it('should return empty mixins array when no mixins defined', () => {
+    const registry = makeRegistry({
+      base: {
+        description: 'Base',
+        constraints: [],
+        hints: [],
+      },
+      'no.mixin.arch': {
+        inherits: 'base',
+        description: 'No mixin',
+        constraints: [],
+        hints: [],
+      },
+    });
+
+    const summary = buildArchitectureSummary('no.mixin.arch', ['src/a.ts'], registry);
+    expect(summary.mixins).toBeDefined();
+    expect(Array.isArray(summary.mixins)).toBe(true);
+  });
 });

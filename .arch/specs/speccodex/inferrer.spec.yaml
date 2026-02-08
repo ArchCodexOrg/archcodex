@@ -1,0 +1,243 @@
+# SpecCodex Inferrer Specification
+#
+# Generates spec YAML from existing TypeScript implementations.
+# Enables reverse workflow: code-first, then spec, then tests.
+
+version: "1.0"
+
+spec.speccodex.infer:
+  inherits: spec.function
+  implementation: src/core/spec/inferrer.ts#inferSpec
+
+  # === STRATEGIC ===
+  goal: "Generate SpecCodex spec YAML from existing TypeScript implementation code"
+  outcomes:
+    - "Parse implementation path and extract function signature via AST"
+    - "Map TypeScript types to spec input/output types"
+    - "Detect wrapper pattern to determine base spec (mutation/query/action/function)"
+    - "Detect security patterns, side effects, and error codes"
+    - "Generate spec ID from file path"
+    - "Assemble YAML with TODO comments for manual fields"
+
+  # === OPERATIONAL ===
+  intent: "Infer a spec from implementation code to bootstrap spec-first workflow"
+
+  inputs:
+    implementationPath:
+      type: string
+      required: true
+      description: "Path in format path/to/file.ts#exportName"
+    options:
+      type: object
+      properties:
+        projectRoot: { type: string, description: "Project root directory" }
+        inherits: { type: string, description: "Override auto-detected base spec" }
+
+  outputs:
+    valid:
+      type: boolean
+      description: "Whether inference succeeded"
+    specId:
+      type: string
+      description: "Generated spec ID from file path"
+    yaml:
+      type: string
+      description: "Generated spec YAML content"
+    detectedPatterns:
+      type: object
+      properties:
+        baseSpec: { type: string, description: "Detected base spec to inherit from" }
+        security:
+          type: object
+          properties:
+            authentication: { type: enum, values: [required, optional, none] }
+        effects: { type: array, description: "Detected side effects" }
+        errorCodes: { type: array, description: "Extracted error codes" }
+        archTag: { type: string, optional: true }
+    errors:
+      type: array
+
+  # === INVARIANTS ===
+  invariants:
+    - "valid is true when implementation path is parseable and file exists"
+    - "when valid is true, specId always starts with 'spec.'"
+    - "makeAuthMutation wrapper maps to baseSpec spec.mutation"
+    - "makeAuthQuery wrapper maps to baseSpec spec.query"
+    - "makeAuthAction wrapper maps to baseSpec spec.action"
+    - "plain function maps to baseSpec spec.function"
+    - "function named use* maps to baseSpec spec.hook"
+    - "yaml includes 'goal: \"TODO: Describe the high-level goal\"'"
+    - "yaml includes 'intent: \"TODO: Describe what this function does\"'"
+    - "generated YAML always includes implementation field"
+    - "inherits override takes precedence over auto-detection"
+    - "when valid is false, specId is empty string and yaml is empty string"
+    - "when return type is imported from another file, cross-file resolution is attempted"
+    - "when cross-file resolution succeeds, output fields are expanded (no TODO)"
+    - "when cross-file resolution fails, fallback to TODO message"
+    - "when parameter type is an imported interface, properties are resolved cross-file"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "plain function infers spec.function"
+        given:
+          implementationPath: "src/utils/format.ts#formatDate"
+        then:
+          result.valid: true
+          result.specId: "@contains('spec.')"
+          result.detectedPatterns.baseSpec: "spec.function"
+          result.detectedPatterns.security.authentication: "none"
+          result.yaml: "@contains('inherits: spec.function')"
+
+      - name: "makeAuthMutation infers spec.mutation with required auth"
+        given:
+          implementationPath: "src/domain/products/mutations/create.ts#create"
+        then:
+          result.valid: true
+          result.detectedPatterns.baseSpec: "spec.mutation"
+          result.detectedPatterns.security.authentication: "required"
+          result.yaml: "@contains('inherits: spec.mutation')"
+          result.yaml: "@contains('authentication: required')"
+
+      - name: "override inherits via option"
+        given:
+          implementationPath: "src/test.ts#fn"
+          options: { inherits: "spec.action" }
+        then:
+          result.valid: true
+          result.detectedPatterns.baseSpec: "spec.action"
+          result.yaml: "@contains('inherits: spec.action')"
+
+      - name: "YAML includes TODO placeholders for manual fields"
+        given:
+          implementationPath: "src/utils/helpers.ts#doStuff"
+        then:
+          result.valid: true
+          result.yaml: "@contains('TODO')"
+          result.yaml: "@contains('goal:')"
+          result.yaml: "@contains('intent:')"
+
+      - name: "detects side effects from code patterns"
+        given:
+          implementationPath: "src/domain/items/mutations/update.ts#update"
+        then:
+          result.valid: true
+          result.detectedPatterns.effects: "@gt(0)"
+
+      - name: "extracts error codes from throws"
+        given:
+          implementationPath: "src/domain/items/mutations/delete.ts#remove"
+        then:
+          result.valid: true
+          result.detectedPatterns.errorCodes: "@gt(0)"
+
+      - name: "resolves imported return type fields cross-file"
+        given:
+          implementationPath: "tests/fixtures/typescript/imported-types/main.ts#processUser"
+        then:
+          result.valid: true
+          result.yaml: "@contains('valid')"
+          result.yaml: "@contains('boolean')"
+
+    errors:
+      - name: "invalid path format (no hash)"
+        given:
+          implementationPath: "no-hash-here.ts"
+        then:
+          result.valid: false
+          result.errors: "@hasItem({ code: 'INVALID_PATH' })"
+
+      - name: "file not found"
+        given:
+          implementationPath: "nonexistent/file.ts#fn"
+        then:
+          result.valid: false
+          result.errors: "@hasItem({ code: 'IMPLEMENTATION_NOT_FOUND' })"
+
+      - name: "export not found in file"
+        given:
+          implementationPath: "src/utils/helpers.ts#nonExistentExport"
+        then:
+          result.valid: false
+          result.errors: "@hasItem({ code: 'EXPORT_NOT_FOUND' })"
+
+---
+
+spec.speccodex.infer.update:
+  inherits: spec.function
+  implementation: src/core/spec/inferrer.ts#inferSpecUpdate
+
+  # === STRATEGIC ===
+  goal: "Update existing spec with changes detected from implementation"
+  outcomes:
+    - "Compare inferred signature with existing spec inputs/outputs"
+    - "Report added and removed fields"
+    - "Preserve hand-written goal, intent, examples, and invariants"
+    - "Generate updated YAML with merge annotations"
+
+  # === OPERATIONAL ===
+  intent: "Merge inferred changes into existing spec preserving hand-written content"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Existing spec ID to update"
+    implementationPath:
+      type: string
+      required: true
+      description: "Path in format path/to/file.ts#exportName"
+    options:
+      type: object
+      properties:
+        projectRoot: { type: string }
+
+  outputs:
+    valid:
+      type: boolean
+    yaml:
+      type: string
+      description: "Updated spec YAML with merge annotations"
+    errors:
+      type: array
+
+  # === INVARIANTS ===
+  invariants:
+    - "goal field is never overwritten by inferSpecUpdate"
+    - "intent field is never overwritten by inferSpecUpdate"
+    - "examples section is never overwritten by inferSpecUpdate"
+    - "invariants section is never overwritten by inferSpecUpdate"
+    - "added inputs are annotated with NEW comment"
+    - "removed inputs are commented out, not deleted"
+    - "result.mergeReport.preservedSections always includes ['goal', 'intent', 'examples', 'invariants']"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "detects new parameter added to implementation"
+        given:
+          specId: "spec.test.fn"
+          implementationPath: "src/test.ts#fn"
+        then:
+          result.valid: true
+          result.yaml: "@defined"
+          result.mergeReport.preservedSections: "@hasItem('goal')"
+          result.mergeReport.preservedSections: "@hasItem('intent')"
+          result.mergeReport.preservedSections: "@hasItem('examples')"
+
+      - name: "preserves existing goal and intent"
+        given:
+          specId: "spec.test.fn"
+          implementationPath: "src/test.ts#fn"
+        then:
+          result.valid: true
+          result.mergeReport.preservedSections: "@hasItem('invariants')"
+
+    errors:
+      - name: "spec not found"
+        given:
+          specId: "spec.nonexistent"
+          implementationPath: "src/test.ts#fn"
+        then:
+          result.valid: false
+          result.errors: "@hasItem({ code: 'SPEC_NOT_FOUND' })"

@@ -6,6 +6,17 @@ archcodex.infra.barrel:
   mixins:
     - barrel
   description: Infrastructure barrel/index files - re-exports only
+  reference_implementations:
+    - src/validators/index.ts
+    - src/validators/tree-sitter/index.ts
+  file_pattern: index.ts
+  default_path: src/validators
+  code_pattern: |-
+    /**
+     * @arch archcodex.infra.barrel
+     */
+    export * from './module-a.js';
+    export * from './module-b.js';
   rationale: |
     Index files that consolidate infrastructure exports.
 

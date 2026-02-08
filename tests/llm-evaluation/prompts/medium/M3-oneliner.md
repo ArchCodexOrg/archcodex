@@ -1,0 +1,1 @@
+Rename getImportGraph to getFileDependencyGraph

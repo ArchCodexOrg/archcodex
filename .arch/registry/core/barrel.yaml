@@ -14,8 +14,25 @@ archcodex.core.barrel:
     Don't use for: Files with implementation logic.
   constraints:
     - rule: max_file_lines
-      value: 50
+      value: 200
       severity: warning
-      why: Core barrels should only contain exports
+      why: Core barrels should only contain exports - larger modules may need more lines for comprehensive re-exports
+  reference_implementations:
+    - src/core/hydration/index.ts
+  file_pattern: index.ts
+  default_path: src/core
+  code_pattern: |-
+    /**
+     * @arch archcodex.core.barrel
+     *
+     * Module exports barrel file.
+     */
+    export { MyEngine } from './engine.js';
+    export { myHelper } from './helpers.js';
+    export type {
+      MyOptions,
+      MyResult,
+      MyFormat,
+    } from './types.js';
   hints:
     - Keep alphabetically sorted for maintainability

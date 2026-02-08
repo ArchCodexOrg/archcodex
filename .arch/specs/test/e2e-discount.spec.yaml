@@ -1,0 +1,194 @@
+version: "1.0"
+
+spec.test.calculateDiscount:
+  type: base  # Example spec for demonstrating SpecCodex features
+  inherits: spec.function
+  intent: "Calculate discount amount and final price based on quantity and customer tier"
+
+  # === STRATEGIC ===
+  goal: "Apply tiered discounts to orders based on customer loyalty and order quantity"
+  outcomes:
+    - "Return accurate total price after discount application"
+    - "Calculate correct discount percentage based on tier"
+    - "Compute savings amount correctly"
+
+  # === INPUTS ===
+  inputs:
+    quantity:
+      type: number
+      required: true
+      description: "Order quantity (must be at least 1)"
+      constraints:
+        - "@gte(1)"
+
+    unitPrice:
+      type: number
+      required: true
+      description: "Price per unit (non-negative)"
+      constraints:
+        - "@gte(0)"
+
+    customerTier:
+      type: string
+      required: true
+      description: "Customer loyalty tier"
+      enum: [bronze, silver, gold]
+
+  # === OUTPUTS ===
+  outputs:
+    totalPrice:
+      type: number
+      description: "Final price after discount"
+      constraints:
+        - "@gte(0)"
+
+    discountPercent:
+      type: number
+      description: "Discount percentage applied (0-20)"
+      constraints:
+        - "@gte(0)"
+        - "@lte(20)"
+
+    savings:
+      type: number
+      description: "Amount saved due to discount"
+      constraints:
+        - "@gte(0)"
+
+  # === INVARIANTS ===
+  invariants:
+    # Field-level assertions
+    - { "result.totalPrice": "@gte(0)" }
+    - { "result.discountPercent": "@between(0,20)" }
+    - { "result.savings": "@gte(0)" }
+
+    # Condition-based invariants
+    - condition: "result.savings === (input.quantity * input.unitPrice) - result.totalPrice"
+      description: "Savings must equal difference between original and discounted price"
+
+    - condition: "result.totalPrice === input.quantity * input.unitPrice * (1 - result.discountPercent / 100)"
+      description: "Total price must reflect exact discount percentage"
+
+    - condition: "result.totalPrice <= input.quantity * input.unitPrice"
+      description: "Discounted price cannot exceed original price"
+
+    # Tier-based invariants
+    - condition: "input.customerTier === 'bronze' && result.discountPercent === 0"
+      description: "Bronze tier customers get 0% discount"
+
+    - condition: "input.customerTier === 'silver' && result.discountPercent === 10"
+      description: "Silver tier customers get 10% discount"
+
+    - condition: "input.customerTier === 'gold' && result.discountPercent === 20"
+      description: "Gold tier customers get 20% discount"
+
+    # All calculations must be mathematically valid
+    - description: "Savings amount is always non-negative"
+      condition: "result.savings >= 0"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "bronze tier minimal order"
+        given:
+          quantity: 1
+          unitPrice: 100
+          customerTier: bronze
+        then:
+          totalPrice: 100
+          discountPercent: 0
+          savings: 0
+
+      - name: "silver tier bulk order"
+        given:
+          quantity: 10
+          unitPrice: 50
+          customerTier: silver
+        then:
+          totalPrice: 450
+          discountPercent: 10
+          savings: 50
+
+      - name: "gold tier large order"
+        given:
+          quantity: 50
+          unitPrice: 20
+          customerTier: gold
+        then:
+          totalPrice: 800
+          discountPercent: 20
+          savings: 200
+
+      - name: "gold tier fractional pricing"
+        given:
+          quantity: 3
+          unitPrice: 33.33
+          customerTier: gold
+        then:
+          totalPrice: "@gte(79)"
+          discountPercent: 20
+          savings: "@gte(19)"
+
+    boundaries:
+      - name: "single unit minimum"
+        given:
+          quantity: 1
+          unitPrice: 0.01
+          customerTier: gold
+        then:
+          totalPrice: "@between(0, 0.01)"
+          discountPercent: 20
+          savings: "@gte(0)"
+
+      - name: "zero unit price"
+        given:
+          quantity: 100
+          unitPrice: 0
+          customerTier: silver
+        then:
+          totalPrice: 0
+          discountPercent: 10
+          savings: 0
+
+      - name: "large bulk order"
+        given:
+          quantity: 10000
+          unitPrice: 99.99
+          customerTier: gold
+        then:
+          totalPrice: "@gte(0)"
+          discountPercent: 20
+          savings: "@gte(0)"
+
+    errors:
+      - name: "invalid quantity zero"
+        given:
+          quantity: 0
+          unitPrice: 100
+          customerTier: bronze
+        then:
+          error: "INVALID_QUANTITY"
+
+      - name: "negative quantity"
+        given:
+          quantity: -5
+          unitPrice: 100
+          customerTier: silver
+        then:
+          error: "INVALID_QUANTITY"
+
+      - name: "negative unit price"
+        given:
+          quantity: 10
+          unitPrice: -50
+          customerTier: gold
+        then:
+          error: "INVALID_PRICE"
+
+      - name: "invalid tier"
+        given:
+          quantity: 10
+          unitPrice: 100
+          customerTier: platinum
+        then:
+          error: "INVALID_TIER"

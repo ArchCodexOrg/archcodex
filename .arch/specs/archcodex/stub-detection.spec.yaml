@@ -1,0 +1,132 @@
+# Stub Detection Specification
+#
+# Regex-based heuristic detection of stub vs real implementations.
+# Used by feature_audit to tell agents whether found functions are
+# actually implemented or just placeholders.
+
+version: "1.0"
+
+spec.archcodex.auditStubDetection:
+  inherits: spec.function
+  implementation: src/core/audit/feature-audit.ts#analyzeImplementationStatus
+
+  # === STRATEGIC ===
+  goal: "Detect if a function is a stub or real implementation"
+  outcomes:
+    - "Agents know immediately if a function is production-ready"
+    - "Stubs are flagged with a reason explaining why"
+    - "Real implementations are not falsely flagged"
+
+  # === OPERATIONAL ===
+  intent: "Analyze function body text with regex heuristics to classify implementation status"
+
+  inputs:
+    functionBody:
+      type: string
+      required: true
+      description: "Source code of the function body to analyze"
+
+  outputs:
+    status:
+      type: string
+      enum: [stub, implemented, unknown]
+      description: "Implementation completeness assessment"
+    reason:
+      type: string
+      description: "Why it was classified as stub (only present for stubs)"
+
+  examples:
+    success:
+      - name: "empty function body"
+        given:
+          functionBody: "{}"
+        then:
+          result.status: "stub"
+          result.reason: "@contains('empty')"
+
+      - name: "empty string"
+        given:
+          functionBody: ""
+        then:
+          result.status: "stub"
+          result.reason: "@contains('empty')"
+
+      - name: "TODO marker"
+        given:
+          functionBody: "{ // TODO implement this\n return null; }"
+        then:
+          result.status: "stub"
+          result.reason: "@contains('TODO')"
+
+      - name: "FIXME marker"
+        given:
+          functionBody: "{ // FIXME broken\n return null; }"
+        then:
+          result.status: "stub"
+          result.reason: "@contains('FIXME')"
+
+      - name: "throw not implemented"
+        given:
+          functionBody: "{ throw new Error('Not implemented'); }"
+        then:
+          result.status: "stub"
+          result.reason: "@contains('not-implemented')"
+
+      - name: "throw not implemented with template literal"
+        given:
+          functionBody: "{ throw new Error(`not implemented yet`); }"
+        then:
+          result.status: "stub"
+          result.reason: "@contains('not-implemented')"
+
+      - name: "single-line delegation"
+        given:
+          functionBody: "{ return someOtherFn(); }"
+        then:
+          result.status: "stub"
+          result.reason: "@contains('delegation')"
+
+      - name: "minimal logic - single return"
+        given:
+          functionBody: "{ return { success: true }; }"
+        then:
+          result.status: "stub"
+          result.reason: "@contains('minimal')"
+
+      - name: "real implementation with branching"
+        given:
+          functionBody: "{\n  const x = validateInput(input);\n  if (x.errors) throw new Error('invalid');\n  const result = await db.insert(x);\n  return result;\n}"
+        then:
+          result.status: "implemented"
+
+      - name: "real implementation with array methods"
+        given:
+          functionBody: "{\n  const items = data.filter(d => d.active);\n  return items.map(i => transform(i));\n}"
+        then:
+          result.status: "implemented"
+
+      - name: "real implementation with validation"
+        given:
+          functionBody: "{\n  validate(input);\n  return process(input);\n}"
+        then:
+          result.status: "implemented"
+
+    errors:
+      - name: "never throws on any input"
+        given:
+          functionBody: "anything"
+        then:
+          result.status: "@exists"
+
+  invariants:
+    - description: "empty body always returns stub"
+      condition: "functionBody.trim() === '{}' || functionBody.trim() === '' implies result.status === 'stub'"
+
+    - description: "TODO/FIXME always returns stub"
+      condition: "functionBody matches /TODO|FIXME/ implies result.status === 'stub'"
+
+    - description: "implemented status never has a reason"
+      condition: "result.status === 'implemented' implies result.reason is undefined"
+
+    - description: "stub status always has a reason"
+      condition: "result.status === 'stub' implies result.reason is defined"

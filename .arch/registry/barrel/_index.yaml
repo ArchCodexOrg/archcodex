@@ -6,6 +6,28 @@ archcodex.barrel:
   mixins:
     - barrel
   description: Top-level library barrel file - main entry point exports
+  reference_implementations:
+    - src/index.ts
+  file_pattern: index.ts
+  default_path: src
+  code_pattern: |-
+    /**
+     * @arch archcodex.barrel
+     *
+     * Main library exports barrel file.
+     */
+
+    // Configuration
+    export * from './core/config/index.js';
+
+    // Registry
+    export * from './core/registry/index.js';
+
+    // Utilities
+    export * from './utils/index.js';
+
+    // CLI
+    export { createCli } from './cli/index.js';
   rationale: |
     The main entry point for the library (src/index.ts). Defines the public API
     by re-exporting from submodules. Consumers import from here.

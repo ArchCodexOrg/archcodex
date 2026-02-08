@@ -1,0 +1,123 @@
+# SpecCodex Mixins
+#
+# Reusable spec fragments that can be composed into specs.
+# Mixins can use ${variable} placeholders that are substituted at resolution time.
+#
+# Usage: spec.product.create: { mixins: [requires_auth, logs_audit: { resource: product }], ... }
+
+version: "1.0"
+
+mixins:
+  # === AUTHENTICATION ===
+  requires_auth:
+    description: "Requires authenticated user"
+    security:
+      authentication: required
+    examples:
+      errors:
+        - { name: "unauthenticated", given: { user: null }, then: { error: "NOT_AUTHENTICATED" } }
+
+  # === PERMISSIONS ===
+  requires_permission:
+    description: "Requires specific permission level"
+    # Usage: requires_permission: { permission: edit, resource: product }
+    security:
+      permissions: ["${resource}.${permission}"]
+    examples:
+      errors:
+        - { name: "no_permission", given: { user: "@authenticated", permission: false }, then: { error: "PERMISSION_DENIED" } }
+
+  requires_ownership:
+    description: "Requires resource ownership"
+    invariants:
+      - { "resource.userId": "equals(ctx.userId)" }
+    examples:
+      errors:
+        - { name: "not_owner", given: { user: "@authenticated", owner: "@other_user" }, then: { error: "PERMISSION_DENIED" } }
+
+  requires_project_access:
+    description: "Requires access to project"
+    # Usage: requires_project_access: { level: edit }
+    security:
+      permissions: ["project.${level}"]
+    examples:
+      errors:
+        - { name: "no_project_access", given: { user: "@authenticated", projectId: "@no_access" }, then: { error: "PERMISSION_DENIED" } }
+
+  # === RATE LIMITING ===
+  rate_limited:
+    description: "Applies rate limiting"
+    # Usage: rate_limited: { requests: 60, window: "15m" }
+    security:
+      rate_limit: { requests: "${requests}", window: "${window}" }
+    examples:
+      errors:
+        - { name: "rate_limited", given: { user: "@authenticated", rate_exceeded: true }, then: { error: "RATE_LIMITED" } }
+
+  rate_limited_strict:
+    description: "Strict rate limiting for sensitive operations"
+    security:
+      rate_limit: { requests: 10, window: "15m" }
+    examples:
+      errors:
+        - { name: "rate_limited", given: { user: "@authenticated", rate_exceeded: true }, then: { error: "RATE_LIMITED" } }
+
+  # === AUDIT LOGGING ===
+  logs_audit:
+    description: "Logs action to audit trail"
+    # Usage: logs_audit: { action: "product.create", resource: "product" }
+    effects:
+      - { audit_log: { action: "${action}", resourceType: "${resource}" } }
+
+  # === INPUT VALIDATION ===
+  validates_input:
+    description: "Validates input against schema"
+    examples:
+      errors:
+        - { name: "invalid_input", given: { input: "@invalid" }, then: { error: "VALIDATION_ERROR" } }
+
+  validates_url:
+    description: "Validates URL format"
+    examples:
+      errors:
+        - { name: "invalid_url", given: { url: "not-a-url" }, then: { error: "INVALID_URL" } }
+
+  validates_id:
+    description: "Validates resource ID exists"
+    examples:
+      errors:
+        - { name: "not_found", given: { id: "@nonexistent" }, then: { error: "NOT_FOUND" } }
+
+  # === SOFT DELETE ===
+  soft_deletable:
+    description: "Resource supports soft delete"
+    invariants:
+      - { "if result.isDeleted then result.deletedAt is defined": true }
+      - { "result.isDeleted": "boolean" }
+    effects:
+      - { field_set: { isDeleted: true, deletedAt: "@now" } }
+
+  # === TIMESTAMPS ===
+  timestamped:
+    description: "Resource has created/updated timestamps"
+    invariants:
+      - { "result._creationTime": "lte(Date.now())" }
+      - { "result.updatedAt": "lte(Date.now())" }
+
+  # === COMPOSITE MIXINS ===
+  secure_mutation:
+    description: "Standard secure mutation (auth + rate limit + permission)"
+    # Usage: secure_mutation: { resource: "product", action: "create" }
+    compose:
+      - requires_auth
+      - rate_limited: { requests: 60, window: "15m" }
+      - requires_permission: { resource: "${resource}", permission: "${action}" }
+      - logs_audit: { resource: "${resource}", action: "${resource}.${action}" }
+
+  secure_action:
+    description: "Standard secure action (auth + strict rate limit)"
+    # Usage: secure_action: { resource: "ai", action: "suggest" }
+    compose:
+      - requires_auth
+      - rate_limited_strict
+      - logs_audit: { resource: "${resource}", action: "${resource}.${action}" }

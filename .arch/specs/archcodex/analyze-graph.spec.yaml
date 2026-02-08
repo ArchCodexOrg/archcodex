@@ -1,0 +1,168 @@
+# Cross-Reference Graph Builder
+#
+# Builds relationship maps across specs by analyzing inputs, outputs,
+# effects, and dependencies. Used by multi-spec checkers (data, consistency).
+
+version: "1.0"
+
+spec.archcodex.analyze.graph:
+  inherits: spec.function
+  implementation: src/core/analysis/graph.ts#buildCrossReferenceGraph
+
+  # === STRATEGIC ===
+  goal: "Build cross-reference maps enabling multi-spec analysis"
+  outcomes:
+    - "Map entities to their specs"
+    - "Map database tables to specs that read/write them"
+    - "Map spec dependencies (reverse lookup)"
+    - "Map architectures to specs using them"
+
+  # === OPERATIONAL ===
+  intent: "Extract relationships from spec inputs, outputs, effects, and metadata"
+
+  inputs:
+    specRegistry:
+      type: object
+      required: true
+      description: "SpecRegistry with resolved nodes"
+
+  outputs:
+    entityToSpecs:
+      type: object
+      description: "Map<entityPrefix, specId[]> grouped by spec ID prefix (e.g., 'tag' -> [spec.tag.create, spec.tag.delete])"
+    tableToWriters:
+      type: object
+      description: "Map<tableName, {specId, operation}[]> from database effects"
+    tableToReaders:
+      type: object
+      description: "Map<tableName, {specId, inputField}[]> from id-typed inputs"
+    specDependents:
+      type: object
+      description: "Map<specId, specId[]> reverse of depends_on"
+    archToSpecs:
+      type: object
+      description: "Map<archId, specId[]> from spec.architectures field"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "Every spec with type:id input populates tableToReaders"
+      forall:
+        variable: spec
+        in: input.specRegistry.nodes
+        then:
+          "if spec has input with type:id and table then table appears in result.tableToReaders": true
+
+    - description: "Every spec with database effect populates tableToWriters"
+      forall:
+        variable: spec
+        in: input.specRegistry.nodes
+        then:
+          "if spec has database effect then table appears in result.tableToWriters": true
+
+    - description: "depends_on creates reverse mapping"
+      condition: >
+        for every spec with depends_on: [depId],
+        result.specDependents[depId] contains spec.id
+
+    - description: "Graph is deterministic"
+      condition: "same input produces identical output"
+
+    - description: "Base specs (type: base) are excluded from entity grouping"
+      condition: "base specs do not appear in entityToSpecs"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "empty registry produces empty graph"
+        given:
+          specRegistry: { nodes: {}, mixins: {} }
+        then:
+          result.entityToSpecs: "@empty"
+          result.tableToWriters: "@empty"
+          result.tableToReaders: "@empty"
+          result.specDependents: "@empty"
+          result.archToSpecs: "@empty"
+
+      - name: "id input populates tableToReaders"
+        given:
+          specRegistry:
+            nodes:
+              spec.tag.create:
+                intent: "Create tag"
+                inputs:
+                  projectId: { type: id, table: projects }
+            mixins: {}
+        then:
+          result.tableToReaders: "@hasProperties({ projects: [{ specId: 'spec.tag.create', inputField: 'projectId' }] })"
+
+      - name: "database effect populates tableToWriters"
+        given:
+          specRegistry:
+            nodes:
+              spec.tag.create:
+                intent: "Create tag"
+                effects:
+                  - { database: { table: tags, operation: insert } }
+            mixins: {}
+        then:
+          result.tableToWriters: "@hasProperties({ tags: [{ specId: 'spec.tag.create', operation: 'insert' }] })"
+
+      - name: "depends_on populates specDependents"
+        given:
+          specRegistry:
+            nodes:
+              spec.tag.create:
+                intent: "Create tag"
+                depends_on: [spec.project.get]
+              spec.project.get:
+                intent: "Get project"
+            mixins: {}
+        then:
+          result.specDependents: "@hasProperties({ 'spec.project.get': ['spec.tag.create'] })"
+
+      - name: "entity grouping by spec prefix"
+        given:
+          specRegistry:
+            nodes:
+              spec.tag.create: { intent: "Create tag" }
+              spec.tag.delete: { intent: "Delete tag" }
+              spec.tag.update: { intent: "Update tag" }
+              spec.user.get: { intent: "Get user" }
+            mixins: {}
+        then:
+          result.entityToSpecs: "@hasProperties({ tag: ['spec.tag.create', 'spec.tag.delete', 'spec.tag.update'] })"
+          result.entityToSpecs: "@hasProperties({ user: ['spec.user.get'] })"
+
+      - name: "architectures field populates archToSpecs"
+        given:
+          specRegistry:
+            nodes:
+              spec.tag.create:
+                intent: "Create tag"
+                architectures: [convex.mutation]
+            mixins: {}
+        then:
+          result.archToSpecs: "@hasProperties({ 'convex.mutation': ['spec.tag.create'] })"
+
+    boundaries:
+      - name: "spec with no inputs, outputs, or effects"
+        given:
+          specRegistry:
+            nodes:
+              spec.minimal: { intent: "Minimal spec" }
+            mixins: {}
+        then:
+          result.tableToWriters: "@empty"
+          result.tableToReaders: "@empty"
+          result.entityToSpecs: "@hasProperties({ minimal: ['spec.minimal'] })"
+
+      - name: "base specs excluded from entity grouping"
+        given:
+          specRegistry:
+            nodes:
+              spec.mutation: { type: base, intent: "Base mutation" }
+              spec.tag.create: { intent: "Create tag", inherits: spec.mutation }
+            mixins: {}
+        then:
+          # spec.mutation should not appear in entityToSpecs
+          result.entityToSpecs: "@hasProperties({ tag: ['spec.tag.create'] })"

@@ -1,0 +1,308 @@
+# Logic Checker - Schema-Inferred Analysis
+#
+# Detects logic issues by analyzing spec invariants, examples, inputs,
+# outputs, and UI state machines for contradictions and gaps.
+# 13 analyses: LOG-1 through LOG-13.
+
+version: "1.0"
+
+spec.archcodex.analyze.logic:
+  inherits: spec.function
+  implementation: src/core/analysis/checkers/logic.ts#checkLogic
+
+  # === STRATEGIC ===
+  goal: "Detect logic issues inferable from spec schemas"
+  outcomes:
+    - "Detect contradictory invariants"
+    - "Detect unreachable error branches"
+    - "Detect untested default values"
+    - "Detect incomplete UI state machines"
+    - "Detect invariant-example contradictions"
+    - "Detect forall/exists scope errors"
+    - "Detect untested output fields"
+    - "Detect required+default contradictions"
+    - "Detect undocumented error codes in implementation (deep)"
+    - "Detect return shape drift between spec and implementation (deep)"
+    - "Detect invariants unasserted in implementation (deep)"
+    - "Detect unreachable error examples in implementation (deep)"
+    - "Detect error code collisions across specs"
+
+  # === OPERATIONAL ===
+  intent: "Analyze spec invariants, examples, and outputs for logical consistency"
+
+  inputs:
+    specs:
+      type: array
+      required: true
+      description: "Array of resolved spec nodes to analyze"
+    graph:
+      type: object
+      required: true
+      description: "CrossReferenceGraph for context"
+
+  outputs:
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          category: { type: enum, values: [logic] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string }
+          field: { type: string, optional: true }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "All issues have category 'logic'"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.category: "logic"
+
+    - description: "Issue IDs follow LOG-N pattern"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@matches('^LOG-(1[0-3]|[1-9])$')"
+
+  # === EXAMPLES ===
+  defaults: &minimal_graph
+    graph: { entityToSpecs: {}, tableToWriters: {}, tableToReaders: {}, specDependents: {}, archToSpecs: {} }
+
+  examples:
+    success:
+      # --- LOG-1: Contradictory invariants ---
+      - name: "LOG-1: detects contradictory boolean invariants"
+        given:
+          specs:
+            - specId: spec.order.validate
+              intent: "Validate order"
+              invariants:
+                - { condition: "result.valid === true" }
+                - { condition: "result.valid === false" }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-1', severity: 'error', specId: 'spec.order.validate' })"
+
+      # --- LOG-2: Unreachable error branches ---
+      - name: "LOG-2: detects error example with valid enum value"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                color: { type: enum, values: [red, blue, green] }
+              examples:
+                errors:
+                  - name: "invalid color"
+                    given: { color: red }
+                    then: { error: "INVALID_COLOR" }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-2', severity: 'warning' })"
+
+      # --- LOG-3: Missing default handling ---
+      - name: "LOG-3: detects untested default value"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                name: { type: string, required: true }
+                color: { type: enum, values: [red, blue, green], default: blue }
+              examples:
+                success:
+                  - name: "with color"
+                    given: { name: "Test", color: red }
+                    then: { result: "@exists" }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-3', severity: 'warning', field: 'color' })"
+
+      # --- LOG-4: Incomplete state machine ---
+      - name: "LOG-4: detects unreachable UI state"
+        given:
+          specs:
+            - specId: spec.dialog.share
+              intent: "Share dialog"
+              ui:
+                interaction:
+                  sequence:
+                    - { trigger: click, then: { modal: visible } }
+                    - { trigger: submit, then: { modal: closed } }
+                  states:
+                    loading: { when: "submitting", then: { button: disabled } }
+                    error: { when: "failed", then: { message: visible } }
+                    retry: { when: "retry_clicked", then: { form: reset } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-4', severity: 'warning' })"
+
+      # --- LOG-5: Invariant-example contradiction ---
+      - name: "LOG-5: detects success example contradicting invariant"
+        given:
+          specs:
+            - specId: spec.order.calculate
+              intent: "Calculate order total"
+              invariants:
+                - { condition: "result.total >= 0" }
+              examples:
+                success:
+                  - name: "negative total"
+                    given: { items: [] }
+                    then: { result.total: -5 }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-5', severity: 'error' })"
+
+      # --- LOG-6: Forall scope error ---
+      - name: "LOG-6: detects forall on non-existent collection"
+        given:
+          specs:
+            - specId: spec.order.validate
+              intent: "Validate order"
+              outputs:
+                valid: { type: boolean }
+              invariants:
+                - forall:
+                    variable: item
+                    in: result.entries
+                    then: { item.status: "@defined" }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-6', severity: 'error', field: 'result.entries' })"
+
+      # --- LOG-7: Output-assertion gap ---
+      - name: "LOG-7: detects untested output field"
+        given:
+          specs:
+            - specId: spec.user.get
+              intent: "Get user"
+              outputs:
+                name: { type: string }
+                email: { type: string }
+                avatar: { type: string }
+              examples:
+                success:
+                  - name: "basic"
+                    given: { userId: "u1" }
+                    then:
+                      result.name: "John"
+                      result.email: "john@test.com"
+                      # avatar never asserted
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-7', severity: 'warning', field: 'avatar' })"
+
+      # --- LOG-8: Required+default contradiction ---
+      - name: "LOG-8: detects required input with default value"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                name: { type: string, required: true, default: "untitled" }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-8', severity: 'warning', field: 'name' })"
+
+      # --- LOG-9: Undocumented error codes (deep) ---
+      - name: "LOG-9: detects undocumented error codes in implementation"
+        given:
+          specs:
+            - specId: spec.product.create
+              intent: "Create product"
+              examples:
+                errors:
+                  - { name: "unauth", given: { user: null }, then: { error: "NOT_AUTHENTICATED" } }
+          <<: *minimal_graph
+          # Deep: verifier finds extra error codes thrown but not in spec examples
+        then:
+          result.issues: "@hasItem({ id: 'LOG-9', severity: 'warning' })"
+
+      # --- LOG-10: Return shape drift (deep) ---
+      - name: "LOG-10: detects spec outputs missing from implementation"
+        given:
+          specs:
+            - specId: spec.user.get
+              intent: "Get user"
+              outputs:
+                name: { type: string }
+                email: { type: string }
+                avatar: { type: string }
+          <<: *minimal_graph
+          # Deep: verifier finds avatar not returned by implementation
+        then:
+          result.issues: "@hasItem({ id: 'LOG-10', severity: 'warning' })"
+
+      # --- LOG-11: Invariant unasserted in code (deep) ---
+      - name: "LOG-11: detects invariant with low code coverage"
+        given:
+          specs:
+            - specId: spec.order.validate
+              intent: "Validate order"
+              invariants:
+                - { condition: "order total includes shipping and tax calculations" }
+          <<: *minimal_graph
+          # Deep: implementation code has <30% keyword match for invariant
+        then:
+          result.issues: "@hasItem({ id: 'LOG-11', severity: 'warning' })"
+
+      # --- LOG-12: Error unreachable in implementation (deep) ---
+      - name: "LOG-12: detects error code not found in implementation"
+        given:
+          specs:
+            - specId: spec.product.create
+              intent: "Create product"
+              examples:
+                errors:
+                  - { name: "quota exceeded", given: { user: "@authenticated" }, then: { error: "QUOTA_EXCEEDED" } }
+          <<: *minimal_graph
+          # Deep: implementation code doesn't contain "QUOTA_EXCEEDED" string
+        then:
+          result.issues: "@hasItem({ id: 'LOG-12', severity: 'info' })"
+
+      # --- LOG-13: Error code collision (cross-spec) ---
+      - name: "LOG-13: detects same error code used across different specs"
+        given:
+          specs:
+            - specId: spec.order.cancel
+              intent: "Cancel order"
+              examples:
+                errors:
+                  - { name: "expired", given: { orderId: "o1" }, then: { error: "ORDER_EXPIRED" } }
+            - specId: spec.order.refund
+              intent: "Refund order"
+              examples:
+                errors:
+                  - { name: "expired", given: { orderId: "o1" }, then: { error: "ORDER_EXPIRED" } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'LOG-13', severity: 'info' })"
+
+      # --- No false positives ---
+      - name: "no issue for well-formed spec"
+        given:
+          specs:
+            - specId: spec.calc.add
+              intent: "Add numbers"
+              inputs:
+                a: { type: number, required: true }
+                b: { type: number, required: true }
+              outputs:
+                sum: { type: number }
+              invariants:
+                - { condition: "result.sum === input.a + input.b" }
+              examples:
+                success:
+                  - name: "basic"
+                    given: { a: 1, b: 2 }
+                    then: { result.sum: 3 }
+          <<: *minimal_graph
+        then:
+          result.issues: "@empty"

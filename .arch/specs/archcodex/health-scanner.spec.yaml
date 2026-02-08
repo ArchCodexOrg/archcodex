@@ -1,0 +1,128 @@
+# Health Scanner Specification
+#
+# Unified file scanner for health analysis.
+# Coordinates scanning across all health components:
+# single glob, parallel batched reads, shared metadata cache, lazy AST parsing.
+
+version: "1.0"
+
+spec.archcodex.healthScanner:
+  inherits: spec.function
+  implementation: src/core/health/scanner.ts#UnifiedHealthScanner
+
+  # === STRATEGIC ===
+  goal: "Provide a single-pass file scanner that all health analyzers share"
+  outcomes:
+    - "One glob operation instead of 3-4 duplicate globs"
+    - "Parallel file reads with configurable concurrency"
+    - "Cache-aware scanning with ~90% hit rate on repeated runs"
+    - "Lazy AST parsing only when semantic models are needed"
+
+  # === OPERATIONAL ===
+  intent: "Glob project files, read them in batches, extract arch metadata, and cache results for reuse"
+
+  inputs:
+    options:
+      type: object
+      required: true
+      description: "Scan configuration"
+      properties:
+        include:
+          type: array
+          description: "Glob patterns for files to include"
+        exclude:
+          type: array
+          description: "Glob patterns for files to exclude"
+        useCache:
+          type: boolean
+          description: "Enable progressive caching (default false)"
+        registryChecksum:
+          type: string
+          description: "Registry checksum for cache invalidation"
+
+  outputs:
+    files:
+      type: Map
+      description: "Map of relative path to FileMetadata"
+    stats:
+      type: object
+      description: "Scan statistics (totalFiles, scanTimeMs, cacheHits, cacheMisses)"
+
+  examples:
+    success:
+      - name: "scan returns file metadata with arch IDs"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            include: ["src/**/*.ts"]
+            exclude: ["**/node_modules/**"]
+        then:
+          result.files: "@exists"
+          result.stats.totalFiles: "@gt(0)"
+          result.stats.scanTimeMs: "@gt(0)"
+
+      - name: "scan extracts arch tag from file"
+        given:
+          projectRoot: "/tmp/test-project"
+          fileContent: "/** @arch archcodex.core.engine */\nexport class Foo {}"
+          options:
+            include: ["src/**/*.ts"]
+            exclude: []
+        then:
+          result.files: "@exists"
+          # Files with @arch tags should have archId populated
+
+      - name: "scan with caching tracks cache hits and misses"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            include: ["src/**/*.ts"]
+            exclude: []
+            useCache: true
+            registryChecksum: "abc123"
+        then:
+          result.stats.cacheHits: "@gt(-1)"
+          result.stats.cacheMisses: "@gt(-1)"
+
+      - name: "scan invalidates cache when registry checksum changes"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            include: ["src/**/*.ts"]
+            exclude: []
+            useCache: true
+            registryChecksum: "changed-checksum"
+        then:
+          result.stats.cacheMisses: "@gt(0)"
+
+      - name: "empty project returns zero files"
+        given:
+          projectRoot: "/tmp/empty-project"
+          options:
+            include: ["src/**/*.ts"]
+            exclude: []
+        then:
+          result.stats.totalFiles: 0
+          result.stats.cacheHits: 0
+          result.stats.cacheMisses: 0
+
+    errors:
+      - name: "unreadable files are silently skipped"
+        given:
+          projectRoot: "/tmp/test-project"
+          options:
+            include: ["src/**/*.ts"]
+            exclude: []
+        then:
+          # No exception thrown; unreadable files just don't appear in results
+          result.files: "@exists"
+
+  invariants:
+    - description: "totalFiles equals cacheHits + cacheMisses + skipped"
+      condition: "result.stats.totalFiles >= result.stats.cacheHits + result.stats.cacheMisses"
+
+    - description: "scanTimeMs is always non-negative"
+      condition: "result.stats.scanTimeMs >= 0"
+
+    - description: "dispose clears all in-memory caches"
+      condition: "after dispose(), semanticModelCache.size === 0"

@@ -1,0 +1,258 @@
+# Validation Engine Specification
+#
+# Orchestrates constraint checking for source files.
+# Parses @arch tags, resolves architectures, runs constraint validators,
+# applies overrides, and produces structured validation results.
+
+version: "1.0"
+
+spec.archcodex.validationEngine.validateFile:
+  inherits: spec.function
+  implementation: src/core/validation/engine.ts#ValidationEngine.validateFile
+
+  # === STRATEGIC ===
+  goal: "Validate a single source file against its declared architectural constraints"
+  outcomes:
+    - "Files with valid @arch tags are checked against all resolved constraints"
+    - "Constraint violations are reported with line numbers, codes, and fix hints"
+    - "Overrides suppress matching violations when valid"
+    - "Untagged files are handled according to config policy (allow/warn/deny)"
+    - "Files with no registered validator are skipped gracefully"
+
+  # === OPERATIONAL ===
+  intent: "Parse @arch tag from file, resolve architecture from registry, run all constraint validators, apply overrides, and return structured result"
+
+  inputs:
+    filePath:
+      type: string
+      required: true
+      description: "Relative path to the file to validate"
+    options:
+      type: object
+      required: false
+      description: "Validation options (strict mode, severity filter, skip rules)"
+      properties:
+        strict: { type: boolean, description: "Treat warnings as errors" }
+        severities: { type: array, description: "Only check specific severities" }
+        skipRules: { type: array, description: "Rules to skip" }
+
+  outputs:
+    status:
+      type: string
+      enum: [pass, fail, warn]
+      description: "Overall validation status"
+    file:
+      type: string
+      description: "File path that was validated"
+    archId:
+      type: string
+      nullable: true
+      description: "Architecture ID from @arch tag, null if missing"
+    violations:
+      type: array
+      description: "Error-level violations found"
+    warnings:
+      type: array
+      description: "Warning-level violations found"
+    overridesActive:
+      type: array
+      description: "Active overrides that suppressed violations"
+    passed:
+      type: boolean
+      description: "Whether validation passed (no errors)"
+    errorCount:
+      type: number
+      description: "Total error count"
+    warningCount:
+      type: number
+      description: "Total warning count"
+
+  examples:
+    success:
+      - name: "file with valid arch tag and no violations"
+        given:
+          filePath: "src/utils/helper.ts"
+          options: {}
+        then:
+          result.status: "pass"
+          result.passed: true
+          result.errorCount: 0
+          result.warningCount: 0
+          result.violations: "@length(0)"
+
+      - name: "file with forbidden import violation"
+        given:
+          filePath: "src/core/engine.ts"
+          options: {}
+        then:
+          result.status: "fail"
+          result.passed: false
+          result.errorCount: "@gt(0)"
+          result.violations: "@length(@gt(0))"
+
+      - name: "file with override suppressing a violation"
+        given:
+          filePath: "src/core/special.ts"
+          options: {}
+        then:
+          result.overridesActive: "@length(@gt(0))"
+
+      - name: "untagged file with allow policy returns pass"
+        given:
+          filePath: "src/lib/untagged.ts"
+          options: {}
+        then:
+          result.status: "pass"
+          result.archId: null
+          result.passed: true
+
+      - name: "untagged file with deny policy returns fail"
+        given:
+          filePath: "src/lib/untagged.ts"
+          options: {}
+        then:
+          result.status: "fail"
+          result.errorCount: 1
+          result.violations: "@length(1)"
+
+      - name: "strict mode promotes warnings to errors"
+        given:
+          filePath: "src/lib/warned.ts"
+          options: { strict: true }
+        then:
+          result.warningCount: 0
+
+      - name: "skip rules excludes specified constraints"
+        given:
+          filePath: "src/core/engine.ts"
+          options: { skipRules: ["forbid_import"] }
+        then:
+          result.status: "pass"
+
+    errors:
+      - name: "file with unknown architecture ID returns error result"
+        given:
+          filePath: "src/bad-arch.ts"
+          options: {}
+        then:
+          result.status: "fail"
+          result.errorCount: 1
+          result.violations: "@length(1)"
+
+      - name: "file with unsupported extension is skipped"
+        given:
+          filePath: "assets/data.csv"
+          options: {}
+        then:
+          result.status: "pass"
+          result.skipped: true
+          result.skipReason: "@contains('No validator')"
+
+  invariants:
+    - description: "passed is always consistent with errorCount"
+      condition: "result.passed === true implies result.errorCount === 0"
+
+    - description: "fail status always has at least one error"
+      condition: "result.status === 'fail' implies result.errorCount > 0"
+
+    - description: "pass status has zero errors"
+      condition: "result.status === 'pass' implies result.errorCount === 0"
+
+    - description: "warn status has zero errors but at least one warning"
+      condition: "result.status === 'warn' implies result.errorCount === 0 && result.warningCount > 0"
+
+    - description: "file field always matches input filePath"
+      condition: "result.file === filePath"
+
+---
+
+spec.archcodex.validationEngine.validateFiles:
+  inherits: spec.function
+  implementation: src/core/validation/engine.ts#ValidationEngine.validateFiles
+
+  # === STRATEGIC ===
+  goal: "Validate multiple files in batches with concurrency and produce aggregate results"
+  outcomes:
+    - "All files are validated with controlled concurrency"
+    - "One file failure does not break the entire batch"
+    - "Summary statistics aggregate pass/fail/warn counts"
+    - "Singleton architecture violations are detected across files"
+
+  # === OPERATIONAL ===
+  intent: "Process files in concurrent batches using Promise.allSettled, check singleton violations across results, and compute summary statistics"
+
+  inputs:
+    filePaths:
+      type: array
+      required: true
+      description: "Array of relative file paths to validate"
+    options:
+      type: object
+      required: false
+      description: "Shared validation options for all files"
+
+  outputs:
+    results:
+      type: array
+      description: "Individual ValidationResult for each file"
+    summary:
+      type: object
+      description: "Aggregate statistics"
+      properties:
+        total: { type: number }
+        passed: { type: number }
+        failed: { type: number }
+        warned: { type: number }
+        totalErrors: { type: number }
+        totalWarnings: { type: number }
+        activeOverrides: { type: number }
+
+  examples:
+    success:
+      - name: "batch of all passing files"
+        given:
+          filePaths: ["src/a.ts", "src/b.ts", "src/c.ts"]
+          options: {}
+        then:
+          result.summary.total: 3
+          result.summary.passed: 3
+          result.summary.failed: 0
+          result.results: "@length(3)"
+
+      - name: "batch with mixed results"
+        given:
+          filePaths: ["src/good.ts", "src/bad.ts"]
+          options: {}
+        then:
+          result.summary.total: 2
+          result.summary.totalErrors: "@gt(0)"
+
+      - name: "empty file list returns empty results"
+        given:
+          filePaths: []
+          options: {}
+        then:
+          result.results: "@length(0)"
+          result.summary.total: 0
+          result.summary.passed: 0
+          result.summary.failed: 0
+
+    errors:
+      - name: "file that throws during validation gets error result"
+        given:
+          filePaths: ["src/nonexistent.ts"]
+          options: {}
+        then:
+          result.summary.total: 1
+          result.summary.failed: 1
+          result.results: "@length(1)"
+
+  invariants:
+    - description: "summary.total always equals results length"
+      condition: "result.summary.total === result.results.length"
+
+    - description: "passed + failed + warned equals total"
+      condition: "result.summary.passed + result.summary.failed + result.summary.warned === result.summary.total"
+
+    - description: "results count matches input file count"
+      condition: "result.results.length === filePaths.length"

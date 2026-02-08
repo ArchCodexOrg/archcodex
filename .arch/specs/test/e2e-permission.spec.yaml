@@ -1,0 +1,72 @@
+version: "1.0"
+
+spec.test.e2e.checkPermission:
+  type: test
+  inherits: spec.mutation
+  architectures: [convex.mutation]
+
+  goal: "Test permission enforcement across roles and access levels"
+  intent: "Check if user has permission for a resource action"
+
+  inputs:
+    userId: { type: id, table: users, required: true }
+    resourceId: { type: id, table: resources, required: true }
+    action: { type: enum, values: [view, edit, delete, admin], required: true }
+    context: { type: object, properties: { ipAddress: { type: string }, userAgent: { type: string } } }
+
+  outputs:
+    allowed: { type: boolean }
+    reason: { type: string, optional: true }
+    permissions: { type: array, items: { type: string } }
+    cachedUntil: { type: number }
+
+  security:
+    authentication: required
+    rate_limit: { requests: 100, window: "1m" }
+    permissions: [permission.check]
+
+  invariants:
+    - condition: "result.allowed === true || result.reason !== undefined"
+    - condition: "result.permissions.length >= 0"
+    - condition: "result.cachedUntil > Date.now()"
+    - forall:
+        variable: p
+        in: result.permissions
+        then: { p: "@matches('^[a-z]+\\.[a-z]+$')" }
+
+  effects:
+    - audit_log: { action: "permission.check", resourceType: "resource" }
+    - cache: { ttl: "5m", key: "perm:${userId}:${resourceId}" }
+    - metrics: { counter: "permission_checks" }
+
+  examples:
+    success:
+      - name: "owner has all permissions"
+        given: { userId: "@authenticated", resourceId: "@string(24)", action: "admin" }
+        then:
+          result.allowed: true
+          result.permissions: "@hasItem('admin')"
+          result.cachedUntil: "@gt(@now)"
+
+      - name: "viewer can only view"
+        given: { userId: "@authenticated", resourceId: "@string(24)", action: "view" }
+        then:
+          result.allowed: true
+          result.permissions: "@length(1)"
+
+    errors:
+      - name: "unauthenticated rejected"
+        given: { userId: null, resourceId: "@string(24)", action: "view" }
+        then: { error: "NOT_AUTHENTICATED" }
+
+      - name: "invalid action rejected"
+        given: { userId: "@authenticated", resourceId: "@string(24)", action: "invalid" }
+        then: { error: "INVALID_ACTION" }
+
+    boundaries:
+      - name: "handles rapid permission checks"
+        userId: "@authenticated"
+        resourceId: "@string(24)"
+        action: "view"
+        then: { result.allowed: "@defined" }
+        property: "forall valid inputs, returns within 50ms"

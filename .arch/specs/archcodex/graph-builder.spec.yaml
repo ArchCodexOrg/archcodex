@@ -1,0 +1,156 @@
+# Graph Builder Specification
+#
+# Builds architecture graphs from registry data, showing inheritance
+# and mixin relationships. Supports Mermaid, Graphviz DOT, and JSON
+# output formats. Optionally scans project files for usage counts.
+
+version: "1.0"
+
+spec.archcodex.graphBuilder:
+  inherits: spec.function
+  implementation: src/core/graph/builder.ts#GraphBuilder
+
+  # === STRATEGIC ===
+  goal: "Build and format architecture dependency graphs from registry data"
+  outcomes:
+    - "Inheritance relationships are represented as directed edges"
+    - "Mixin relationships are optionally included as dotted edges"
+    - "Graphs can be filtered to a subtree by root architecture"
+    - "Output supports Mermaid, Graphviz DOT, and JSON formats"
+    - "File usage counts can be scanned and attached to nodes"
+
+  # === OPERATIONAL ===
+  intent: "Traverse registry architecture nodes, build graph of inheritance and mixin edges, format as diagram"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Absolute path to project root for file scanning"
+    registry:
+      type: object
+      required: true
+      description: "Architecture registry with nodes (archId -> ArchitectureNode)"
+    options:
+      type: object
+      required: false
+      description: "GraphOptions: format, showFiles, showMixins, root, maxDepth"
+
+  outputs:
+    graph:
+      type: object
+      description: "ArchitectureGraph with nodes[] and edges[]"
+    formatted:
+      type: string
+      description: "Formatted string output (Mermaid, Graphviz, or JSON)"
+
+  examples:
+    success:
+      - name: "simple inheritance chain"
+        given:
+          registry:
+            nodes:
+              "app.base": {}
+              "app.service": { inherits: "app.base" }
+              "app.handler": { inherits: "app.service" }
+          options:
+            showMixins: true
+        then:
+          result.graph.nodes: "@length(3)"
+          result.graph.edges: "@length(2)"
+
+      - name: "mixin relationships included"
+        given:
+          registry:
+            nodes:
+              "app.service": { mixins: ["mixin.logging"] }
+          options:
+            showMixins: true
+        then:
+          result.graph.edges: "@hasItem({from: 'mixin.logging', to: 'app.service', type: 'mixin'})"
+
+      - name: "mixin relationships excluded"
+        given:
+          registry:
+            nodes:
+              "app.service": { mixins: ["mixin.logging"] }
+          options:
+            showMixins: false
+        then:
+          result.graph.edges: "@length(0)"
+
+      - name: "filtered by root architecture"
+        given:
+          registry:
+            nodes:
+              "app.base": {}
+              "app.service": { inherits: "app.base" }
+              "other.handler": {}
+          options:
+            root: "app"
+        then:
+          result.graph.nodes: "@length(2)"
+
+      - name: "mermaid format output"
+        given:
+          registry:
+            nodes:
+              "app.base": {}
+              "app.service": { inherits: "app.base" }
+          options:
+            format: "mermaid"
+        then:
+          result.formatted: "@all(@contains('graph TD'), @contains('-->'))"
+
+      - name: "graphviz format output"
+        given:
+          registry:
+            nodes:
+              "app.base": {}
+              "app.service": { inherits: "app.base" }
+          options:
+            format: "graphviz"
+        then:
+          result.formatted: "@all(@contains('digraph ArchCodex'), @contains('->'))"
+
+      - name: "json format output"
+        given:
+          registry:
+            nodes:
+              "app.base": {}
+          options:
+            format: "json"
+        then:
+          result.formatted: "@all(@contains('\"nodes\"'), @contains('\"edges\"'))"
+
+    errors:
+      - name: "unknown format throws error"
+        given:
+          graph: { nodes: [], edges: [] }
+          format: "xml"
+        then:
+          throws: "@contains('Unknown format')"
+
+      - name: "empty registry produces empty graph"
+        given:
+          registry:
+            nodes: {}
+        then:
+          result.graph.nodes: "@length(0)"
+          result.graph.edges: "@length(0)"
+
+  invariants:
+    - description: "every edge references existing nodes"
+      condition: "for every edge, edge.from and edge.to exist in nodes"
+
+    - description: "node labels are the last segment of the archId"
+      condition: "node.label === archId.split('.').pop()"
+
+    - description: "sanitized IDs replace dots and hyphens with underscores"
+      condition: "sanitizeId(id) does not contain . or -"
+
+    - description: "inheritance edges always have type 'inherits'"
+      condition: "edges from inherits field have type === 'inherits'"
+
+    - description: "mixin edges always have type 'mixin'"
+      condition: "edges from mixins field have type === 'mixin'"

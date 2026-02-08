@@ -1,0 +1,147 @@
+# Logger Utility Specification
+#
+# Structured logging infrastructure for ArchCodex CLI.
+# Singleton logger with configurable levels, prefix support, and child loggers.
+
+version: "1.0"
+
+spec.archcodex.utilLogger:
+  inherits: spec.function
+  implementation: src/utils/logger.ts#Logger
+
+  # === STRATEGIC ===
+  goal: "Provide structured, level-aware logging for the entire ArchCodex codebase"
+  outcomes:
+    - "Log messages are filtered by configured level"
+    - "Each log level has distinct visual formatting (color-coded)"
+    - "Child loggers inherit parent level and prepend prefix"
+    - "Silent level suppresses all output"
+
+  # === OPERATIONAL ===
+  intent: "Compare message level against configured threshold, format with prefix and chalk colors, output to console"
+
+  inputs:
+    message:
+      type: string
+      required: true
+      description: "Log message text"
+    data:
+      type: object
+      required: false
+      description: "Optional structured data (JSON-serialized)"
+
+  outputs:
+    type: void
+    description: "Side effect: writes formatted message to console"
+
+  examples:
+    success:
+      - name: "info message is shown at info level"
+        given:
+          level: "info"
+          method: "info"
+          message: "Scanning files"
+        then:
+          output: "@contains('[INFO]')"
+          output: "@contains('Scanning files')"
+
+      - name: "debug message is hidden at info level"
+        given:
+          level: "info"
+          method: "debug"
+          message: "Detailed trace"
+        then:
+          output: null
+
+      - name: "debug message is shown at debug level"
+        given:
+          level: "debug"
+          method: "debug"
+          message: "Detailed trace"
+        then:
+          output: "@contains('[DEBUG]')"
+
+      - name: "warn message is shown at info level"
+        given:
+          level: "info"
+          method: "warn"
+          message: "Slow query detected"
+        then:
+          output: "@contains('[WARN]')"
+
+      - name: "error logs Error stack trace"
+        given:
+          level: "info"
+          method: "error"
+          message: "Failed"
+          error: "new Error('connection timeout')"
+        then:
+          output: "@contains('[ERROR]')"
+          output: "@contains('connection timeout')"
+
+      - name: "silent level suppresses everything"
+        given:
+          level: "silent"
+          method: "error"
+          message: "Critical failure"
+        then:
+          output: null
+
+      - name: "prefix is prepended to messages"
+        given:
+          level: "info"
+          prefix: "scanner"
+          method: "info"
+          message: "Started"
+        then:
+          output: "@contains('[scanner]')"
+
+      - name: "child logger inherits parent level"
+        given:
+          parentLevel: "warn"
+          childPrefix: "db"
+          method: "info"
+          message: "query executed"
+        then:
+          output: null
+
+      - name: "child logger composes prefix"
+        given:
+          parentPrefix: "core"
+          childPrefix: "db"
+          method: "warn"
+          message: "slow"
+        then:
+          output: "@contains('[core:db]')"
+
+      - name: "success method shows check mark"
+        given:
+          level: "info"
+          method: "success"
+          message: "All checks passed"
+        then:
+          output: "@contains('All checks passed')"
+
+      - name: "fail method shows X mark"
+        given:
+          level: "info"
+          method: "fail"
+          message: "3 violations found"
+        then:
+          output: "@contains('3 violations found')"
+
+  invariants:
+    - description: "log levels are ordered: debug < info < warn < error < silent"
+      condition: "LOG_LEVELS.debug < LOG_LEVELS.info < LOG_LEVELS.warn < LOG_LEVELS.error < LOG_LEVELS.silent"
+
+    - description: "messages at or above the configured level are always output"
+      condition: "LOG_LEVELS[method] >= LOG_LEVELS[configuredLevel] implies output is produced"
+
+    - description: "messages below the configured level are never output"
+      condition: "LOG_LEVELS[method] < LOG_LEVELS[configuredLevel] implies no output"
+
+    - description: "child logger level matches parent level at creation time"
+      condition: "child.level === parent.level at time of child() call"
+
+    - description: "singleton logger is exported as 'logger'"
+      condition: "logger is an instance of Logger"

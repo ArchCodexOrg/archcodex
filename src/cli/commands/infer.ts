@@ -68,8 +68,7 @@ async function runInfer(pattern: string, options: InferOptions): Promise<void> {
   if (shouldValidate && await registryExists(projectRoot)) {
     try {
       registry = await loadRegistry(projectRoot, config.registry);
-    } catch {
-      // Registry load failed - continue without validation
+    } catch { /* registry load failed - continue without validation */
       if (!options.quiet) {
         logger.warn('Could not load registry for archId validation');
       }
@@ -80,9 +79,7 @@ async function runInfer(pattern: string, options: InferOptions): Promise<void> {
   let intentRegistry: IntentRegistry | null = null;
   try {
     intentRegistry = await loadIntentRegistry(projectRoot);
-  } catch {
-    // Intent registry load failed - continue without suggestions
-  }
+  } catch { /* intent registry load failed - continue without suggestions */ }
 
   // Get files
   let files: string[];

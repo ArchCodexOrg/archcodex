@@ -84,7 +84,7 @@ nodes:
   q1:
     type: question
     text: "Is this USER-CREATED CONTENT the user can edit/delete?"
-    examples: "bookmarks, documents, files, collections"
+    examples: "products, orders, articles, categories"
     yes: r_resource
     no: q2
 
@@ -128,7 +128,7 @@ nodes:
 Architecture Decision Tree
 
 Q1: Is this USER-CREATED CONTENT the user can edit/delete?
-    Examples: bookmarks, documents, files, collections
+    Examples: products, orders, articles, categories
     [y/n]: n
 
 Q2: Is this IDENTITY/ACCOUNT data?

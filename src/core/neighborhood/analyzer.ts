@@ -100,7 +100,7 @@ export class NeighborhoodAnalyzer {
         const resolved = resolveArchitecture(this.registry, archId);
         constraints = this.extractConstraintsSummary(resolved.architecture.constraints);
         allowedImports = this.extractAllowedImports(resolved.architecture.constraints);
-      } catch {
+      } catch { /* architecture not found in registry */
         // Architecture not found in registry, skip constraint resolution
       }
     }

@@ -1,0 +1,196 @@
+# TypeScript Validator Specification
+#
+# AST-based validator using ts-morph that parses TypeScript/JavaScript files
+# into a language-agnostic SemanticModel. The SemanticModel is then used by
+# constraint validators to check architectural rules.
+
+version: "1.0"
+
+spec.archcodex.validatorTypescript:
+  inherits: spec.function
+  implementation: src/validators/typescript.ts#TypeScriptValidator
+
+  # === STRATEGIC ===
+  goal: "Parse TypeScript/JavaScript files into a language-agnostic SemanticModel"
+  outcomes:
+    - "Imports (static, dynamic, require) are extracted with module specifiers"
+    - "Classes are extracted with extends, implements, decorators, and methods"
+    - "Interfaces are extracted with extends relationships"
+    - "Functions (declarations and arrow) are extracted with visibility and parameters"
+    - "Function calls are tracked with receiver, arguments, and control flow context"
+    - "Mutations (assignments, delete, ++/--) on properties are detected"
+    - "Exports are catalogued by kind (function, class, interface, type, variable, re-export)"
+    - "Line count and LOC (excluding comments/blanks) are calculated"
+
+  # === OPERATIONAL ===
+  intent: "Use ts-morph to perform single-pass AST analysis and produce SemanticModel"
+
+  inputs:
+    filePath:
+      type: string
+      required: true
+      description: "Path to the TypeScript/JavaScript file"
+    content:
+      type: string
+      required: false
+      description: "Optional pre-loaded file content to avoid re-reading from disk"
+
+  outputs:
+    model:
+      type: object
+      description: "SemanticModel with imports, classes, interfaces, functions, functionCalls, mutations, exports, lineCount, locCount"
+
+  examples:
+    success:
+      - name: "extracts static imports"
+        given:
+          content: "import { readFile } from 'fs';\nimport path from 'node:path';\n"
+          filePath: "test.ts"
+        then:
+          result.imports: "@all(@length(2), @hasItem({moduleSpecifier: 'fs', isDynamic: false}))"
+
+      - name: "extracts dynamic imports"
+        given:
+          content: "const mod = await import('./dynamic.js');\n"
+          filePath: "test.ts"
+        then:
+          result.imports: "@hasItem({moduleSpecifier: './dynamic.js', isDynamic: true})"
+
+      - name: "extracts type-only imports"
+        given:
+          content: "import type { Config } from './config.js';\n"
+          filePath: "test.ts"
+        then:
+          result.imports: "@hasItem({moduleSpecifier: './config.js', isTypeOnly: true})"
+
+      - name: "extracts class with extends and implements"
+        given:
+          content: "export class MyService extends BaseService implements IService {\n  async process(): Promise<void> {}\n}\n"
+          filePath: "test.ts"
+        then:
+          result.classes: "@all(@length(1), @hasItem({name: 'MyService', isExported: true}))"
+
+      - name: "extracts class methods with visibility"
+        given:
+          content: "class Foo {\n  public doA() {}\n  private doB() {}\n  protected doC() {}\n}\n"
+          filePath: "test.ts"
+        then:
+          result.classes: "@length(1)"
+
+      - name: "extracts interfaces"
+        given:
+          content: "export interface IValidator {\n  validate(input: string): boolean;\n}\n"
+          filePath: "test.ts"
+        then:
+          result.interfaces: "@all(@length(1), @hasItem({name: 'IValidator', isExported: true}))"
+
+      - name: "extracts function declarations"
+        given:
+          content: "export async function processData(input: string): Promise<string> {\n  return input;\n}\n"
+          filePath: "test.ts"
+        then:
+          result.functions: "@hasItem({name: 'processData', isExported: true, isAsync: true})"
+
+      - name: "extracts arrow functions assigned to variables"
+        given:
+          content: "export const transform = (data: string): string => {\n  return data.trim();\n};\n"
+          filePath: "test.ts"
+        then:
+          result.functions: "@hasItem({name: 'transform', isExported: true})"
+
+      - name: "tracks function calls with receiver"
+        given:
+          content: "function test() {\n  const result = service.process(input);\n}\n"
+          filePath: "test.ts"
+        then:
+          result.functionCalls: "@hasItem({callee: 'service.process', receiver: 'service', methodName: 'process'})"
+
+      - name: "detects property mutations"
+        given:
+          content: "function test() {\n  obj.count = 5;\n  obj.value += 1;\n}\n"
+          filePath: "test.ts"
+        then:
+          result.mutations: "@length(2)"
+
+      - name: "detects delete mutations"
+        given:
+          content: "function test() {\n  delete obj.prop;\n}\n"
+          filePath: "test.ts"
+        then:
+          result.mutations: "@hasItem({operator: 'delete', isDelete: true})"
+
+      - name: "tracks control flow context for calls in try blocks"
+        given:
+          content: "function test() {\n  try {\n    riskyCall();\n  } catch (e) {\n    handleError(e);\n  }\n}\n"
+          filePath: "test.ts"
+        then:
+          result.functionCalls: "@length(@gt(0))"
+
+      - name: "extracts exports by kind"
+        given:
+          content: "export function foo() {}\nexport class Bar {}\nexport interface IBaz {}\nexport type MyType = string;\nexport const VALUE = 42;\n"
+          filePath: "test.ts"
+        then:
+          result.exports: "@length(5)"
+
+      - name: "calculates line count correctly"
+        given:
+          content: "line1\nline2\nline3\n"
+          filePath: "test.ts"
+        then:
+          result.lineCount: 3
+
+      - name: "calculates LOC excluding comments and blanks"
+        given:
+          content: "// comment\n\nconst x = 1;\n/* block comment */\nconst y = 2;\n"
+          filePath: "test.ts"
+        then:
+          result.locCount: 2
+
+      - name: "empty file has zero lines"
+        given:
+          content: ""
+          filePath: "test.ts"
+        then:
+          result.lineCount: 0
+          result.locCount: 0
+
+      - name: "detects language from extension"
+        given:
+          content: "const x = 1;\n"
+          filePath: "test.js"
+        then:
+          result.language: "javascript"
+
+      - name: "typescript extension detected"
+        given:
+          content: "const x: number = 1;\n"
+          filePath: "test.ts"
+        then:
+          result.language: "typescript"
+
+    errors:
+      - name: "supported extensions include ts tsx js jsx"
+        given:
+          validator: "new TypeScriptValidator()"
+        then:
+          result.supportedExtensions: "@all(@hasItem('.ts'), @hasItem('.tsx'), @hasItem('.js'), @hasItem('.jsx'))"
+
+  invariants:
+    - description: "lineCount is 0 for empty content"
+      condition: "content === '' implies lineCount === 0"
+
+    - description: "locCount is always less than or equal to lineCount"
+      condition: "locCount <= lineCount"
+
+    - description: "static imports have isDynamic false"
+      condition: "import declarations have isDynamic === false"
+
+    - description: "dynamic imports have isDynamic true"
+      condition: "import() and require() have isDynamic === true"
+
+    - description: "temp source files are cleaned up after parsing"
+      condition: "after parseFile, the temp source file is removed from the project"
+
+    - description: "dispose clears inheritance cache and source files"
+      condition: "after dispose(), inheritanceCache is empty and no source files remain"

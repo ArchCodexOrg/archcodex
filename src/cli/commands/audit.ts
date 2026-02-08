@@ -197,10 +197,10 @@ function printClusters(clusters: OverrideCluster[]): void {
     }
     if (cluster.commonReasons.length > 0) {
       const truncatedReasons = cluster.commonReasons
-        .map(r => r.length > 50 ? r.slice(0, 50) + '...' : r)
+        .map((r: string) => r.length > 50 ? r.slice(0, 50) + '...' : r)
         .slice(0, 3);
       console.log(
-        `    ${chalk.dim('Reasons:')} ${truncatedReasons.map(r => `"${r}"`).join(', ')}`
+        `    ${chalk.dim('Reasons:')} ${truncatedReasons.map((r: string) => `"${r}"`).join(', ')}`
       );
     }
     console.log(

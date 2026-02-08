@@ -1,0 +1,145 @@
+# Path Matcher Specification
+#
+# Include/exclude pattern matching for file paths using the `ignore` library.
+# Used for pre-commit gradual adoption and file filtering throughout ArchCodex.
+
+version: "1.0"
+
+spec.archcodex.utilPathMatcher:
+  inherits: spec.unit
+  implementation: src/utils/path-matcher.ts#createPathMatcher
+
+  # === STRATEGIC ===
+  goal: "Filter file paths by include/exclude glob patterns"
+  outcomes:
+    - "Files matching include patterns are included"
+    - "Files matching exclude patterns are excluded"
+    - "When no include patterns exist, all files are initially included"
+    - "Exclude patterns take precedence over include patterns"
+
+  # === OPERATIONAL ===
+  intent: "Create a matcher that checks file paths against include/exclude gitignore-style patterns"
+
+  inputs:
+    include:
+      type: array
+      required: false
+      description: "Glob patterns for files to include (empty means include all)"
+    exclude:
+      type: array
+      required: false
+      description: "Glob patterns for files to exclude"
+
+  outputs:
+    matcher:
+      type: object
+      description: "PathMatcher with matches(), filter(), includePatterns(), excludePatterns()"
+
+  examples:
+    success:
+      - name: "no patterns includes all files"
+        given:
+          include: []
+          exclude: []
+          filePath: "src/core/engine.ts"
+        then:
+          result.matches: true
+
+      - name: "include pattern filters to matching files"
+        given:
+          include: ["src/**"]
+          exclude: []
+          filePath: "src/core/engine.ts"
+        then:
+          result.matches: true
+
+      - name: "include pattern rejects non-matching files"
+        given:
+          include: ["src/**"]
+          exclude: []
+          filePath: "tests/core/engine.test.ts"
+        then:
+          result.matches: false
+
+      - name: "exclude pattern rejects matching files"
+        given:
+          include: []
+          exclude: ["**/*.test.ts"]
+          filePath: "src/core/engine.test.ts"
+        then:
+          result.matches: false
+
+      - name: "exclude takes precedence over include"
+        given:
+          include: ["src/**"]
+          exclude: ["src/legacy/**"]
+          filePath: "src/legacy/old-code.ts"
+        then:
+          result.matches: false
+
+      - name: "backslashes are normalized to forward slashes"
+        given:
+          include: ["src/**"]
+          exclude: []
+          filePath: "src\\core\\engine.ts"
+        then:
+          result.matches: true
+
+      - name: "filter returns only matching paths"
+        given:
+          include: ["src/**"]
+          exclude: ["**/*.test.ts"]
+          filePaths: ["src/core/engine.ts", "src/core/engine.test.ts", "tests/foo.ts"]
+        then:
+          result.filter: "@all(@length(1), @hasItem('src/core/engine.ts'))"
+
+      - name: "includePatterns returns copy of include patterns"
+        given:
+          include: ["src/**", "lib/**"]
+          exclude: []
+        then:
+          result.includePatterns: "@all(@length(2), @hasItem('src/**'))"
+
+      - name: "excludePatterns returns copy of exclude patterns"
+        given:
+          include: []
+          exclude: ["**/*.test.ts"]
+        then:
+          result.excludePatterns: "@length(1)"
+
+      - name: "hasPatternConfig returns false when both empty"
+        given:
+          include: []
+          exclude: []
+        then:
+          result.hasPatternConfig: false
+
+      - name: "hasPatternConfig returns true when include has patterns"
+        given:
+          include: ["src/**"]
+          exclude: []
+        then:
+          result.hasPatternConfig: true
+
+      - name: "hasPatternConfig returns true when exclude has patterns"
+        given:
+          include: []
+          exclude: ["**/*.test.ts"]
+        then:
+          result.hasPatternConfig: true
+
+  invariants:
+    - description: "empty include means all files are initially included"
+      condition: "include.length === 0 implies all files pass the include check"
+
+    - description: "exclude always takes precedence over include"
+      condition: "if a file matches both include and exclude, matches() returns false"
+
+    - description: "filter results are a subset of input paths"
+      condition: "filter(paths).every(p => paths.includes(p))"
+
+    - description: "includePatterns and excludePatterns return copies"
+      condition: "mutating the returned arrays does not affect the matcher"
+
+    - description: "backslash normalization ensures cross-platform behavior"
+      condition: "matches('a\\b\\c.ts') === matches('a/b/c.ts')"

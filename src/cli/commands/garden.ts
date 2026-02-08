@@ -127,9 +127,7 @@ async function runGarden(options: GardenCommandOptions): Promise<void> {
       try {
         const content = await readFile(file);
         fileContents.set(file, content);
-      } catch {
-        // Skip files that can't be read
-      }
+      } catch { /* file read failed, skip */ }
     }
   }
 
@@ -295,8 +293,7 @@ async function extractArchTags(
       const content = await readFile(file);
       const archId = extractArchId(content);
       results.push({ path: file, archId });
-    } catch {
-      // Skip files that can't be read
+    } catch { /* file read failed, mark archId as null */
       results.push({ path: file, archId: null });
     }
   }
@@ -317,7 +314,7 @@ async function applyKeywordSuggestions(
   let indexContent: string;
   try {
     indexContent = await readFile(indexPath);
-  } catch {
+  } catch { /* index.yaml not found */
     logger.error('Could not read .arch/index.yaml');
     return 0;
   }
@@ -377,7 +374,7 @@ async function applyKeywordCleanups(
   let indexContent: string;
   try {
     indexContent = await readFile(indexPath);
-  } catch {
+  } catch { /* index.yaml not found */
     logger.error('Could not read .arch/index.yaml');
     return 0;
   }

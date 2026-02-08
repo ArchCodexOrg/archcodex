@@ -43,11 +43,11 @@ async function buildFileCache(projectRoot: string): Promise<Map<string, string>>
         const content = await readFile(file);
         const relativePath = path.relative(projectRoot, file);
         cache.set(relativePath, content);
-      } catch {
+      } catch { /* file read error */
         // Skip unreadable files
       }
     }
-  } catch {
+  } catch { /* glob pattern failed */
     // Glob failed, return empty cache
   }
   return cache;
@@ -259,7 +259,7 @@ async function validateModify(
         const absolutePath = path.resolve(projectRoot, change.path);
         const content = await readFile(absolutePath);
         archId = extractArchId(content) ?? undefined;
-      } catch {
+      } catch { /* file does not exist yet */
         // File doesn't exist yet or can't be read
       }
     }
@@ -370,7 +370,7 @@ function validateConstraints(
               alternative: forbidden.alternative,
             });
           }
-        } catch {
+        } catch { /* invalid regex in constraint */
           // Invalid regex in constraint, skip
         }
       }

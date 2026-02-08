@@ -7,14 +7,18 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { parseYaml, parseYamlWithSchema, stringifyYaml } from '../../../src/utils/yaml.js';
+import { parseYaml, parseYamlWithSchema, stringifyYaml, loadYaml, loadYamlWithSchema, writeYaml } from '../../../src/utils/yaml.js';
 import { SystemError, ErrorCodes } from '../../../src/utils/errors.js';
+import { readFile, writeFile } from '../../../src/utils/file-system.js';
 
-// Mock file-system since we only test the sync parsing functions
+// Mock file-system for async load/write functions
 vi.mock('../../../src/utils/file-system.js', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
 }));
+
+const mockReadFile = vi.mocked(readFile);
+const mockWriteFile = vi.mocked(writeFile);
 
 describe('parseYaml', () => {
   it('should parse valid YAML string', () => {
@@ -238,5 +242,98 @@ describe('stringifyYaml', () => {
     const lines = result.split('\n');
     // Check that indentation increases for nested levels
     expect(lines.some(l => l.startsWith('  '))).toBe(true);
+  });
+});
+
+describe('loadYaml', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should load and parse a YAML file', async () => {
+    mockReadFile.mockResolvedValue('name: test\nversion: 1\n');
+
+    const result = await loadYaml<{ name: string; version: number }>('/path/to/file.yaml');
+    expect(result.name).toBe('test');
+    expect(result.version).toBe(1);
+    expect(mockReadFile).toHaveBeenCalledWith('/path/to/file.yaml');
+  });
+
+  it('should re-throw SystemError from readFile', async () => {
+    const sysError = new SystemError(ErrorCodes.PARSE_ERROR, 'Read failed');
+    mockReadFile.mockRejectedValue(sysError);
+
+    await expect(loadYaml('/missing.yaml')).rejects.toThrow(sysError);
+  });
+
+  it('should wrap non-SystemError with file path context', async () => {
+    mockReadFile.mockRejectedValue(new Error('ENOENT'));
+
+    try {
+      await loadYaml('/missing.yaml');
+      expect.fail('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SystemError);
+      expect((error as SystemError).code).toBe(ErrorCodes.PARSE_ERROR);
+      expect((error as SystemError).message).toContain('/missing.yaml');
+    }
+  });
+});
+
+describe('loadYamlWithSchema', () => {
+  const schema = z.object({ name: z.string(), version: z.number() });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should load, parse, and validate a YAML file', async () => {
+    mockReadFile.mockResolvedValue('name: test\nversion: 2\n');
+
+    const result = await loadYamlWithSchema('/path/to/file.yaml', schema);
+    expect(result.name).toBe('test');
+    expect(result.version).toBe(2);
+  });
+
+  it('should re-throw SystemError with file path context on validation failure', async () => {
+    mockReadFile.mockResolvedValue('name: test\n');
+
+    try {
+      await loadYamlWithSchema('/path/to/invalid.yaml', schema);
+      expect.fail('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SystemError);
+      expect((error as SystemError).message).toContain('/path/to/invalid.yaml');
+    }
+  });
+
+  it('should wrap non-SystemError with file path context', async () => {
+    mockReadFile.mockRejectedValue(new Error('Permission denied'));
+
+    try {
+      await loadYamlWithSchema('/path/to/file.yaml', schema);
+      expect.fail('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SystemError);
+      expect((error as SystemError).code).toBe(ErrorCodes.PARSE_ERROR);
+      expect((error as SystemError).message).toContain('/path/to/file.yaml');
+    }
+  });
+});
+
+describe('writeYaml', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should stringify and write data to a file', async () => {
+    mockWriteFile.mockResolvedValue(undefined);
+
+    await writeYaml('/path/to/output.yaml', { name: 'test', items: [1, 2] });
+
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/path/to/output.yaml',
+      expect.stringContaining('name: test'),
+    );
   });
 });

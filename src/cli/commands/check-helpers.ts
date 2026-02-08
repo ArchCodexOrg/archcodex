@@ -1,5 +1,6 @@
 /**
- * @arch archcodex.core.domain
+ * @arch archcodex.cli.data
+ * @intent:cli-output
  *
  * Helper functions for the check command.
  * Extracted to keep check.ts under line limit.
@@ -304,7 +305,7 @@ export async function runProjectValidation(opts: ProjectValidationOptions): Prom
         } else {
           filesToValidate.push(file);
         }
-      } catch {
+      } catch { /* file read failed, validate it */
         filesToValidate.push(file);
       }
     }
@@ -331,7 +332,7 @@ export async function runProjectValidation(opts: ProjectValidationOptions): Prom
         try {
           const content = await readFile(`${projectRoot}/${vr.file}`);
           cacheManager.set(vr.file, createCacheEntry(vr, computeChecksum(content)));
-        } catch { /* skip */ }
+        } catch { /* file read failed, skip caching */ }
       }
     }
   } else {
@@ -404,7 +405,7 @@ export function findAlternativeArchitectures(
         .filter(c => violatedRules.includes(c.rule))
         .map(c => `${c.rule}:${formatConstraintValue(c.value)}`)
     );
-  } catch {
+  } catch { /* architecture resolution failed */
     return [];
   }
 
@@ -442,7 +443,7 @@ export function findAlternativeArchitectures(
         constraintsAdded: added,
         relationship,
       });
-    } catch { /* skip */ }
+    } catch { /* architecture resolution failed, skip */ }
   }
 
   // Sort by: fewest added constraints, then most removed

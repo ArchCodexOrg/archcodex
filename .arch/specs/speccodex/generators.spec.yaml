@@ -1,0 +1,997 @@
+# SpecCodex Test Generator Specifications
+#
+# Specs for deterministic test generation from spec examples.
+
+version: "1.0"
+
+# === PHASE 2: Unit Test Generation ===
+
+spec.speccodex.generate.unit:
+  inherits: spec.function
+  implementation: src/core/spec/generators/unit.ts#generateUnitTests
+
+  # === STRATEGIC ===
+  goal: "Generate unit tests from spec examples deterministically"
+  outcomes:
+    - "Generate test file from success/error/warning examples"
+    - "Expand @ placeholders to concrete values"
+    - "Generate boundary tests from boundaries section"
+    - "Support multiple test frameworks (vitest, jest)"
+    - "Use marker sections for regeneration"
+
+  # === OPERATIONAL ===
+  intent: "Generate unit tests from a resolved spec"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with examples"
+    options:
+      type: object
+      properties:
+        framework: { type: enum, values: [vitest, jest], default: vitest }
+        outputPath: { type: string, description: "Output file path" }
+        markers: { type: boolean, default: true, description: "Add regeneration markers" }
+        importPath: { type: string, description: "Import path for function under test" }
+        functionName: { type: string, description: "Function name to test" }
+        coverage: { type: enum, values: [examples, full], default: examples, description: "Coverage mode" }
+        projectRoot: { type: string, description: "Project root for resolving paths" }
+
+  outputs:
+    valid:
+      type: boolean
+      description: "Whether generation was successful"
+    testCount:
+      type: number
+      description: "Total number of tests generated"
+    code:
+      type: string
+      description: "Generated TypeScript test code"
+    errors:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+    warnings:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+    testNames:
+      type: array
+      items: { type: string }
+      description: "Array of all generated test names (for traceability)"
+
+  # === INVARIANTS ===
+  invariants:
+    - "each success example generates one test case"
+    - "each error example generates one test case"
+    - "each boundary generates at least one test case"
+    - "generated code is syntactically valid TypeScript"
+    - "regeneration preserves code outside markers"
+    - "testNames contains the name of every generated test"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate from success examples"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              success:
+                - name: "valid url"
+                  given: { url: "https://github.com" }
+                  then: { "result.url": "https://github.com" }
+        then:
+          result.valid: true
+          result.errors: []
+          result.warnings: []
+          result.testCount: 1
+          result.testNames: "@hasItem('valid url')"
+          "result.code": "@contains('it(\"valid url\"')"
+
+      - name: "generate from error examples"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              errors:
+                - name: "invalid url"
+                  given: { url: "not-a-url" }
+                  then: { error: "INVALID_URL" }
+        then:
+          result.valid: true
+          result.testCount: 1
+          "result.code": "@contains('rejects')"
+
+      - name: "generate with boundaries"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              boundaries:
+                - name: "url at max length"
+                  url: "@string(2048)"
+                  then: { result: "@created" }
+        then:
+          result.valid: true
+          result.testCount: 1
+
+      - name: "expand placeholders"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              success:
+                - name: "authenticated user"
+                  given: { user: "@authenticated" }
+                  then: { result: "@exists" }
+        then:
+          result.valid: true
+          result.codeContains: ["authenticatedUser", "toBeDefined"]
+
+      - name: "generate with markers"
+        given:
+          spec: { specId: "spec.test", intent: "Test", examples: { success: [] } }
+          options: { markers: true }
+        then:
+          result.codeContains: ["// @speccodex:start", "// @speccodex:end"]
+
+    errors:
+      - name: "spec without examples"
+        given:
+          spec: { specId: "spec.test", intent: "Test" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "NO_EXAMPLES"
+
+      - name: "duplicate example name"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              success:
+                - name: "same name"
+                  given: { x: 1 }
+                  then: { result: 1 }
+                - name: "same name"
+                  given: { x: 2 }
+                  then: { result: 2 }
+        then:
+          result.valid: false
+          "result.errors[0].code": "DUPLICATE_NAME"
+
+      - name: "missing name"
+        then: { error: "MISSING_NAME" }
+
+      - name: "invalid spec"
+        then: { error: "INVALID_SPEC" }
+
+    warnings:
+      - name: "example missing name gets auto-generated name"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              success:
+                - given: { x: 1 }
+                  then: { result: 1 }
+        then:
+          result.valid: true
+          "result.warnings[0].code": "MISSING_NAME"
+
+      # === Enhancement: Architecture-Aware Error Patterns ===
+      - name: "convex architecture uses toMatchObject error pattern"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            architectures: ["convex.mutation"]
+            examples:
+              errors:
+                - name: "not found"
+                  given: { id: "missing" }
+                  then: { error: "NOT_FOUND" }
+        then:
+          result.valid: true
+          "result.code": "@contains('toMatchObject')"
+
+      - name: "standard architecture uses toThrow error pattern"
+        given:
+          spec:
+            specId: "spec.utils.validate"
+            intent: "Validate input"
+            architectures: ["archcodex.core.domain"]
+            examples:
+              errors:
+                - name: "invalid input"
+                  given: { value: "" }
+                  then: { error: "INVALID_INPUT" }
+        then:
+          result.valid: true
+          "result.code": "@contains('.rejects.toThrow(')"
+
+      - name: "no architecture defaults to standard toThrow"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              errors:
+                - name: "fails"
+                  given: { x: null }
+                  then: { error: "NULL_ERROR" }
+        then:
+          result.valid: true
+          "result.code": "@contains('.rejects.toThrow(')"
+
+# === PHASE 3: Property-Based Test Generation ===
+
+spec.speccodex.generate.property:
+  inherits: spec.function
+  implementation: src/core/spec/generators/property.ts#generatePropertyTests
+
+  # === STRATEGIC ===
+  goal: "Generate property-based tests from invariants and boundaries"
+  outcomes:
+    - "Generate fast-check arbitraries from input schema"
+    - "Convert invariants to property assertions"
+    - "Generate property tests from boundary conditions"
+    - "Support shrinking for failure cases"
+
+  # === OPERATIONAL ===
+  intent: "Generate property-based tests from spec invariants"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with invariants and/or boundaries"
+    options:
+      type: object
+      properties:
+        framework: { type: enum, values: [fast-check], default: fast-check }
+        numRuns: { type: number, default: 100 }
+        seed: { type: number, description: "Seed for reproducibility" }
+
+  # === INVARIANTS ===
+  invariants:
+    - "each invariant generates one property test"
+    - "boundaries with 'property' field generate property tests"
+    - "generated arbitraries match input schema types"
+    - "string inputs with max generate fc.string({ maxLength })"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate from invariant"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            inputs:
+              url: { type: string, validate: url }
+            invariants:
+              - { "result.url": "valid_url" }
+        then:
+          result.valid: true
+          result.propertyCount: 1
+          result.codeContains: ["fc.assert", "fc.webUrl"]
+
+      - name: "generate arbitrary from input schema"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              name: { type: string, max: 100 }
+              count: { type: number, min: 0, max: 1000 }
+            invariants:
+              - "result is always defined"
+        then:
+          result.valid: true
+          result.codeContains: ["fc.string({ maxLength: 100 })", "fc.integer({ min: 0, max: 1000 })"]
+
+      - name: "generate from boundary with property"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              boundaries:
+                - name: "url too long"
+                  url: "@string(2049)"
+                  then: { error: "URL_TOO_LONG" }
+                  property: "forall url.length > 2048, returns URL_TOO_LONG"
+        then:
+          result.valid: true
+          result.propertyCount: 1
+
+      - name: "multiple invariants"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            invariants:
+              - { "result.id": "@defined" }
+              - { "result.createdAt": "@lt(@now)" }
+              - "userId equals ctx.userId"
+        then:
+          result.valid: true
+          result.propertyCount: 3
+
+      # === Enhancement: Full Test Generation (not scaffolds) ===
+      - name: "string invariant generates actual assertion not TODO"
+        description: "String invariants should generate executable assertions, not TODO comments"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test function"
+            inputs:
+              value: { type: string }
+            invariants:
+              - "result is always defined"
+        then:
+          result.valid: true
+          result.propertyCount: 1
+          "result.code": "@all(@contains('expect(result).'), @not(@contains('TODO')))"
+
+      - name: "string invariant with 'length' generates length assertion"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test function"
+            inputs:
+              items: { type: array }
+            invariants:
+              - "result length is always positive"
+        then:
+          result.valid: true
+          "result.code": "@contains('expect(result.length)')"
+
+      - name: "string invariant with 'valid' generates truthy assertion"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test function"
+            inputs:
+              data: { type: object }
+            invariants:
+              - "result is always valid"
+        then:
+          result.valid: true
+          "result.code": "@contains('expect(result).toBeTruthy()')"
+
+      # === Enhancement: Mock Isolation ===
+      - name: "property tests clear mocks between iterations"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs:
+              value: { type: string }
+            invariants:
+              - { "result.valid": true }
+        then:
+          result.valid: true
+          "result.code": "@all(@contains('vi.clearAllMocks()'), @contains('beforeEach'))"
+
+    errors:
+      - name: "spec without invariants or boundaries"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples: { success: [] }
+        then:
+          result.valid: false
+          "result.errors[0].code": "NO_INVARIANTS"
+
+      - name: "invalid invariant syntax"
+        then: { error: "INVALID_INVARIANT_SYNTAX" }
+
+# === PHASE 4: Integration Test Generation ===
+
+spec.speccodex.generate.integration:
+  inherits: spec.function
+  implementation: src/core/spec/generators/integration.ts#generateIntegrationTests
+
+  # === STRATEGIC ===
+  goal: "Generate integration tests from spec effects"
+  outcomes:
+    - "Generate tests that verify side effects"
+    - "Set up and tear down test fixtures"
+    - "Assert database state changes"
+    - "Assert audit log entries"
+    - "Assert external API calls"
+
+  # === OPERATIONAL ===
+  intent: "Generate integration tests from spec effects"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with effects"
+    options:
+      type: object
+      properties:
+        framework: { type: enum, values: [vitest, jest], default: vitest }
+        setupHelpers: { type: string, description: "Path to test setup helpers" }
+
+  # === INVARIANTS ===
+  invariants:
+    - "each effect generates verification code"
+    - "audit_log effects verify log table entries"
+    - "database effects verify row state"
+    - "tests include proper setup and teardown"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate audit log verification"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            effects:
+              - { audit_log: { action: "product.create", resourceType: "product" } }
+        then:
+          result.valid: true
+          result.effectTests: 1
+          result.codeContains: ["auditLogs", "product.create"]
+
+      - name: "generate database state verification"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            effects:
+              - { database: { table: "products", operation: "insert" } }
+        then:
+          result.valid: true
+          "result.code": "@contains('db.query')"
+
+      - name: "generate embedding verification"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            effects:
+              - { embedding: "generated_async" }
+        then:
+          result.valid: true
+          "result.code": "@contains('embedding')"
+
+      - name: "multiple effects"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            effects:
+              - { audit_log: { action: "product.create" } }
+              - { database: { table: "products", operation: "insert" } }
+              - { cache: { invalidated: "user_products" } }
+        then:
+          result.valid: true
+          result.effectTests: 3
+
+      # === Enhancement: Use Example Inputs (not placeholders) ===
+      - name: "uses example input instead of placeholder"
+        description: "Effect tests should use actual example data, not { /* valid input */ }"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              success:
+                - name: "valid product"
+                  given:
+                    url: "https://github.com"
+                    title: "GitHub"
+                  then:
+                    result.success: true
+            effects:
+              - { audit_log: { action: "product.create" } }
+        then:
+          result.valid: true
+          "result.code": "@all(@contains('https://github.com'), @not(@contains('/* valid input */')))"
+
+      - name: "uses boundary example when no success examples"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test function"
+            examples:
+              boundaries:
+                - name: "max length input"
+                  value: "test-value"
+                  then: { result: true }
+            effects:
+              - { database: { table: "items", operation: "insert" } }
+        then:
+          result.valid: true
+          "result.code": "@contains('test-value')"
+
+      - name: "handles nested object inputs from examples"
+        given:
+          spec:
+            specId: "spec.request.send"
+            intent: "Send HTTP request"
+            examples:
+              success:
+                - name: "POST with headers"
+                  given:
+                    config:
+                      method: "POST"
+                      headers:
+                        "Content-Type": "application/json"
+                  then:
+                    result.success: true
+            effects:
+              - { metrics: { counter: "requests_sent" } }
+        then:
+          result.valid: true
+          # Verify nested objects with special keys are properly quoted
+          "result.code": "@all(@contains('\"Content-Type\"'), @contains('application/json'))"
+
+      - name: "falls back to empty object when no examples"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test function"
+            effects:
+              - { cache: { invalidated: "items" } }
+        then:
+          result.valid: true
+          # Should use {} not /* valid input */
+          "result.code": "@not(@contains('/* valid input */'))"
+
+      # === Enhancement: Architecture-Aware Integration Tests ===
+      - name: "standard architecture uses mock-based verification"
+        given:
+          spec:
+            specId: "spec.email.send"
+            intent: "Send email"
+            architectures: ["archcodex.core.domain"]
+            effects:
+              - { notification: { type: "email", channel: "smtp" } }
+        then:
+          result.valid: true
+          "result.code": "@all(@contains('vi.fn()'), @contains('toHaveBeenCalledWith'))"
+
+      - name: "convex architecture uses ctx.db pattern"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            architectures: ["convex.mutation"]
+            effects:
+              - { database: { table: "products", operation: "insert" } }
+        then:
+          result.valid: true
+          "result.code": "@contains('ctx.db')"
+
+      - name: "no architecture defaults to standard mocks"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            effects:
+              - { cache: { invalidated: "items" } }
+        then:
+          result.valid: true
+          "result.code": "@contains('vi.fn()')"
+
+    errors:
+      - name: "spec without effects"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "NO_EFFECTS"
+
+      - name: "invalid spec"
+        then: { error: "INVALID_SPEC" }
+
+# === PHASE 5: Bidirectional Verification ===
+
+spec.speccodex.verify:
+  inherits: spec.function
+  implementation: src/core/spec/verifier.ts#verifyImplementation
+
+  # === STRATEGIC ===
+  goal: "Verify implementation matches spec bidirectionally"
+  outcomes:
+    - "Check implementation exports match spec inputs"
+    - "Check implementation handles all error cases"
+    - "Check generated tests cover all examples"
+    - "Report drift between spec and implementation"
+
+  # === OPERATIONAL ===
+  intent: "Verify implementation matches spec"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec ID to verify"
+    implementationPath:
+      type: string
+      description: "Path to implementation file (inferred if colocated)"
+
+  # === INVARIANTS ===
+  invariants:
+    - "all spec inputs have corresponding function parameters"
+    - "all error examples have corresponding error handling"
+    - "implementation architecture matches spec.architectures"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "matching implementation"
+        given:
+          specId: "spec.product.create"
+          implementationPath: "src/domain/products/mutations/create.ts"
+        then:
+          result.valid: true
+          result.drift: []
+
+      - name: "colocated spec"
+        given:
+          specId: "spec.product.create"
+          # No implementationPath - inferred from create.spec.yaml → create.ts
+        then:
+          result.valid: true
+
+    errors:
+      - name: "missing input parameter"
+        given:
+          specId: "spec.test"
+          # Spec has input 'title' but implementation doesn't accept it
+        then:
+          result.valid: false
+          "result.drift[0].type": "missing_input"
+          "result.drift[0].field": "title"
+
+      - name: "missing error handling"
+        given:
+          specId: "spec.test"
+          # Spec has error example for INVALID_URL but implementation doesn't throw it
+        then:
+          result.valid: false
+          "result.drift[0].type": "missing_error"
+          "result.drift[0].errorCode": "INVALID_URL"
+
+      - name: "implementation not found"
+        given:
+          specId: "spec.nonexistent"
+        then:
+          result.valid: false
+          "result.errors[0].code": "IMPLEMENTATION_NOT_FOUND"
+
+    warnings:
+      - name: "extra implementation parameter"
+        given:
+          specId: "spec.test"
+          # Implementation accepts 'debug' parameter not in spec
+        then:
+          result.valid: true
+          "result.drift[0].type": "extra_input"
+          "result.drift[0].severity": "warning"
+
+# === PHASE 6: Shared Generator Utilities ===
+
+spec.speccodex.generate.shared.extractExampleInput:
+  inherits: spec.function
+  implementation: src/core/spec/generators/shared.ts#extractExampleInput
+
+  goal: "Extract first available example input from a resolved spec"
+  outcomes:
+    - "Success examples take priority over boundary examples"
+    - "Boundary metadata fields are excluded from extraction"
+    - "Returns null when no examples exist"
+  intent: "Get concrete test input data from spec examples for use in generators"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with optional examples"
+
+  invariants:
+    - "returns null when spec has no examples"
+    - "success examples take priority over boundaries"
+    - "boundary 'given' extracted correctly"
+    - "metadata fields (name, then, property) are excluded from boundary extraction"
+
+  examples:
+    success:
+      - name: "extracts from success example"
+        given:
+          spec:
+            specId: "spec.test"
+            node:
+              examples:
+                success:
+                  - name: "valid"
+                    given:
+                      url: "https://example.com"
+                      title: "Example"
+                    then: { result: true }
+        then:
+          result: "@hasProperties({ url: 'https://example.com', title: 'Example' })"
+
+      - name: "extracts from boundary when no success examples"
+        given:
+          spec:
+            specId: "spec.test"
+            node:
+              examples:
+                boundaries:
+                  - name: "max length"
+                    value: "test-input"
+                    then: { result: true }
+        then:
+          result: "@hasProperties({ value: 'test-input' })"
+
+      - name: "excludes boundary metadata fields"
+        description: "name, then, property, description should not be in result"
+        given:
+          spec:
+            specId: "spec.test"
+            node:
+              examples:
+                boundaries:
+                  - name: "boundary test"
+                    value: "data"
+                    property: "forall value, valid"
+                    description: "Test boundary"
+                    then: { result: true }
+        then:
+          result: "@hasProperties({ value: 'data' })"
+          "result.name": "@undefined"
+          "result.then": "@undefined"
+          "result.property": "@undefined"
+          "result.description": "@undefined"
+
+      - name: "returns null when no examples"
+        given:
+          spec:
+            specId: "spec.test"
+            node: {}
+        then:
+          result: null
+
+      - name: "returns null when examples object is empty"
+        given:
+          spec:
+            specId: "spec.test"
+            node:
+              examples: {}
+        then:
+          result: null
+
+      - name: "success takes priority over boundaries"
+        given:
+          spec:
+            specId: "spec.test"
+            node:
+              examples:
+                success:
+                  - name: "success"
+                    given: { source: "success" }
+                    then: { result: true }
+                boundaries:
+                  - name: "boundary"
+                    source: "boundary"
+                    then: { result: true }
+        then:
+          result: "@hasProperties({ source: 'success' })"
+
+spec.speccodex.generate.shared.expandValue:
+  inherits: spec.function
+  implementation: src/core/spec/generators/shared.ts#expandValue
+
+  goal: "Expand a value to JavaScript code string, handling placeholders and special keys"
+  outcomes:
+    - "Expand @ placeholders to concrete values"
+    - "Quote special keys (hyphens, spaces, reserved words)"
+    - "Recursively expand nested objects and arrays"
+  intent: "Convert spec values to valid JavaScript code for test generation"
+
+  inputs:
+    value:
+      type: unknown
+      description: "Value to expand (primitive, object, array, or placeholder). Accepts any type."
+
+  invariants:
+    - "placeholders are expanded to concrete values"
+    - "strings are JSON-quoted"
+    - "objects with special keys have those keys quoted"
+    - "null returns 'null'"
+    - "arrays are recursively expanded"
+
+  examples:
+    success:
+      - name: "expands string"
+        given:
+          value: "hello"
+        then:
+          result: "\"hello\""
+
+      - name: "expands number"
+        given:
+          value: 42
+        then:
+          result: "42"
+
+      - name: "expands boolean"
+        given:
+          value: true
+        then:
+          result: "true"
+
+      - name: "expands simple object"
+        given:
+          value:
+            name: "test"
+            count: 5
+        then:
+          result: "@contains('name: \"test\"')"
+
+      - name: "quotes hyphenated keys"
+        given:
+          value:
+            "Content-Type": "application/json"
+        then:
+          result: "@contains('\"Content-Type\": \"application/json\"')"
+
+      - name: "quotes keys with spaces"
+        given:
+          value:
+            "with spaces": "value"
+        then:
+          result: "@contains('\"with spaces\": \"value\"')"
+
+      - name: "quotes reserved word keys"
+        given:
+          value:
+            class: "MyClass"
+        then:
+          result: "@contains('\"class\": \"MyClass\"')"
+
+      - name: "does not quote valid identifiers"
+        given:
+          value:
+            normalKey: "value"
+            _underscore: "value"
+        then:
+          result: "@all(@contains('normalKey:'), @contains('_underscore:'))"
+
+      - name: "expands array"
+        given:
+          value: [1, "two", true]
+        then:
+          result: "[1, \"two\", true]"
+
+      - name: "expands @length placeholder"
+        given:
+          value: "@length(5)"
+        then:
+          result: "\"xxxxx\""
+
+      - name: "expands @authenticated placeholder"
+        given:
+          value: "@authenticated"
+        then:
+          result: "@contains('permissions')"
+
+# === PHASE 7: Mock Scaffolding ===
+
+spec.speccodex.generate.mockScaffolding:
+  inherits: spec.function
+  implementation: src/core/spec/generators/shared.ts#generateMockScaffolding
+
+  goal: "Generate vi.mock() scaffolding from extracted dependencies"
+  outcomes:
+    - "Generate vi.mock() call for each dependency"
+    - "Use node: prefix for Node.js builtins"
+    - "Create mock functions for named imports"
+  intent: "Create mock declarations for I/O dependencies"
+
+  inputs:
+    dependencies:
+      type: array
+      required: true
+      description: "Array of dependency descriptors"
+    indent:
+      type: string
+      default: ""
+      description: "Indentation prefix for each line"
+
+  invariants:
+    - description: "each dependency produces one vi.mock() call"
+      condition: "result.filter(l => l.includes('vi.mock')).length === dependencies.length"
+    - description: "node builtins use node: prefix"
+      condition: "isNodeBuiltin implies result.includes('node:')"
+    - description: "empty dependencies produces no lines"
+      condition: "dependencies.length === 0 implies result.length === 0"
+
+  examples:
+    success:
+      - name: "generates vi.mock for relative import"
+        given:
+          dependencies:
+            - importPath: "../../utils/database.js"
+              importedNames: ["query", "insert"]
+              isNodeBuiltin: false
+              suggestedMockType: "full"
+          indent: ""
+        then:
+          result: "@all(@hasItem('vi.mock'), @hasItem('database'))"
+
+      - name: "generates vi.mock for node builtin"
+        given:
+          dependencies:
+            - importPath: "fs"
+              importedNames: ["readFileSync"]
+              isNodeBuiltin: true
+              suggestedMockType: "full"
+          indent: ""
+        then:
+          result: "@hasItem('node:fs')"
+
+      - name: "empty dependencies produces no mocks"
+        given:
+          dependencies: []
+          indent: ""
+        then:
+          result: "@length(0)"
+
+      - name: "uses default empty indent"
+        given:
+          dependencies:
+            - importPath: "./service.js"
+              importedNames: ["create"]
+              isNodeBuiltin: false
+              suggestedMockType: "full"
+          # indent omitted — should default to ""
+        then:
+          result: "@hasItem('vi.mock')"
+
+      - name: "generates mock functions for named imports"
+        given:
+          dependencies:
+            - importPath: "./service.js"
+              importedNames: ["create", "update", "delete"]
+              isNodeBuiltin: false
+              suggestedMockType: "full"
+          indent: ""
+        then:
+          result: "@all(@hasItem('create: vi.fn()'), @hasItem('update: vi.fn()'), @hasItem('delete: vi.fn()'))"
+
+      - name: "preserves node: prefix if already present"
+        given:
+          dependencies:
+            - importPath: "node:path"
+              importedNames: ["resolve", "join"]
+              isNodeBuiltin: true
+              suggestedMockType: "full"
+          indent: ""
+        then:
+          result: "@hasItem('node:path')"

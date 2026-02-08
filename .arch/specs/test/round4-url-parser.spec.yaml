@@ -1,0 +1,51 @@
+version: "1.0"
+
+spec.test.parseUrl:
+  inherits: spec.function
+  implementation: tests/spec/e2e/url-parser.ts#parseUrl
+
+  goal: "Parse URL into components"
+  intent: "Extract protocol, host, path, and query from URL string"
+
+  outcomes:
+    - "Successfully parse valid URLs with protocol, host, path"
+    - "Extract query parameters into object"
+    - "Identify and report empty URLs"
+    - "Identify and report invalid URL formats"
+
+  inputs:
+    url: { type: string, required: true }
+
+  outputs:
+    protocol: { type: string }
+    host: { type: string }
+    path: { type: string }
+    query: { type: object }
+    error: { type: string, optional: true }
+
+  examples:
+    success:
+      - name: "simple URL"
+        given: { url: "https://example.com/path" }
+        then:
+          result.protocol: "https"
+          result.host: "example.com"
+          result.path: "/path"
+          result.error: "@undefined"
+      - name: "URL with query"
+        given: { url: "https://api.test.com/search?q=hello&limit=10" }
+        then:
+          result.host: "@contains('api')"
+          result.query: "@hasItem({ q: 'hello' })"
+      - name: "URL with port"
+        given: { url: "http://localhost:3000/api" }
+        then:
+          result.protocol: "http"
+          result.host: "@contains('localhost')"
+    errors:
+      - name: "empty URL"
+        given: { url: "" }
+        then: { result.error: "EMPTY_URL" }
+      - name: "invalid URL"
+        given: { url: "not-a-url" }
+        then: { result.error: "INVALID_FORMAT" }

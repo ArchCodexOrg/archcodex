@@ -271,7 +271,250 @@ describe('verifyFiles', () => {
   });
 });
 
+describe('verifyFile - hint pattern coverage', () => {
+  let mockRegistry: Registry;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockRegistry = {
+      nodes: {
+        base: { description: 'Base' },
+        'test.arch': { description: 'Test', inherits: 'base' },
+      },
+      mixins: {},
+    };
+
+    vi.mocked(readFile).mockResolvedValue('/**\n * @arch test.arch\n */\nconst x = 1;');
+    vi.mocked(parseArchTags).mockReturnValue({
+      archTag: { archId: 'test.arch', inlineMixins: [] },
+      overrides: [],
+      intents: [],
+    });
+  });
+
+  // Helper to set up hints and capture the verification request
+  function setupWithHints(hintTexts: string[]) {
+    vi.mocked(resolveArchitecture).mockReturnValue({
+      architecture: {
+        archId: 'test.arch',
+        inheritanceChain: ['test.arch'],
+        appliedMixins: [],
+        constraints: [],
+        hints: hintTexts.map(text => ({ text })),
+        pointers: [],
+      },
+      conflicts: [],
+    });
+
+    const mockVerify = vi.fn().mockResolvedValue({
+      passed: true,
+      provider: 'test',
+      results: hintTexts.map(hint => ({ hint, passed: true, confidence: 0.9, reasoning: 'OK' })),
+    });
+    vi.mocked(getAvailableProvider).mockReturnValue({
+      isAvailable: () => true,
+      verify: mockVerify,
+      generateKeywords: vi.fn(),
+    });
+
+    return mockVerify;
+  }
+
+  it('should generate question for "redact X before logging" pattern', async () => {
+    const mockVerify = setupWithHints(['redact passwords before logging']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('redact');
+    expect(request.checks[0].question).toContain('passwords');
+  });
+
+  it('should generate question for "use X pattern" pattern', async () => {
+    const mockVerify = setupWithHints(['use factory pattern for services']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('factory');
+    expect(request.checks[0].question).toContain('pattern');
+  });
+
+  it('should generate question for "must do X" pattern (without not)', async () => {
+    const mockVerify = setupWithHints(['must validate all input']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('validate all input');
+    expect(request.checks[0].question).not.toContain('avoid');
+  });
+
+  it('should generate question for "must not X" pattern (with not)', async () => {
+    const mockVerify = setupWithHints(['must not use global state']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('avoid');
+    expect(request.checks[0].question).toContain('use global state');
+  });
+
+  it('should generate question for "prefer X over Y" pattern', async () => {
+    const mockVerify = setupWithHints(['prefer composition over inheritance']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('composition');
+    expect(request.checks[0].question).toContain('inheritance');
+  });
+
+  it('should generate question for "avoid X" pattern', async () => {
+    const mockVerify = setupWithHints(['avoid mutable state']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('avoid');
+    expect(request.checks[0].question).toContain('mutable state');
+  });
+
+  it('should generate question for "always X" pattern', async () => {
+    const mockVerify = setupWithHints(['always use const declarations']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('always');
+    expect(request.checks[0].question).toContain('use const declarations');
+  });
+
+  it('should generate question for "never X" pattern', async () => {
+    const mockVerify = setupWithHints(['never use any type']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('avoid');
+    expect(request.checks[0].question).toContain('use any type');
+  });
+
+  it('should generate default question for non-matching hint', async () => {
+    const mockVerify = setupWithHints(['Keep functions pure and simple']);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks[0].question).toContain('comply with the following hint');
+    expect(request.checks[0].question).toContain('Keep functions pure and simple');
+  });
+
+  it('should handle multiple hints with different patterns', async () => {
+    const mockVerify = setupWithHints([
+      'always validate input',
+      'never use eval',
+      'Keep it simple',
+    ]);
+    await verifyFile('/test/file.ts', mockRegistry);
+
+    const request = mockVerify.mock.calls[0][0];
+    expect(request.checks).toHaveLength(3);
+    expect(request.checks[0].question).toContain('always');
+    expect(request.checks[1].question).toContain('avoid');
+    expect(request.checks[2].question).toContain('comply with the following hint');
+  });
+});
+
+describe('verifyFiles - edge cases', () => {
+  let mockRegistry: Registry;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRegistry = {
+      nodes: { base: { description: 'Base' } },
+      mixins: {},
+    };
+  });
+
+  it('should return empty array for empty file list', async () => {
+    const results = await verifyFiles([], mockRegistry);
+    expect(results).toHaveLength(0);
+  });
+
+  it('should continue processing after first file error', async () => {
+    vi.mocked(readFile)
+      .mockRejectedValueOnce(new Error('File not found'))
+      .mockResolvedValueOnce('/**\n * @arch test.arch\n */\nconst x = 1;');
+    vi.mocked(parseArchTags).mockReturnValue({
+      archTag: { archId: 'test.arch', inlineMixins: [] },
+      overrides: [],
+      intents: [],
+    });
+    vi.mocked(resolveArchitecture).mockReturnValue({
+      architecture: {
+        archId: 'test.arch',
+        inheritanceChain: ['test.arch'],
+        appliedMixins: [],
+        constraints: [],
+        hints: [],
+        pointers: [],
+      },
+      conflicts: [],
+    });
+
+    const results = await verifyFiles(['/test/missing.ts', '/test/exists.ts'], mockRegistry);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].staticPassed).toBe(false);
+    expect(results[1].staticPassed).toBe(true);
+  });
+});
+
 describe('formatVerificationResult', () => {
+  it('should format result with no archId', () => {
+    const result = {
+      filePath: '/test/file.ts',
+      archId: null,
+      staticPassed: false,
+    };
+
+    const formatted = formatVerificationResult(result);
+
+    expect(formatted).toContain('/test/file.ts');
+    expect(formatted).toContain('none');
+  });
+
+  it('should format verification error', () => {
+    const result = {
+      filePath: '/test/file.ts',
+      archId: 'test.arch',
+      staticPassed: true,
+      llmVerification: {
+        passed: false,
+        provider: 'openai',
+        error: 'API rate limit exceeded',
+        results: [],
+      },
+    };
+
+    const formatted = formatVerificationResult(result);
+
+    expect(formatted).toContain('Error: API rate limit exceeded');
+  });
+
+  it('should include token usage when present', () => {
+    const result = {
+      filePath: '/test/file.ts',
+      archId: 'test.arch',
+      staticPassed: true,
+      llmVerification: {
+        passed: true,
+        provider: 'openai',
+        results: [{ hint: 'Keep pure', passed: true, confidence: 0.95, reasoning: 'OK' }],
+        tokenUsage: { input: 150, output: 50, total: 200 },
+      },
+    };
+
+    const formatted = formatVerificationResult(result);
+
+    expect(formatted).toContain('Tokens: 200');
+    expect(formatted).toContain('150 in');
+    expect(formatted).toContain('50 out');
+  });
+
   it('should format successful verification result', () => {
     const result = {
       filePath: '/test/file.ts',

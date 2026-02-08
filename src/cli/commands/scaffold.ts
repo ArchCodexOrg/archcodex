@@ -86,17 +86,13 @@ async function runScaffold(archId: string, options: ScaffoldOptions): Promise<vo
   let registry;
   try {
     registry = await loadRegistry(projectRoot);
-  } catch {
-    // Registry is optional for scaffolding
-  }
+  } catch { /* registry is optional for scaffolding */ }
 
   // Load intent registry for suggestions
   let intentRegistry;
   try {
     intentRegistry = await loadIntentRegistry(projectRoot);
-  } catch {
-    // Intent registry is optional
-  }
+  } catch { /* intent registry is optional */ }
 
   // Create scaffold engine
   const engine = new ScaffoldEngine(projectRoot, '.arch/templates', registry);

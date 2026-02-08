@@ -1,0 +1,441 @@
+# Discovery Ranker Specification
+#
+# Multi-signal ranking system using Reciprocal Rank Fusion (RRF).
+# Combines path, entity, architecture, import graph, recency, and feedback signals
+# into a single ranked list of module suggestions.
+
+version: "1.0"
+
+# --- calculateRRF ---
+
+spec.archcodex.discoveryRanker.calculateRRF:
+  inherits: spec.function
+  implementation: src/core/unified-context/discovery/ranker.ts#calculateRRF
+
+  goal: "Calculate Reciprocal Rank Fusion score from multiple rank positions"
+  intent: "Sum 1/(k + rank_i) for each rank position to produce a combined RRF score"
+
+  inputs:
+    ranks:
+      type: array
+      items: { type: number }
+      required: true
+      description: "Array of rank positions (0-indexed or 1-indexed)"
+    k:
+      type: number
+      required: false
+      description: "RRF constant (default 60). Higher k gives more weight to lower-ranked items"
+
+  outputs:
+    result:
+      type: number
+      description: "Combined RRF score"
+
+  examples:
+    success:
+      - name: "single rank returns reciprocal"
+        given:
+          ranks: [1]
+        then:
+          # 1 / (60 + 1) = ~0.01639
+          result: "@all(@gt(0), @lt(1))"
+
+      - name: "multiple ranks sum reciprocals"
+        given:
+          ranks: [1, 2, 3]
+        then:
+          # 1/(60+1) + 1/(60+2) + 1/(60+3) = sum of small fractions
+          result: "@gt(0)"
+
+      - name: "custom k changes result"
+        given:
+          ranks: [1]
+          k: 10
+        then:
+          # 1 / (10 + 1) = ~0.0909
+          result: "@all(@gt(0.09), @lt(0.1))"
+
+      - name: "empty ranks returns zero"
+        given:
+          ranks: []
+        then:
+          result: 0
+
+  invariants:
+    - description: "result is always non-negative"
+      condition: "result >= 0"
+    - description: "more ranks always produce a higher score"
+      condition: "calculateRRF([1,2]) > calculateRRF([1])"
+
+# --- combineSignals ---
+
+spec.archcodex.discoveryRanker.combineSignals:
+  inherits: spec.function
+  implementation: src/core/unified-context/discovery/ranker.ts#combineSignals
+
+  goal: "Combine multiple ranking signals into a single weighted score (0-100)"
+  intent: "Compute weighted average of signal scores, then scale to 0-100 range"
+
+  inputs:
+    signals:
+      type: array
+      required: true
+      description: "Array of RankingSignal objects with type, score, and reason"
+    weights:
+      type: object
+      required: false
+      description: "RankingWeights with per-signal-type weights (default: DEFAULT_WEIGHTS)"
+
+  outputs:
+    result:
+      type: number
+      description: "Combined score in 0-100 range"
+
+  examples:
+    success:
+      - name: "single signal with default weight"
+        given:
+          signals:
+            - { type: "path", score: 0.8, reason: "path match" }
+        then:
+          # (0.8 * 0.35) / 0.35 * 100 = 80
+          result: 80
+
+      - name: "multiple signals weighted average"
+        given:
+          signals:
+            - { type: "path", score: 1.0, reason: "exact path" }
+            - { type: "entity", score: 0.5, reason: "entity match" }
+        then:
+          result: "@all(@gt(0), @lte(100))"
+
+      - name: "empty signals returns zero"
+        given:
+          signals: []
+        then:
+          result: 0
+
+      - name: "custom weights override defaults"
+        given:
+          signals:
+            - { type: "path", score: 1.0, reason: "path match" }
+          weights: { path: 1.0, entity: 0, architecture: 0, import: 0, recency: 0, feedback: 0 }
+        then:
+          result: 100
+
+      - name: "zero-weight signals are ignored"
+        given:
+          signals:
+            - { type: "path", score: 1.0, reason: "path match" }
+          weights: { path: 0, entity: 0, architecture: 0, import: 0, recency: 0, feedback: 0 }
+        then:
+          result: 0
+
+  invariants:
+    - description: "result is between 0 and 100 inclusive"
+      condition: "result >= 0 && result <= 100"
+    - description: "all-zero weights returns 0"
+      condition: "combineSignals(signals, zeroWeights) === 0"
+
+# --- rankModules ---
+
+spec.archcodex.discoveryRanker.rankModules:
+  inherits: spec.function
+  implementation: src/core/unified-context/discovery/ranker.ts#rankModules
+
+  goal: "Rank modules by combining all signals into a confidence score"
+  intent: "For each module, combine its signals into a confidence score, extract primary reason and metadata, and sort by confidence descending"
+
+  inputs:
+    moduleSignals:
+      type: Map
+      required: true
+      description: "Map of module path to array of RankingSignal objects"
+    weights:
+      type: object
+      required: false
+      description: "RankingWeights (default: DEFAULT_WEIGHTS)"
+
+  outputs:
+    result:
+      type: array
+      description: "Array of RankedModule objects sorted by confidence descending"
+
+  examples:
+    success:
+      - name: "single module produces single result"
+        given:
+          moduleSignals:
+            "src/core/engine/":
+              - { type: "path", score: 0.9, reason: "path keyword match" }
+        then:
+          result: "@length(1)"
+          result[0].path: "src/core/engine/"
+          result[0].confidence: "@gt(0)"
+          result[0].primaryReason: "path keyword match"
+
+      - name: "multiple modules sorted by confidence descending"
+        given:
+          moduleSignals:
+            "src/core/low/":
+              - { type: "path", score: 0.2, reason: "weak match" }
+            "src/core/high/":
+              - { type: "path", score: 0.9, reason: "strong match" }
+        then:
+          result: "@length(2)"
+          result[0].path: "src/core/high/"
+          result[1].path: "src/core/low/"
+
+      - name: "empty map returns empty array"
+        given:
+          moduleSignals: {}
+        then:
+          result: "@empty"
+
+      - name: "extracts fileCount from signal metadata"
+        given:
+          moduleSignals:
+            "src/core/":
+              - { type: "path", score: 0.5, reason: "match", metadata: { fileCount: 12 } }
+        then:
+          result[0].fileCount: 12
+
+      - name: "extracts architecture from signal metadata"
+        given:
+          moduleSignals:
+            "src/core/":
+              - { type: "architecture", score: 0.7, reason: "arch match", metadata: { architecture: "archcodex.core.engine" } }
+        then:
+          result[0].architecture: "archcodex.core.engine"
+
+      - name: "confidence is rounded to one decimal"
+        given:
+          moduleSignals:
+            "src/core/":
+              - { type: "path", score: 0.333, reason: "partial" }
+        then:
+          # Confidence should not have more than 1 decimal place
+          result[0].confidence: "@gte(0)"
+
+      - name: "primary reason is the highest-scoring signal"
+        given:
+          moduleSignals:
+            "src/core/":
+              - { type: "path", score: 0.3, reason: "weak path" }
+              - { type: "entity", score: 0.9, reason: "strong entity" }
+        then:
+          result[0].primaryReason: "strong entity"
+
+  invariants:
+    - description: "results sorted by confidence descending"
+      forall:
+        variable: i
+        in: "range(0, result.length - 1)"
+        then:
+          condition: "result[i].confidence >= result[i+1].confidence"
+
+    - description: "every result has required fields"
+      forall:
+        variable: module
+        in: result
+        then:
+          module.path: "@defined"
+          module.confidence: "@defined"
+          module.signals: "@defined"
+          module.primaryReason: "@defined"
+
+    - description: "confidence is rounded to at most 1 decimal"
+      forall:
+        variable: module
+        in: result
+        then:
+          condition: "module.confidence * 10 === Math.round(module.confidence * 10)"
+
+# --- needsClarification ---
+
+spec.archcodex.discoveryRanker.needsClarification:
+  inherits: spec.function
+  implementation: src/core/unified-context/discovery/ranker.ts#needsClarification
+
+  goal: "Determine if ranked results are ambiguous and need user clarification"
+  intent: "Check if the top N results are within a threshold of each other, indicating ambiguity"
+
+  inputs:
+    modules:
+      type: array
+      required: true
+      description: "Array of RankedModule objects (pre-sorted by confidence)"
+    topN:
+      type: number
+      required: false
+      description: "Number of top results to compare (default: 3)"
+    threshold:
+      type: number
+      required: false
+      description: "Maximum confidence spread before clarification is needed (default: 10)"
+
+  outputs:
+    result:
+      type: boolean
+      description: "True if results are ambiguous and clarification would help"
+
+  examples:
+    success:
+      - name: "close scores need clarification"
+        given:
+          modules:
+            - { path: "a/", confidence: 85, signals: [], primaryReason: "a", fileCount: 0 }
+            - { path: "b/", confidence: 82, signals: [], primaryReason: "b", fileCount: 0 }
+            - { path: "c/", confidence: 80, signals: [], primaryReason: "c", fileCount: 0 }
+        then:
+          result: true
+
+      - name: "spread scores do not need clarification"
+        given:
+          modules:
+            - { path: "a/", confidence: 95, signals: [], primaryReason: "a", fileCount: 0 }
+            - { path: "b/", confidence: 60, signals: [], primaryReason: "b", fileCount: 0 }
+            - { path: "c/", confidence: 40, signals: [], primaryReason: "c", fileCount: 0 }
+        then:
+          result: false
+
+      - name: "single module never needs clarification"
+        given:
+          modules:
+            - { path: "a/", confidence: 90, signals: [], primaryReason: "a", fileCount: 0 }
+        then:
+          result: false
+
+      - name: "empty modules never needs clarification"
+        given:
+          modules: []
+        then:
+          result: false
+
+      - name: "custom threshold changes behavior"
+        given:
+          modules:
+            - { path: "a/", confidence: 85, signals: [], primaryReason: "a", fileCount: 0 }
+            - { path: "b/", confidence: 60, signals: [], primaryReason: "b", fileCount: 0 }
+          threshold: 30
+        then:
+          result: true
+
+  invariants:
+    - description: "fewer than 2 modules always returns false"
+      condition: "if modules.length < 2 then result === false"
+
+# --- applyBoosts ---
+
+spec.archcodex.discoveryRanker.applyBoosts:
+  inherits: spec.function
+  implementation: src/core/unified-context/discovery/ranker.ts#applyBoosts
+
+  goal: "Apply confidence boosts based on clarifying question answers"
+  intent: "Boost modules matching path keywords or signal reason keywords, then re-sort"
+
+  inputs:
+    modules:
+      type: array
+      required: true
+      description: "Array of RankedModule objects to boost"
+    boostKeywords:
+      type: array
+      items: { type: string }
+      required: true
+      description: "Keywords to match in signal reasons (+10 boost)"
+    boostPaths:
+      type: array
+      items: { type: string }
+      required: true
+      description: "Path substrings to match in module paths (+15 boost)"
+
+  outputs:
+    result:
+      type: array
+      description: "Boosted and re-sorted RankedModule array"
+
+  examples:
+    success:
+      - name: "path boost increases confidence by 15"
+        given:
+          modules:
+            - { path: "src/core/engine/", confidence: 50, signals: [{ type: "path", score: 0.5, reason: "some reason" }], primaryReason: "r", fileCount: 0 }
+          boostKeywords: []
+          boostPaths: ["engine"]
+        then:
+          result[0].confidence: 65
+
+      - name: "keyword boost increases confidence by 10"
+        given:
+          modules:
+            - { path: "src/core/", confidence: 50, signals: [{ type: "path", score: 0.5, reason: "handles validation" }], primaryReason: "r", fileCount: 0 }
+          boostKeywords: ["validation"]
+          boostPaths: []
+        then:
+          result[0].confidence: 60
+
+      - name: "both boosts stack"
+        given:
+          modules:
+            - { path: "src/core/validator/", confidence: 50, signals: [{ type: "path", score: 0.5, reason: "handles validation" }], primaryReason: "r", fileCount: 0 }
+          boostKeywords: ["validation"]
+          boostPaths: ["validator"]
+        then:
+          result[0].confidence: 75
+
+      - name: "confidence capped at 100"
+        given:
+          modules:
+            - { path: "src/core/validator/", confidence: 95, signals: [{ type: "path", score: 0.9, reason: "handles validation" }], primaryReason: "r", fileCount: 0 }
+          boostKeywords: ["validation"]
+          boostPaths: ["validator"]
+        then:
+          result[0].confidence: 100
+
+      - name: "no matching boosts leaves confidence unchanged"
+        given:
+          modules:
+            - { path: "src/core/", confidence: 70, signals: [{ type: "path", score: 0.7, reason: "match" }], primaryReason: "r", fileCount: 0 }
+          boostKeywords: ["unrelated"]
+          boostPaths: ["nonexistent"]
+        then:
+          result[0].confidence: 70
+
+      - name: "boosts are case-insensitive"
+        given:
+          modules:
+            - { path: "src/Core/Engine/", confidence: 50, signals: [{ type: "path", score: 0.5, reason: "Validation logic" }], primaryReason: "r", fileCount: 0 }
+          boostKeywords: ["validation"]
+          boostPaths: ["engine"]
+        then:
+          result[0].confidence: 75
+
+      - name: "re-sorts after boosting"
+        given:
+          modules:
+            - { path: "src/low/", confidence: 80, signals: [{ type: "path", score: 0.8, reason: "misc" }], primaryReason: "r", fileCount: 0 }
+            - { path: "src/high/engine/", confidence: 60, signals: [{ type: "path", score: 0.6, reason: "engine logic" }], primaryReason: "r", fileCount: 0 }
+          boostKeywords: ["engine"]
+          boostPaths: ["engine"]
+        then:
+          # 60 + 15 (path) + 10 (keyword) = 85 > 80
+          result[0].path: "src/high/engine/"
+
+  invariants:
+    - description: "confidence never exceeds 100"
+      forall:
+        variable: module
+        in: result
+        then:
+          module.confidence: "@lte(100)"
+
+    - description: "results re-sorted by confidence descending"
+      forall:
+        variable: i
+        in: "range(0, result.length - 1)"
+        then:
+          condition: "result[i].confidence >= result[i+1].confidence"
+
+    - description: "boost never decreases confidence"
+      condition: "every result[i].confidence >= original modules[i matching path].confidence"

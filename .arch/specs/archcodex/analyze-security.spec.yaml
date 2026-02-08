@@ -1,0 +1,335 @@
+# Security Checker - Schema-Inferred Analysis
+#
+# Detects security issues by analyzing spec security blocks, permissions,
+# rate limits, input validation, and authentication requirements.
+# 14 analyses: SEC-1 through SEC-14.
+
+version: "1.0"
+
+spec.archcodex.analyze.security:
+  inherits: spec.function
+  implementation: src/core/analysis/checkers/security.ts#checkSecurity
+
+  # === STRATEGIC ===
+  goal: "Detect security gaps inferable from spec schemas"
+  outcomes:
+    - "Detect unauthenticated mutations with side effects"
+    - "Detect missing rate limits on public endpoints"
+    - "Detect permission-effect mismatches"
+    - "Detect missing input sanitization"
+    - "Detect missing auth/permission/rate-limit error examples"
+    - "Detect overly broad permissions"
+    - "Detect scheduler abuse vectors"
+    - "Detect missing NOT_FOUND error paths for ID inputs"
+    - "Detect unbounded bulk operations"
+    - "Detect missing auth checks in implementation (deep)"
+    - "Detect missing ownership checks in implementation (deep)"
+    - "Detect permission model divergence across entity specs"
+    - "Detect permission drift between spec and implementation (deep)"
+    - "Detect soft-delete leaks in queries (deep)"
+
+  # === OPERATIONAL ===
+  intent: "Analyze spec security, inputs, effects, and examples to find security gaps"
+
+  inputs:
+    specs:
+      type: array
+      required: true
+      description: "Array of resolved spec nodes to analyze"
+    graph:
+      type: object
+      required: true
+      description: "CrossReferenceGraph for multi-spec analysis"
+
+  outputs:
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          category: { type: enum, values: [security] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "All issues have category 'security'"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.category: "security"
+
+    - description: "Issue IDs follow SEC-N pattern"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@matches('^SEC-(1[0-4]|[1-9])$')"
+
+  # === EXAMPLES ===
+  defaults: &minimal_graph
+    graph: { entityToSpecs: {}, tableToWriters: {}, tableToReaders: {}, specDependents: {}, archToSpecs: {} }
+
+  examples:
+    success:
+      # --- SEC-1: Unauthenticated mutation with effects ---
+      - name: "SEC-1: detects unauthenticated database write"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              security: { authentication: none }
+              effects:
+                - { database: { table: widgets, operation: insert } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-1', severity: 'error', specId: 'spec.widget.create' })"
+
+      # --- SEC-2: Missing rate limit on public endpoint ---
+      - name: "SEC-2: detects public endpoint without rate limit"
+        given:
+          specs:
+            - specId: spec.search.public
+              intent: "Public search"
+              security: { authentication: optional }
+              effects:
+                - { database: { table: searches, operation: insert } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-2', severity: 'error' })"
+
+      - name: "SEC-2: warning for public endpoint without effects"
+        given:
+          specs:
+            - specId: spec.search.publicRead
+              intent: "Public read"
+              security: { authentication: optional }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-2', severity: 'warning' })"
+
+      # --- SEC-3: Permission-effect mismatch ---
+      - name: "SEC-3: detects delete without admin permission"
+        given:
+          specs:
+            - specId: spec.user.delete
+              intent: "Delete user"
+              security: { authentication: required, permissions: ["user.edit"] }
+              effects:
+                - { database: { table: users, operation: delete } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-3', severity: 'error' })"
+
+      # --- SEC-4: Missing input sanitization ---
+      - name: "SEC-4: detects unsanitized string stored to database"
+        given:
+          specs:
+            - specId: spec.comment.create
+              intent: "Create comment"
+              security: { authentication: required }
+              inputs:
+                content: { type: string, required: true }
+              effects:
+                - { database: { table: comments, operation: insert } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-4', severity: 'warning', specId: 'spec.comment.create' })"
+
+      # --- SEC-5: Missing auth error example ---
+      - name: "SEC-5: detects missing NOT_AUTHENTICATED example"
+        given:
+          specs:
+            - specId: spec.product.create
+              intent: "Create product"
+              security: { authentication: required }
+              examples:
+                success:
+                  - { name: "works", given: { title: "Test" }, then: { result: "@exists" } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-5', severity: 'warning' })"
+
+      # --- SEC-6: Overly broad permissions ---
+      - name: "SEC-6: detects admin permission on read-only operation"
+        given:
+          specs:
+            - specId: spec.report.view
+              intent: "View report"
+              security: { authentication: required, permissions: ["report.admin"] }
+              # No effects = read-only
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-6', severity: 'warning' })"
+
+      # --- SEC-7: Scheduler without rate limit ---
+      - name: "SEC-7: detects scheduler flood risk"
+        given:
+          specs:
+            - specId: spec.export.generate
+              intent: "Generate export"
+              security: { authentication: required }
+              effects:
+                - { scheduler: { job: generateReport, delay: "1h" } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-7', severity: 'warning' })"
+
+      # --- SEC-8: Missing NOT_FOUND for ID inputs ---
+      - name: "SEC-8: detects missing NOT_FOUND error for id input"
+        given:
+          specs:
+            - specId: spec.product.update
+              intent: "Update product"
+              inputs:
+                productId: { type: id, table: products }
+              examples:
+                success:
+                  - { name: "works", given: { productId: "prod_1" }, then: { result: "@exists" } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-8', severity: 'warning' })"
+
+      # --- SEC-9: Unbounded bulk operation ---
+      - name: "SEC-9: detects unbounded array input with database write"
+        given:
+          specs:
+            - specId: spec.import.batch
+              intent: "Batch import"
+              inputs:
+                items: { type: array, required: true }
+              effects:
+                - { database: { table: items, operation: insert } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'SEC-9', severity: 'warning', field: 'items' })"
+
+      # --- SEC-10: Auth required but code never checks user (deep) ---
+      - name: "SEC-10: detects missing auth check in implementation"
+        given:
+          specs:
+            - specId: spec.product.create
+              intent: "Create product"
+              security: { authentication: required }
+          <<: *minimal_graph
+          # Deep: implementation content has no auth check patterns
+        then:
+          # Requires deep analysis with configured auth_check patterns
+          result.issues: "@hasItem({ id: 'SEC-10', severity: 'error' })"
+
+      # --- SEC-11: Owner-scoped invariant without owner check (deep) ---
+      - name: "SEC-11: detects missing ownership check"
+        given:
+          specs:
+            - specId: spec.product.update
+              intent: "Update product"
+              security: { authentication: required }
+              invariants:
+                - { condition: "user can only update their own products" }
+          <<: *minimal_graph
+          # Deep: implementation fetches record but never checks .userId
+        then:
+          result.issues: "@hasItem({ id: 'SEC-11', severity: 'error' })"
+
+      # --- SEC-12: Permission model divergence (cross-spec) ---
+      - name: "SEC-12: detects inconsistent permission models for entity"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              security: { permissions: ["widget.edit"] }
+            - specId: spec.widget.delete
+              intent: "Delete widget"
+              security: { permissions: ["widget.admin"] }
+            - specId: spec.widget.update
+              intent: "Update widget"
+              security: { permissions: ["widget.edit"] }
+          graph:
+            entityToSpecs: { widget: [spec.widget.create, spec.widget.delete, spec.widget.update] }
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'SEC-12', severity: 'warning' })"
+
+      # --- SEC-13: Permission drift (deep) ---
+      - name: "SEC-13: detects code checking wrong permission"
+        given:
+          specs:
+            - specId: spec.product.archive
+              intent: "Archive product"
+              security: { permissions: ["product.edit"] }
+          <<: *minimal_graph
+          # Deep: code calls canAccess(ctx, id, "admin") but spec says "product.edit"
+        then:
+          result.issues: "@hasItem({ id: 'SEC-13', severity: 'error' })"
+
+      # --- SEC-14: Soft-delete leak (deep) ---
+      - name: "SEC-14: detects query without soft-delete filter"
+        given:
+          specs:
+            - specId: spec.product.list
+              intent: "List products"
+              inherits: spec.query
+              invariants:
+                - { condition: "only returns non-deleted products" }
+              inputs:
+                isDeleted: { type: boolean }
+          <<: *minimal_graph
+          # Deep: code queries db but never filters isDeleted
+        then:
+          result.issues: "@hasItem({ id: 'SEC-14', severity: 'warning' })"
+
+      # --- Negative examples (no false positives) ---
+      - name: "no issue for properly secured mutation"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              security:
+                authentication: required
+                rate_limit: { requests: 60, window: "15m" }
+                permissions: ["tag.edit"]
+                sanitization: [html_escape]
+              inputs:
+                name: { type: string, required: true, validate: alphanumeric }
+              effects:
+                - { database: { table: tags, operation: insert } }
+                - { audit_log: { action: "tag.create", resourceType: tag } }
+              examples:
+                success:
+                  - { name: "works", given: { user: "@authenticated", name: "test" }, then: { result: "@exists" } }
+                errors:
+                  - { name: "unauth", given: { user: null }, then: { error: "NOT_AUTHENTICATED" } }
+                  - { name: "no perm", given: { user: "@no_access" }, then: { error: "PERMISSION_DENIED" } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@empty"
+
+      - name: "no issue for query without rate limit"
+        given:
+          specs:
+            - specId: spec.tag.list
+              intent: "List tags"
+              security: { authentication: required }
+              # Queries don't need rate limits by default
+              examples:
+                errors:
+                  - { name: "unauth", given: { user: null }, then: { error: "NOT_AUTHENTICATED" } }
+          <<: *minimal_graph
+        then:
+          # SEC-2 should not fire for authenticated queries
+          result.issues: "@empty"
+
+    errors:
+      - name: "empty specs array returns empty issues"
+        given:
+          specs: []
+          <<: *minimal_graph
+        then:
+          result.issues: "@empty"

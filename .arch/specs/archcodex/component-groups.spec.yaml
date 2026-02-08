@@ -1,0 +1,186 @@
+# Component Groups Registry Specification
+#
+# Defines coupled UI component groups that must be updated together.
+# Addresses the problem of incomplete UI wiring when mutations affect
+# entities rendered by multiple components.
+
+version: "1.0"
+
+spec.archcodex.componentGroups:
+  inherits: spec.function
+  implementation: src/core/registry/component-groups.ts#loadComponentGroupsRegistry
+
+  # === STRATEGIC ===
+  goal: "Prevent incomplete UI wiring by tracking coupled component groups"
+  outcomes:
+    - "Users can define component groups in .arch/component-groups.yaml"
+    - "Groups are matched to entities and mutation patterns"
+    - "Context tools surface warnings when working with matched entities"
+    - "Actions can reference component groups for UI checklists"
+
+  # === OPERATIONAL ===
+  intent: "Load and query component groups that must be updated together"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Project root path for loading .arch/component-groups.yaml"
+    query:
+      type: object
+      description: "Optional query filter (entity or mutation)"
+      properties:
+        entity: { type: string }
+        mutation: { type: string }
+
+  outputs:
+    groups:
+      type: object
+      description: "Map of group name to ComponentGroup definition"
+      properties:
+        "[groupName]":
+          type: object
+          properties:
+            description: { type: string, description: "Human-readable description" }
+            components:
+              type: array
+              items:
+                type: object
+                properties:
+                  path: { type: string, required: true, description: "File path relative to project root" }
+                  renders: { type: string, description: "What this component renders (e.g., 'task', 'note')" }
+            triggers:
+              type: object
+              properties:
+                entities: { type: array, items: { type: string }, description: "Entity names that trigger this group" }
+                mutation_patterns: { type: array, items: { type: string }, description: "Glob patterns for mutations (e.g., '*Entry')" }
+            related:
+              type: object
+              description: "Related files (handlers, actions, etc.)"
+            warning: { type: string, description: "Warning message shown when group is matched" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "loads product cards group"
+        given:
+          projectRoot: "/path/to/project"
+          # .arch/component-groups.yaml contains product-cards group
+        then:
+          result.groups.product-cards: "@exists"
+          result.groups.product-cards.components: "@length(5)"
+          result.groups.product-cards.warning: "@contains('5 components')"
+
+      - name: "returns empty when no component-groups.yaml"
+        given:
+          projectRoot: "/path/without/component-groups"
+        then:
+          result.groups: "@empty"
+
+      - name: "matches group by entity name"
+        given:
+          projectRoot: "/path/to/project"
+          query: { entity: "products" }
+        then:
+          result.matched: "@hasItem({ name: 'product-cards' })"
+
+      - name: "matches group by mutation pattern"
+        given:
+          projectRoot: "/path/to/project"
+          query: { mutation: "duplicateEntry" }
+        then:
+          result.matched: "@hasItem({ name: 'product-cards' })"
+
+    boundaries:
+      - name: "entity not matching any group"
+        given:
+          projectRoot: "/path/to/project"
+          query: { entity: "users" }
+        then:
+          result.matched: "@empty"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "Groups always have at least one component"
+      condition: "forall group in groups: group.components.length > 0"
+    - description: "Component paths are relative to project root"
+      condition: "forall component in group.components: !component.path.startsWith('/')"
+    - description: "Triggers must have at least one entity or pattern"
+      condition: "forall group: group.triggers.entities.length > 0 || group.triggers.mutation_patterns.length > 0"
+
+  # === EFFECTS ===
+  effects:
+    - file_read: { path: ".arch/component-groups.yaml" }
+
+---
+# Query Functions Specification
+
+spec.archcodex.componentGroups.findByEntity:
+  inherits: spec.function
+  implementation: src/core/registry/component-groups.ts#findComponentGroupsByEntity
+
+  intent: "Find component groups that match a given entity name"
+
+  inputs:
+    entityName:
+      type: string
+      required: true
+      description: "Entity name to search for (e.g., 'products')"
+    groups:
+      type: object
+      required: true
+      description: "Loaded component groups registry"
+
+  examples:
+    success:
+      - name: "finds matching group"
+        given:
+          entityName: "products"
+          groups:
+            product-cards:
+              components: [{ path: "ProductCard.tsx" }]
+              triggers: { entities: ["products"] }
+        then:
+          result.matched: "@length(1)"
+          result.matched[0].name: "product-cards"
+
+---
+spec.archcodex.componentGroups.findByMutation:
+  inherits: spec.function
+  implementation: src/core/registry/component-groups.ts#findComponentGroupsByMutation
+
+  intent: "Find component groups that match a mutation name pattern"
+
+  inputs:
+    mutationName:
+      type: string
+      required: true
+      description: "Mutation name to match against patterns (e.g., 'duplicateEntry')"
+    groups:
+      type: object
+      required: true
+      description: "Loaded component groups registry"
+
+  examples:
+    success:
+      - name: "matches *Entry pattern"
+        given:
+          mutationName: "duplicateEntry"
+          groups:
+            product-cards:
+              components: [{ path: "ProductCard.tsx" }]
+              triggers: { mutation_patterns: ["*Entry"] }
+        then:
+          result.matched: "@length(1)"
+          result.matched[0].name: "product-cards"
+
+      - name: "no match for unrelated mutation"
+        given:
+          mutationName: "createUser"
+          groups:
+            product-cards:
+              components: [{ path: "ProductCard.tsx" }]
+              triggers: { mutation_patterns: ["*Entry"] }
+        then:
+          result.matched: "@empty"
+

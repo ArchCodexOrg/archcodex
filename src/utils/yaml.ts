@@ -3,7 +3,7 @@
  *
  * YAML parsing and serialization utilities.
  */
-import { parse, stringify } from 'yaml';
+import { parse, parseAllDocuments, stringify } from 'yaml';
 import { z } from 'zod';
 import { SystemError, ErrorCodes } from './errors.js';
 import { readFile, writeFile } from './file-system.js';
@@ -21,6 +21,32 @@ export function parseYaml<T>(content: string): T {
       { error }
     );
   }
+}
+
+/**
+ * Parse multi-document YAML content into an array of objects.
+ * Documents are separated by '---'.
+ */
+export function parseYamlMultiDoc<T>(content: string): T[] {
+  try {
+    const docs = parseAllDocuments(content);
+    return docs.map((doc) => doc.toJSON() as T);
+  } catch (error) {
+    throw new SystemError(
+      ErrorCodes.PARSE_ERROR,
+      `Failed to parse YAML: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { error }
+    );
+  }
+}
+
+/**
+ * Parse multi-document YAML and merge all documents into a single object.
+ * Later documents override earlier ones for conflicting keys.
+ */
+export function parseYamlMultiDocMerged<T extends Record<string, unknown>>(content: string): T {
+  const docs = parseYamlMultiDoc<Record<string, unknown>>(content);
+  return docs.reduce((merged, doc) => ({ ...merged, ...doc }), {} as Record<string, unknown>) as T;
 }
 
 /**

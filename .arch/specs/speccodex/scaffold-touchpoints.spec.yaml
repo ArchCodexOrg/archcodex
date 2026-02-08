@@ -1,0 +1,154 @@
+# SpecCodex Scaffold Touchpoints Specification
+#
+# Generates spec YAML with UI touchpoints from entity and component group registry.
+# Used by the `archcodex spec scaffold-touchpoints` MCP tool.
+
+version: "1.0"
+
+spec.speccodex.scaffold.touchpoints:
+  inherits: spec.function
+  implementation: src/core/spec/scaffold-touchpoints.ts#generateSpecWithTouchpoints
+
+  goal: "Generate a complete spec YAML scaffold with UI touchpoints for an entity"
+  outcomes:
+    - "Look up component groups matching the entity"
+    - "Generate spec YAML with touchpoints section listing all UI components"
+    - "Include standard spec sections (goal, intent, inputs, outputs, examples)"
+
+  intent: "Scaffold a spec with wired UI touchpoints from component group registry"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec ID for the generated spec (e.g., spec.product.duplicate)"
+    entity:
+      type: string
+      required: true
+      description: "Entity name to match against component groups (e.g., products)"
+    registry:
+      type: object
+      required: true
+      description: "ComponentGroupsRegistry from .arch/component-groups.yaml"
+
+  outputs:
+    result:
+      type: string
+      description: "Generated spec YAML string with touchpoints"
+
+  invariants:
+    - "Output is valid YAML"
+    - "Output includes ui.touchpoints section when result.touchpoints.length > 0"
+    - "Each component in result.touchpoints is listed via generateTouchpointsYaml"
+    - "specId parameter is used as YAML root key (${specId}:)"
+    - "lines array includes 'TODO: Describe the operation' for intent and 'TODO: Add success example' for examples"
+
+  examples:
+    success:
+      - name: "generates spec with touchpoints for matching entity"
+        given:
+          specId: "spec.product.duplicate"
+          entity: "products"
+          registry:
+            componentGroups:
+              product-cards:
+                components:
+                  - { path: "src/components/products/ProductCard.tsx" }
+                  - { path: "src/components/products/ProductListItem.tsx" }
+                triggers:
+                  entities: ["products"]
+        then:
+          result: "@all(@contains('touchpoints'), @contains('ProductCard'), @contains('ProductListItem'))"
+
+      - name: "generates spec without touchpoints when no match"
+        given:
+          specId: "spec.products.create"
+          entity: "products"
+          registry:
+            componentGroups: {}
+        then:
+          result: "@contains('spec.products.create')"
+
+---
+
+spec.speccodex.scaffold.deriveHandlerName:
+  inherits: spec.function
+  implementation: src/core/spec/scaffold-touchpoints.ts#deriveHandlerName
+
+  goal: "Derive a handler function name from a spec ID"
+  outcomes:
+    - "Extract operation name from spec ID"
+    - "Prefix with 'handle' and camelCase"
+
+  intent: "Generate conventional handler names for UI wiring (e.g., spec.product.duplicate → handleDuplicate)"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec ID to derive handler name from"
+
+  outputs:
+    result:
+      type: string
+      description: "Handler function name (e.g., 'handleDuplicate')"
+
+  invariants:
+    - "Result always starts with 'handle'"
+    - "Operation is extracted from last segment of spec ID"
+    - "Result is camelCase"
+
+  examples:
+    success:
+      - name: "derives from spec ID"
+        given:
+          specId: "spec.product.duplicate"
+        then:
+          result: "@contains('handle')"
+
+      - name: "single word operation"
+        given:
+          specId: "spec.products.create"
+        then:
+          result: "@contains('handle')"
+
+---
+
+spec.speccodex.scaffold.extractOperation:
+  inherits: spec.function
+  implementation: src/core/spec/scaffold-touchpoints.ts#extractOperationFromSpecId
+
+  goal: "Extract the operation name from a spec ID"
+  outcomes:
+    - "Return the last segment of a dot-separated spec ID"
+
+  intent: "Parse spec ID to get the operation for handler naming and touchpoint labels"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec ID (e.g., spec.product.duplicate)"
+
+  outputs:
+    result:
+      type: string
+      description: "Operation name (e.g., 'duplicate')"
+
+  invariants:
+    - "Returns parts[parts.length - 1] after specId.split('.'), with Entry/Item/Record suffixes stripped"
+    - "Returns the full string if no dots present (parts.length === 1)"
+
+  examples:
+    success:
+      - name: "extracts last segment"
+        given:
+          specId: "spec.product.duplicate"
+        then:
+          result: "duplicate"
+
+      - name: "handles deeply nested ID"
+        given:
+          specId: "spec.products.mutations.create"
+        then:
+          result: "create"

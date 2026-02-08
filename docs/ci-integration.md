@@ -110,7 +110,7 @@ if [ -z "$FILE_PATH" ]; then
 fi
 
 # Only check source files in configured paths
-if [[ ! "$FILE_PATH" =~ ^(convex/|src/|/.*/(convex|src)/) ]]; then
+if [[ ! "$FILE_PATH" =~ ^(src/|lib/|/.*/(src|lib)/) ]]; then
   exit 0
 fi
 

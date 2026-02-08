@@ -205,6 +205,35 @@ describe('extractImportsAndExports', () => {
       expect(result.exports).toContain('UserService');
       expect(result.exports).toContain('main');
     });
+
+    it('should handle empty content', () => {
+      const result = extractImportsAndExports('');
+      expect(result.imports).toEqual([]);
+      expect(result.exports).toEqual([]);
+    });
+
+    it('should handle content with comments only', () => {
+      const content = `// This is a comment\n/* Block comment */`;
+      const result = extractImportsAndExports(content);
+      expect(result.imports).toEqual([]);
+      expect(result.exports).toEqual([]);
+    });
+
+    it('should handle named exports with empty entries', () => {
+      // Export with trailing comma leading to empty string after split
+      const content = `export { foo, };`;
+      const result = extractImportsAndExports(content);
+      expect(result.exports).toContain('foo');
+    });
+
+    it('should handle multiple named exports in single export statement', () => {
+      const content = `export { a as b, c as d, e };`;
+      const result = extractImportsAndExports(content);
+      // Should take original names (before 'as')
+      expect(result.exports).toContain('a');
+      expect(result.exports).toContain('c');
+      expect(result.exports).toContain('e');
+    });
   });
 });
 

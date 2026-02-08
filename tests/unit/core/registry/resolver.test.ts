@@ -24,7 +24,7 @@ describe('resolveArchitecture', () => {
       const result = resolveArchitecture(registry, 'base');
       expect(result.architecture.description).toBe('Base architecture');
       // Hints can be strings or objects, resolver normalizes them
-      const hintTexts = result.architecture.hints.map((h: any) => typeof h === 'string' ? h : h.text);
+      const hintTexts = result.architecture.hints.map((h: string | { text: string }) => typeof h === 'string' ? h : h.text);
       expect(hintTexts).toContain('Hint 1');
     });
 
@@ -51,7 +51,7 @@ describe('resolveArchitecture', () => {
       const result = resolveArchitecture(registry, 'child');
       expect(result.architecture.inheritanceChain).toEqual(['child', 'base']);
       // Hints can be strings or objects, resolver normalizes them
-      const hintTexts = result.architecture.hints.map((h: any) => typeof h === 'string' ? h : h.text);
+      const hintTexts = result.architecture.hints.map((h: string | { text: string }) => typeof h === 'string' ? h : h.text);
       expect(hintTexts).toContain('Base hint');
       expect(hintTexts).toContain('Child hint');
     });
@@ -145,7 +145,7 @@ describe('resolveArchitecture', () => {
       const result = resolveArchitecture(registry, 'base');
       expect(result.architecture.appliedMixins).toContain('testable');
       // Hints can be strings or objects, resolver normalizes them
-      const hintTexts = result.architecture.hints.map((h: any) => typeof h === 'string' ? h : h.text);
+      const hintTexts = result.architecture.hints.map((h: string | { text: string }) => typeof h === 'string' ? h : h.text);
       expect(hintTexts).toContain('Write tests');
     });
 
@@ -477,7 +477,7 @@ describe('resolveArchitecture', () => {
 
       expect(result.architecture.appliedMixins).toEqual(['profile-counts', 'sidebar-cache']);
       expect(result.architecture.constraints).toHaveLength(1);
-      const hintTexts = result.architecture.hints.map((h: any) => typeof h === 'string' ? h : h.text);
+      const hintTexts = result.architecture.hints.map((h: string | { text: string }) => typeof h === 'string' ? h : h.text);
       expect(hintTexts).toContain('Remember to invalidate cache on updates');
     });
 
@@ -514,7 +514,7 @@ describe('resolveArchitecture', () => {
 
       // Inline mixin's constraint should override registry mixin's (same rule:value key = last wins)
       const maxFileLinesConstraint = result.architecture.constraints.find(
-        (c: any) => c.rule === 'max_file_lines'
+        (c: { rule: string }) => c.rule === 'max_file_lines'
       );
       // Since keys are rule:value, the 100 and 200 are different keys, so both exist
       expect(result.architecture.constraints).toHaveLength(2);

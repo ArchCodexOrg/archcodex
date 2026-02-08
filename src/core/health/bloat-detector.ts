@@ -64,7 +64,7 @@ export function detectSimilarArchitectures(registry: Registry, archIds: string[]
         constraints = new Set(
           resolved.architecture.constraints.map(c => `${c.rule}:${JSON.stringify(c.value)}`)
         );
-      } catch {
+      } catch { /* architecture not found in registry */
         continue;
       }
     }

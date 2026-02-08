@@ -1,0 +1,592 @@
+# SpecCodex Documentation Generator Specifications
+#
+# Specs for generating Markdown documentation from specs.
+# Transforms structured YAML specs into human-readable documentation.
+
+version: "1.0"
+
+# =============================================================================
+# DOCUMENTATION GENERATOR: API Reference
+# =============================================================================
+# Generates API documentation from spec inputs, outputs, and security.
+
+spec.speccodex.docs.api:
+  inherits: spec.function
+  implementation: src/core/spec/generators/docs.ts#generateApiDocs
+
+  # === STRATEGIC ===
+  goal: "Generate API reference documentation from specs"
+  outcomes:
+    - "Generate function/endpoint documentation"
+    - "Document parameters with types and constraints"
+    - "Document return values with shapes"
+    - "Document security requirements"
+    - "Include authentication and rate limits"
+
+  # === OPERATIONAL ===
+  intent: "Generate API reference Markdown from a resolved spec"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with inputs, outputs, security"
+    options:
+      type: object
+      properties:
+        includeExamples: { type: boolean, default: true, description: "Include code examples" }
+        linkToImplementation: { type: boolean, default: true, description: "Link to source file" }
+        format: { type: enum, values: [markdown, html], default: markdown }
+
+  outputs:
+    valid: { type: boolean }
+    markdown: { type: string, description: "Generated Markdown content" }
+    sections: { type: array, items: { type: string }, description: "Sections included" }
+    errors: { type: array }
+
+  # === INVARIANTS ===
+  invariants:
+    - "output includes intent as description"
+    - "all inputs documented in Parameters table"
+    - "all outputs documented in Returns table"
+    - "security section present if spec has authentication"
+    - "generated Markdown is valid CommonMark"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate from spec with inputs and outputs"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "User creates a new product listing"
+            inputs:
+              url: { type: string, validate: url, required: true }
+              title: { type: string, max: 200 }
+            outputs:
+              _id: { type: id, table: products }
+              url: { type: string }
+            security:
+              authentication: required
+              rate_limit: { requests: 60, window: "15m" }
+        then:
+          result.valid: true
+          result.markdown: "@contains('## Create Product')"
+          result.markdown: "@contains('| url | string |')"
+          result.markdown: "@contains('Authentication')"
+          result.markdown: "@contains('Rate limit')"
+          result.errors: []
+          result.sections: "@contains('parameters')"
+          result.sections: "@contains('returns')"
+          result.sections: "@contains('security')"
+
+      - name: "generate with code examples"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            inputs:
+              url: { type: string }
+            examples:
+              success:
+                - name: "valid URL"
+                  given: { url: "https://github.com" }
+                  then: { "result.url": "https://github.com" }
+          options: { includeExamples: true }
+        then:
+          result.valid: true
+          result.markdown: "@contains('```typescript')"
+          result.markdown: "@contains('https://github.com')"
+          result.sections: "@contains('examples')"
+
+      - name: "generate with enum types"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test function"
+            inputs:
+              status: { type: enum, values: [draft, published, archived] }
+            outputs:
+              result: { type: enum, values: [success, failure, pending] }
+        then:
+          result.valid: true
+          result.markdown: "@contains('draft')"
+          result.markdown: "@contains('success')"
+
+      - name: "link to implementation"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            node:
+              implementation: "src/domain/products/mutations/create.ts#create"
+          options: { linkToImplementation: true }
+        then:
+          result.valid: true
+          result.markdown: "@contains('src/domain/products/mutations/create.ts')"
+
+    errors:
+      - name: "spec without intent"
+        given:
+          spec: { specId: "spec.test" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_INTENT"
+
+      - name: "no examples"
+        then: { error: "NO_EXAMPLES" }
+
+      - name: "no error examples"
+        then: { error: "NO_ERROR_EXAMPLES" }
+
+# =============================================================================
+# DOCUMENTATION GENERATOR: Usage Examples
+# =============================================================================
+# Generates usage example documentation from spec examples.
+
+spec.speccodex.docs.examples:
+  inherits: spec.function
+  implementation: src/core/spec/generators/docs.ts#generateExampleDocs
+
+  # === STRATEGIC ===
+  goal: "Generate usage examples documentation from specs"
+  outcomes:
+    - "Generate code snippets from success examples"
+    - "Show input/output pairs"
+    - "Include context setup (authentication, fixtures)"
+    - "Generate runnable TypeScript examples"
+
+  # === OPERATIONAL ===
+  intent: "Generate usage examples Markdown from spec examples"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with examples"
+    options:
+      type: object
+      properties:
+        framework: { type: enum, values: [vanilla, convex, nextjs], default: vanilla }
+        includeSetup: { type: boolean, default: true, description: "Include context setup code" }
+
+  outputs:
+    valid: { type: boolean }
+    markdown: { type: string }
+    exampleCount: { type: number }
+    errors: { type: array }
+
+  # === INVARIANTS ===
+  invariants:
+    - "each success example generates a code block"
+    - "formatExampleCode expands given fields to concrete TypeScript values"
+    - "examples are syntactically valid TypeScript"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate from success examples"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              success:
+                - name: "valid URL"
+                  given: { url: "https://github.com", title: "GitHub" }
+                  then: { "result.title": "GitHub" }
+                - name: "URL without title"
+                  given: { url: "https://news.ycombinator.com" }
+                  then: { "result.title": "news.ycombinator.com" }
+        then:
+          result.valid: true
+          result.errors: []
+          result.exampleCount: 2
+          result.markdown: "@contains('### valid URL')"
+          result.markdown: "@contains('### URL without title')"
+          result.markdown: "@contains('```typescript')"
+
+      - name: "expand authentication placeholder"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            defaults:
+              auth:
+                user: "@authenticated"
+            examples:
+              success:
+                - name: "authenticated request"
+                  given: { "<<": "*auth", data: "test" }
+                  then: { result: "@exists" }
+          options: { includeSetup: true }
+        then:
+          result.valid: true
+          result.markdown: "@contains('// Setup authenticated context')"
+
+      - name: "convex framework format"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              success:
+                - name: "create"
+                  given: { url: "https://x.com" }
+                  then: { result: "@exists" }
+          options: { framework: convex }
+        then:
+          result.valid: true
+          result.markdown: "@contains('useMutation')"
+
+    errors:
+      - name: "spec without examples"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "NO_EXAMPLES"
+
+      - name: "missing intent"
+        then: { error: "MISSING_INTENT" }
+
+      - name: "no error examples"
+        then: { error: "NO_ERROR_EXAMPLES" }
+
+# =============================================================================
+# DOCUMENTATION GENERATOR: Error Catalog
+# =============================================================================
+# Generates error reference documentation from spec error examples.
+
+spec.speccodex.docs.errors:
+  inherits: spec.function
+  implementation: src/core/spec/generators/docs.ts#generateErrorDocs
+
+  # === STRATEGIC ===
+  goal: "Generate error catalog documentation from specs"
+  outcomes:
+    - "Document all error codes with causes"
+    - "Show conditions that trigger each error"
+    - "Suggest fixes or workarounds"
+    - "Group by category if available"
+
+  # === OPERATIONAL ===
+  intent: "Generate error catalog Markdown from spec error examples"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+      description: "Resolved spec with error examples"
+    options:
+      type: object
+      properties:
+        includeHttpCodes: { type: boolean, default: true, description: "Map to HTTP status codes" }
+        groupByCategory: { type: boolean, default: false, description: "Group errors by category" }
+
+  outputs:
+    valid: { type: boolean }
+    markdown: { type: string }
+    errorCount: { type: number }
+    errors: { type: array }
+
+  # === INVARIANTS ===
+  invariants:
+    - "each error example generates a table row"
+    - "error codes are in monospace"
+    - "causes derived from given conditions"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate error catalog"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            examples:
+              errors:
+                - name: "invalid URL format"
+                  given: { url: "not-a-url" }
+                  then: { error: "INVALID_URL" }
+                - name: "unauthenticated"
+                  given: { user: null }
+                  then: { error: "NOT_AUTHENTICATED" }
+                - name: "no permission"
+                  given: { user: "@authenticated", projectId: "@no_access" }
+                  then: { error: "PERMISSION_DENIED" }
+        then:
+          result.valid: true
+          result.errors: []
+          result.errorCount: 3
+          result.markdown: "@contains('## Error Reference')"
+          result.markdown: "@contains('`INVALID_URL`')"
+          result.markdown: "@contains('`NOT_AUTHENTICATED`')"
+          result.markdown: "@contains('`PERMISSION_DENIED`')"
+
+      - name: "include HTTP status codes"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create"
+            examples:
+              errors:
+                - name: "not found"
+                  then: { error: "NOT_FOUND" }
+                - name: "unauthorized"
+                  then: { error: "NOT_AUTHENTICATED" }
+          options: { includeHttpCodes: true }
+        then:
+          result.valid: true
+          result.markdown: "@contains('404')"
+          result.markdown: "@contains('401')"
+
+      - name: "derive cause from given"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              errors:
+                - name: "title too long"
+                  given: { title: "@string(201)" }
+                  then: { error: "TITLE_TOO_LONG" }
+        then:
+          result.valid: true
+          result.markdown: "@contains('Title exceeds')"
+
+    errors:
+      - name: "spec without error examples"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            examples:
+              success: []
+        then:
+          result.valid: false
+          "result.errors[0].code": "NO_ERROR_EXAMPLES"
+
+      - name: "missing intent"
+        then: { error: "MISSING_INTENT" }
+
+      - name: "no examples"
+        then: { error: "NO_EXAMPLES" }
+
+# =============================================================================
+# DOCUMENTATION GENERATOR: Combined (All Types)
+# =============================================================================
+# Generates complete documentation combining all types.
+
+spec.speccodex.docs.all:
+  inherits: spec.function
+  implementation: src/core/spec/generators/docs.ts#generateAllDocs
+
+  # === STRATEGIC ===
+  goal: "Generate complete documentation from spec"
+  outcomes:
+    - "Combine API reference, examples, and errors"
+    - "Generate table of contents"
+    - "Cross-link between sections"
+    - "Support single file or multiple files"
+
+  # === OPERATIONAL ===
+  intent: "Generate complete documentation from a spec"
+
+  inputs:
+    spec:
+      type: object
+      required: true
+    options:
+      type: object
+      properties:
+        sections: { type: array, items: { type: enum, values: [api, examples, errors] }, default: [api, examples, errors] }
+        outputMode: { type: enum, values: [single, multiple], default: single }
+        includeToc: { type: boolean, default: true }
+
+  outputs:
+    valid: { type: boolean }
+    markdown: { type: string, description: "Combined markdown (single mode)" }
+    files: { type: array, items: { type: object }, description: "Multiple files (multiple mode)" }
+    errors: { type: array }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate all sections"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create product"
+            inputs:
+              url: { type: string }
+            outputs:
+              _id: { type: id }
+            examples:
+              success:
+                - name: "valid"
+                  given: { url: "https://x.com" }
+                  then: { result: "@exists" }
+              errors:
+                - name: "invalid"
+                  given: { url: "bad" }
+                  then: { error: "INVALID_URL" }
+          options: { sections: [api, examples, errors] }
+        then:
+          result.valid: true
+          result.errors: []
+          result.markdown: "@contains('## API Reference')"
+          result.markdown: "@contains('## Usage Examples')"
+          result.markdown: "@contains('## Error Reference')"
+
+      - name: "generate with table of contents"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs: { a: { type: string } }
+            examples: { success: [{ name: "test", then: { result: true } }] }
+          options: { includeToc: true }
+        then:
+          result.valid: true
+          result.markdown: "@contains('## Table of Contents')"
+          result.markdown: "@contains('- [API Reference]')"
+
+      - name: "generate subset of sections"
+        given:
+          spec:
+            specId: "spec.test"
+            intent: "Test"
+            inputs: { a: { type: string } }
+            examples:
+              success: [{ name: "test", then: {} }]
+              errors: [{ name: "error", then: { error: "ERR" } }]
+          options: { sections: [api] }
+        then:
+          result.valid: true
+          result.markdown: "@contains('## API Reference')"
+          result.markdown: "@not(@contains('## Usage Examples'))"
+          result.markdown: "@not(@contains('## Error Reference'))"
+
+      - name: "multiple file output"
+        given:
+          spec:
+            specId: "spec.product.create"
+            intent: "Create"
+            inputs: { url: { type: string } }
+            examples:
+              success: [{ name: "test", then: {} }]
+              errors: [{ name: "error", then: { error: "ERR" } }]
+          options: { outputMode: multiple }
+        then:
+          result.valid: true
+          result.files: "@length(3)"
+          "result.files[0].name": "api.md"
+          "result.files[1].name": "examples.md"
+          "result.files[2].name": "errors.md"
+
+    errors:
+      - name: "spec without intent"
+        given:
+          spec: { specId: "spec.test" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_INTENT"
+
+      - name: "no examples"
+        then: { error: "NO_EXAMPLES" }
+
+      - name: "no error examples"
+        then: { error: "NO_ERROR_EXAMPLES" }
+
+# =============================================================================
+# CLI COMMAND: spec doc
+# =============================================================================
+# CLI command for documentation generation.
+
+spec.speccodex.cli.doc:
+  inherits: spec.function
+  implementation: src/cli/commands/spec.ts#createSpecCommand
+
+  # === STRATEGIC ===
+  goal: "CLI command for generating documentation from specs"
+  outcomes:
+    - "`spec doc <specId>` generates full docs"
+    - "`spec doc <specId> --type api` generates API only"
+    - "`spec doc --all` generates docs for all specs"
+    - "Support output to file or directory"
+    - "Dry-run mode for preview"
+
+  # === OPERATIONAL ===
+  intent: "Generate documentation from spec via CLI"
+
+  inputs:
+    specId:
+      type: string
+      description: "Spec ID to generate docs for (or --all for all specs)"
+    options:
+      type: object
+      properties:
+        type: { type: enum, values: [api, examples, errors, all], default: all }
+        output: { type: string, description: "Output file or directory" }
+        all: { type: boolean, default: false, description: "Generate for all specs" }
+        dryRun: { type: boolean, default: false, description: "Preview without writing" }
+        json: { type: boolean, default: false, description: "Output as JSON" }
+
+  outputs:
+    stdout: { type: string }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate docs for spec"
+        given:
+          specId: "spec.product.create"
+          options: {}
+        then:
+          result.stdout: "@contains('Generated documentation')"
+
+      - name: "generate API docs only"
+        given:
+          specId: "spec.product.create"
+          options: { type: api }
+        then:
+          result.stdout: "@contains('## ')"
+          result.stdout: "@contains('Parameters')"
+
+      - name: "generate to file"
+        given:
+          specId: "spec.product.create"
+          options: { output: "docs/api/product-create.md" }
+        then:
+          result.stdout: "@contains('docs/api/product-create.md')"
+
+      - name: "generate all specs to directory"
+        given:
+          options: { all: true, output: "docs/api/" }
+        then:
+          result.stdout: "@contains('docs/api/')"
+
+      - name: "dry run preview"
+        given:
+          specId: "spec.product.create"
+          options: { dryRun: true }
+        then:
+          result.stdout: "@contains('Would generate')"
+
+    errors:
+      - name: "spec not found"
+        given:
+          specId: "spec.nonexistent"
+          options: {}
+        then:
+          result.stdout: "@contains('Spec not found')"
+
+      - name: "no specs in registry"
+        given:
+          options: { all: true }
+          # Empty registry
+        then:
+          result.stdout: "@contains('No specs found')"

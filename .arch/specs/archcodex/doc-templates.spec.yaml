@@ -1,0 +1,242 @@
+# ArchCodex Documentation Templates Specification
+#
+# Specs for customizable documentation templates (ADRs, spec docs).
+# Enables users to override default templates in .arch/templates/docs/
+
+version: "1.0"
+
+# =============================================================================
+# TEMPLATE ENGINE
+# =============================================================================
+
+spec.archcodex.docs.templates:
+  inherits: spec.function
+  implementation: src/core/docs/template-engine.ts#DocTemplateEngine
+
+  # === STRATEGIC ===
+  goal: "Enable customizable documentation output through user-defined templates"
+  outcomes:
+    - "Load templates from .arch/templates/docs/ if present"
+    - "Fall back to embedded default templates"
+    - "Support Handlebars-style variable substitution"
+    - "Provide comprehensive variable context for templates"
+
+  # === OPERATIONAL ===
+  intent: "Render documentation using customizable templates"
+
+  inputs:
+    templateName:
+      type: string
+      required: true
+      description: "Template identifier (e.g., 'adr', 'adr-index', 'spec-api')"
+    context:
+      type: object
+      required: true
+      description: "Variables available in template"
+    options:
+      type: object
+      properties:
+        templateDir: { type: string, default: ".arch/templates/docs", description: "Custom template directory" }
+        extension: { type: string, default: ".md.hbs", description: "Template file extension" }
+
+  outputs:
+    valid: { type: boolean }
+    content: { type: string, description: "Rendered template content" }
+    templateSource: { type: enum, values: [custom, default], description: "Which template was used" }
+    errors: { type: array }
+
+  # === INVARIANTS ===
+  invariants:
+    - "custom template in templateDir takes precedence over default"
+    - "missing variables render as empty string, not error"
+    - "output is valid Markdown"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "render ADR with custom template"
+        given:
+          templateName: "adr"
+          context:
+            ARCH_ID: "domain.service"
+            TITLE: "Domain Service"
+            STATUS: "Active"
+            CONTEXT: "Services contain business logic"
+          options: { templateDir: ".arch/templates/docs" }
+        then:
+          result.valid: true
+          result.errors: []
+          result.content: "@contains('Domain Service')"
+          result.templateSource: "custom"
+
+      - name: "fallback to default template"
+        given:
+          templateName: "adr"
+          context:
+            ARCH_ID: "domain.service"
+            TITLE: "Domain Service"
+          options: { templateDir: ".arch/templates/docs" }  # No custom template exists
+        then:
+          result.valid: true
+          result.templateSource: "default"
+
+      - name: "missing variable renders empty"
+        given:
+          templateName: "adr"
+          context:
+            ARCH_ID: "domain.service"
+            # TITLE is missing
+        then:
+          result.valid: true
+          result.content: "@not_contains('{{TITLE}}')"
+
+    errors:
+      - name: "unknown template name"
+        given:
+          templateName: "nonexistent"
+          context: {}
+        then:
+          result.valid: false
+          "result.errors[0].code": "UNKNOWN_TEMPLATE"
+
+      - name: "template not found"
+        given:
+          templateName: "custom-missing"
+          context: {}
+          options: { templateDir: ".arch/templates/docs" }
+        then:
+          error: "TEMPLATE_NOT_FOUND"
+
+      - name: "render error"
+        given:
+          templateName: "adr"
+          context: { invalidData: "{{unclosed" }
+        then:
+          error: "RENDER_ERROR"
+
+# =============================================================================
+# ADR TEMPLATE VARIABLES
+# =============================================================================
+
+spec.archcodex.docs.templates.adr:
+  inherits: spec.type
+  intent: "Document ADR template variable schema"
+  goal: "Define variables available in ADR templates"
+  outcomes:
+    - "Template variables are documented with types and descriptions"
+    - "Variables cover metadata, context, decision, consequences, and guidelines"
+
+  fields:
+    # Metadata
+    ARCH_ID: { type: string, description: "Architecture ID (e.g., domain.service)" }
+    TITLE: { type: string, description: "Human-readable title" }
+    DATE: { type: string, description: "Generation date (YYYY-MM-DD)" }
+
+    # Status
+    STATUS: { type: string, description: "Active or Deprecated" }
+    DEPRECATED_FROM: { type: string, description: "Version deprecated from (if applicable)" }
+    MIGRATION_GUIDE: { type: string, description: "Link to migration guide (if deprecated)" }
+
+    # Context
+    CONTEXT: { type: string, description: "Rationale or description" }
+    INHERITANCE_CHAIN: { type: string, description: "Formatted inheritance (Parent → Grandparent)" }
+    APPLIED_MIXINS: { type: string, description: "Formatted mixin list" }
+
+    # Decision
+    CONSTRAINTS_BY_RULE: { type: object, description: "Constraints grouped by rule type" }
+    FILE_PATTERN: { type: string, description: "Naming pattern if defined" }
+    DEFAULT_PATH: { type: string, description: "Default location if defined" }
+
+    # Consequences
+    FORBIDDEN_ITEMS: { type: array, description: "List of forbidden imports/patterns" }
+    REQUIRED_ITEMS: { type: array, description: "List of required imports/patterns" }
+
+    # Guidelines
+    HINTS: { type: array, description: "Hint objects with text and optional example" }
+
+    # References
+    REFERENCE_IMPLEMENTATIONS: { type: array, description: "Reference file paths" }
+    CODE_PATTERN: { type: string, description: "Code pattern example" }
+    EXPECTED_INTENTS: { type: array, description: "Expected @intent annotations" }
+    SUGGESTED_INTENTS: { type: array, description: "Suggested @intent with guidance" }
+
+# =============================================================================
+# SPEC DOC TEMPLATE VARIABLES
+# =============================================================================
+
+spec.archcodex.docs.templates.spec:
+  inherits: spec.type
+  intent: "Document spec documentation template variable schema"
+  goal: "Define variables available in spec documentation templates"
+  outcomes:
+    - "Template variables are documented with types and descriptions"
+    - "Variables cover metadata, security, parameters, examples, and implementation"
+
+  fields:
+    # Metadata
+    SPEC_ID: { type: string, description: "Spec ID (e.g., spec.product.create)" }
+    TITLE: { type: string, description: "Human-readable title" }
+    DATE: { type: string, description: "Generation date" }
+    INTENT: { type: string, description: "Spec intent statement" }
+    DESCRIPTION: { type: string, description: "Detailed description" }
+
+    # Security
+    AUTHENTICATION: { type: string, description: "Required/Optional/None" }
+    RATE_LIMIT: { type: string, description: "Rate limit description" }
+    PERMISSIONS: { type: array, description: "Required permissions" }
+
+    # Parameters
+    INPUTS: { type: array, description: "Input field definitions" }
+    OUTPUTS: { type: array, description: "Output field definitions" }
+
+    # Examples
+    SUCCESS_EXAMPLES: { type: array, description: "Success example cases" }
+    ERROR_EXAMPLES: { type: array, description: "Error example cases" }
+
+    # Invariants
+    INVARIANTS: { type: array, description: "Invariant rules" }
+
+    # Implementation
+    IMPLEMENTATION_PATH: { type: string, description: "Implementation file path" }
+
+# =============================================================================
+# DEFAULT TEMPLATES
+# =============================================================================
+
+spec.archcodex.docs.templates.defaults:
+  inherits: spec.function
+  implementation: src/core/docs/template-engine.ts#getDefaultTemplates
+  intent: "Retrieve all default embedded templates"
+  goal: "Provide embedded default templates for all doc types"
+  outcomes:
+    - "Returns all embedded default templates"
+    - "Templates cover ADR, index, and spec documentation formats"
+
+  outputs:
+    templates:
+      type: object
+      description: "Map of template name to content"
+
+  examples:
+    success:
+      - name: "get all default templates"
+        given: {}
+        then:
+          result.templates.adr: "@contains('# ADR:')"
+          result.templates.adr-index: "@contains('# Architecture Decision Records')"
+          result.templates.spec-api: "@contains('## Parameters')"
+          result.templates.spec-examples: "@contains('## Usage Examples')"
+          result.templates.spec-errors: "@contains('## Error Reference')"
+          result.templates.spec-all: "@contains('## Table of Contents')"
+
+    errors:
+      - name: "template not found in defaults"
+        given: {}
+        then:
+          error: "TEMPLATE_NOT_FOUND"
+
+      - name: "render error in default template"
+        given: {}
+        then:
+          error: "RENDER_ERROR"
+

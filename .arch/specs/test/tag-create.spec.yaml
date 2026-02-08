@@ -1,0 +1,188 @@
+# Tag Creation Specification
+# Comprehensive CRUD test spec for tag creation functionality
+
+version: "1.0"
+
+spec.tag.create:
+  type: test
+  inherits: spec.function
+  implementation: src/domain/tags/mutations.ts#createTag
+
+  # === STRATEGIC ===
+  goal: "Create a new tag with validation and permissions"
+  outcomes:
+    - "Validate tag name is not empty and within length limits"
+    - "Accept optional color parameter with enum validation"
+    - "Verify user has project access before creating tag"
+    - "Persist tag to database with metadata"
+    - "Return created tag with all fields"
+
+  # === OPERATIONAL ===
+  intent: "User creates a new tag for organizing resources"
+
+  # === INPUTS ===
+  inputs:
+    auth_user_id:
+      type: string
+      description: "Authenticated user ID"
+    name:
+      type: string
+      required: true
+      description: "Tag name for display"
+      constraints:
+        minLength: 1
+        maxLength: 50
+    color:
+      type: enum
+      values: [red, blue, green, yellow]
+      default: blue
+      description: "Tag display color"
+      required: false
+    projectId:
+      type: id
+      table: projects
+      required: true
+      description: "Project ID the tag belongs to"
+
+  # === OUTPUTS ===
+  outputs:
+    _id:
+      type: id
+      table: tags
+      description: "Generated tag ID"
+    name:
+      type: string
+      description: "Tag name"
+    color:
+      type: enum
+      values: [red, blue, green, yellow]
+      description: "Tag color"
+    projectId:
+      type: id
+      table: projects
+      description: "Project ID the tag belongs to"
+    createdAt:
+      type: number
+      description: "Creation timestamp (milliseconds since epoch)"
+    createdBy:
+      type: id
+      table: users
+      description: "User ID who created the tag"
+
+  # === SECURITY ===
+  security:
+    authentication: required
+    authorization:
+      - resource: projects
+        field: projectId
+        access_level: edit
+    validation:
+      - field: name
+        rule: "length > 0 && length <= 50"
+      - field: color
+        rule: "one of: red, blue, green, yellow"
+
+  # === INVARIANTS ===
+  invariants:
+    - "createdAt must be current timestamp (within 5 seconds)"
+    - "createdBy must match authenticated user ID"
+    - "color defaults to blue if not provided"
+    - "name is trimmed of leading/trailing whitespace"
+    - "tag count for project is incremented"
+
+  # === EFFECTS ===
+  effects:
+    - action: database_insert
+      table: tags
+      fields: [name, color, projectId, createdAt, createdBy]
+    - action: audit_log
+      resource_type: tag
+      action_type: create
+      metadata: { projectId: "${projectId}", tagName: "${name}" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "create tag with default blue color"
+        given:
+          auth_user_id: "user_123"
+          name: "Important"
+          projectId: "project_456"
+        then:
+          result._id: "@defined"
+          result.name: "Important"
+          result.color: "blue"
+          result.projectId: "project_456"
+          result.createdBy: "user_123"
+          result.createdAt: "@gte(@now() - 5000)"
+
+      - name: "create tag with red color"
+        given:
+          auth_user_id: "user_789"
+          name: "Urgent"
+          color: "red"
+          projectId: "project_456"
+        then:
+          result._id: "@defined"
+          result.name: "Urgent"
+          result.color: "red"
+          result.projectId: "project_456"
+          result.createdBy: "user_789"
+          result.createdAt: "@gte(@now() - 5000)"
+
+    errors:
+      - name: "empty name rejected"
+        given:
+          auth_user_id: "user_123"
+          name: ""
+          projectId: "project_456"
+        then:
+          error: "INVALID_INPUT"
+          error_message: "@contains('name cannot be empty')"
+
+      - name: "name too long"
+        given:
+          auth_user_id: "user_123"
+          name: "This is a very long tag name that exceeds fifty characters"
+          projectId: "project_456"
+        then:
+          error: "INVALID_INPUT"
+          error_message: "@contains('exceeds maximum length')"
+
+      - name: "invalid color enum"
+        given:
+          auth_user_id: "user_123"
+          name: "Test"
+          color: "purple"
+          projectId: "project_456"
+        then:
+          error: "INVALID_INPUT"
+          error_message: "@contains('invalid color')"
+
+      - name: "user lacks project edit permission"
+        given:
+          auth_user_id: "user_viewer"
+          name: "NewTag"
+          projectId: "project_456"
+          user_project_role: "viewer"
+        then:
+          error: "PERMISSION_DENIED"
+          error_message: "@contains('access')"
+
+      - name: "unauthenticated request"
+        given:
+          auth_user_id: null
+          name: "Test"
+          projectId: "project_456"
+        then:
+          error: "UNAUTHENTICATED"
+          error_message: "@contains('authentication')"
+
+      - name: "project not found"
+        given:
+          auth_user_id: "user_123"
+          name: "Test"
+          projectId: "nonexistent_project"
+        then:
+          error: "NOT_FOUND"
+          error_message: "@contains('project')"

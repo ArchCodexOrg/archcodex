@@ -23,11 +23,11 @@ A comprehensive guide for using ArchCodex to enforce architectural constraints i
 
 ### What is ArchCodex?
 
-**ArchCodex is the Architectural Compiler for LLM Agents.** It enforces architectural constraints through context hydration - developers write minimal `@arch` tags, and LLM agents see fully hydrated headers with constraints, hints, and documentation.
+**ArchCodex is the Architectural Compiler for LLM Agents.** It enforces architectural constraints through context hydration - developers write minimal `@arch` tags, and LLM agents retrieve fully hydrated headers with constraints, hints, and documentation via the `archcodex read` command.
 
 ```
-Developer sees:    /** @arch app.domain.payment.processor */
-LLM Agent sees:    Full constraints, hints, pointers, and documentation
+Developer writes:  /** @arch app.domain.payment.processor */
+Agent retrieves:   archcodex read file.ts --format ai → Full constraints, hints, documentation
 ```
 
 ### The Problem
@@ -43,7 +43,7 @@ Without guidance, agents create code that works but violates architectural bound
 ### The Solution
 
 ArchCodex solves this by:
-- **Injecting constraints** directly into file context when agents read code
+- **Hydrating constraints** via the `archcodex read` command for AI agents
 - **Validating compliance** on save, commit, and CI
 - **Guiding new file creation** with discovery and scaffolding
 - **Documenting exceptions** with auditable overrides

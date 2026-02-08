@@ -1,0 +1,272 @@
+# Component Groups Registry
+#
+# Defines coupled component groups that must be updated together.
+# When a change affects an entity rendered by multiple components,
+# this registry ensures all components are considered.
+#
+# Usage: archcodex_entity_context will surface matching groups
+# when querying entities listed in triggers.entities.
+
+component-groups:
+  # All constraint validators implement the same interface and are registered together
+  constraint-validators:
+    description: "Constraint validators that implement IConstraintValidator and share the same validation interface"
+    components:
+      - path: src/core/constraints/forbid-import.ts
+        renders: forbid_import
+      - path: src/core/constraints/require-import.ts
+        renders: require_import
+      - path: src/core/constraints/forbid-pattern.ts
+        renders: forbid_pattern
+      - path: src/core/constraints/allow-pattern.ts
+        renders: allow_pattern
+      - path: src/core/constraints/require-pattern.ts
+        renders: require_pattern
+      - path: src/core/constraints/naming-pattern.ts
+        renders: naming_pattern
+      - path: src/core/constraints/location-pattern.ts
+        renders: location_pattern
+      - path: src/core/constraints/max-file-lines.ts
+        renders: max_file_lines
+      - path: src/core/constraints/max-public-methods.ts
+        renders: max_public_methods
+      - path: src/core/constraints/must-extend.ts
+        renders: must_extend
+      - path: src/core/constraints/implements.ts
+        renders: implements
+      - path: src/core/constraints/require-decorator.ts
+        renders: require_decorator
+      - path: src/core/constraints/forbid-decorator.ts
+        renders: forbid_decorator
+      - path: src/core/constraints/require-test-file.ts
+        renders: require_test_file
+      - path: src/core/constraints/require-companion-file.ts
+        renders: require_companion_file
+      - path: src/core/constraints/require-companion-call.ts
+        renders: require_companion_call
+      - path: src/core/constraints/require-export.ts
+        renders: require_export
+      - path: src/core/constraints/require-one-of.ts
+        renders: require_one_of
+      - path: src/core/constraints/require-call.ts
+        renders: require_call
+      - path: src/core/constraints/require-call-before.ts
+        renders: require_call_before
+      - path: src/core/constraints/require-try-catch.ts
+        renders: require_try_catch
+      - path: src/core/constraints/forbid-call.ts
+        renders: forbid_call
+      - path: src/core/constraints/forbid-mutation.ts
+        renders: forbid_mutation
+      - path: src/core/constraints/forbid-circular-deps.ts
+        renders: forbid_circular_deps
+      - path: src/core/constraints/forbid-base.ts
+        renders: forbid_base
+      - path: src/core/constraints/importable-by.ts
+        renders: importable_by
+      - path: src/core/constraints/verify-intent.ts
+        renders: verify_intent
+    triggers:
+      entities:
+        - constraints
+      mutation_patterns:
+        - "*Constraint*"
+        - "*Validator*"
+    related:
+      registry: src/core/constraints/registry.ts
+      types: src/core/constraints/types.ts
+      base: src/core/constraints/base.ts
+      barrel: src/core/constraints/index.ts
+      support: src/core/constraints/condition-evaluator.ts
+    warning: "When adding a new constraint, implement IConstraintValidator, register it in registry.ts, and export from index.ts"
+
+  # MCP handlers that expose ArchCodex functionality to LLM agents
+  mcp-handlers:
+    description: "MCP tool handlers that expose ArchCodex capabilities to LLM agents via MCP protocol"
+    components:
+      - path: src/mcp/handlers/validation.ts
+        renders: validation_tools
+      - path: src/mcp/handlers/context.ts
+        renders: context_tools
+      - path: src/mcp/handlers/discovery.ts
+        renders: discovery_tools
+      - path: src/mcp/handlers/health.ts
+        renders: health_tools
+      - path: src/mcp/handlers/analyze.ts
+        renders: analyze_tools
+      - path: src/mcp/handlers/architecture-map.ts
+        renders: architecture_map_tools
+      - path: src/mcp/handlers/unified-context.ts
+        renders: unified_context_tools
+      - path: src/mcp/handlers/feature-audit.ts
+        renders: feature_audit_tools
+      - path: src/mcp/handlers/spec.ts
+        renders: spec_tools
+      - path: src/mcp/handlers/intents.ts
+        renders: intent_tools
+      - path: src/mcp/handlers/scaffold.ts
+        renders: scaffold_tools
+      - path: src/mcp/handlers/entity-context.ts
+        renders: entity_context_tools
+      - path: src/mcp/handlers/meta.ts
+        renders: meta_tools
+    triggers:
+      entities:
+        - mcp-tools
+      mutation_patterns:
+        - "*Handler*"
+        - "*Tool*"
+    related:
+      server: src/mcp/server.ts
+      definitions: src/mcp/tool-definitions.ts
+      definitions_extended: src/mcp/tool-definitions-extended.ts
+      barrel: src/mcp/handlers/index.ts
+    warning: "When adding an MCP tool, define it in tool-definitions.ts and add a handler file"
+
+  # Language validators producing SemanticModel from AST analysis
+  language-validators:
+    description: "Language-specific AST validators that parse source files and produce a SemanticModel"
+    components:
+      - path: src/validators/typescript.ts
+        renders: typescript
+      - path: src/validators/python.ts
+        renders: python
+      - path: src/validators/go.ts
+        renders: go
+    triggers:
+      entities:
+        - validators
+        - languages
+      mutation_patterns:
+        - "*Validator*"
+        - "*Language*"
+    related:
+      interface: src/validators/interface.types.ts
+      semantic: src/validators/semantic.types.ts
+      registry: src/validators/validator-registry.ts
+      capabilities: src/validators/capabilities.ts
+      barrel: src/validators/index.ts
+    warning: "When adding a new language, implement ILanguageValidator and register in validator-registry.ts"
+
+  # CLI output formatters that all receive the same data structures
+  cli-formatters:
+    description: "Output formatters that transform validation results into user-facing text"
+    components:
+      - path: src/cli/formatters/json.ts
+        renders: json
+      - path: src/cli/formatters/human.ts
+        renders: human
+      - path: src/cli/formatters/compact.ts
+        renders: compact
+      - path: src/cli/formatters/garden.ts
+        renders: garden
+    triggers:
+      entities:
+        - formatters
+        - output
+      mutation_patterns:
+        - "*Format*"
+        - "*Output*"
+    related:
+      types: src/cli/formatters/types.ts
+      barrel: src/cli/formatters/index.ts
+    warning: "When changing formatter input types, update ALL formatters to handle the new shape"
+
+  # Schema extractors for different ORMs/frameworks
+  schema-extractors:
+    description: "ORM schema extractors that parse framework-specific schemas into a common entity model"
+    components:
+      - path: src/core/context/extraction/convex.ts
+        renders: convex
+      - path: src/core/context/extraction/behaviors.ts
+        renders: behaviors
+      - path: src/core/context/extraction/operations.ts
+        renders: operations
+    triggers:
+      entities:
+        - extractors
+        - schema
+      mutation_patterns:
+        - "*Extractor*"
+        - "*Schema*"
+    related:
+      types: src/core/context/extraction/types.ts
+      barrel: src/core/context/extraction/index.ts
+    warning: "When adding a new ORM extractor, implement the extraction interface from types.ts"
+
+  # SpecCodex test generators that all generate from the same spec schema
+  spec-generators:
+    description: "Test generators that consume ResolvedSpec and produce test code for different test types"
+    components:
+      - path: src/core/spec/generators/unit.ts
+        renders: unit_tests
+      - path: src/core/spec/generators/property.ts
+        renders: property_tests
+      - path: src/core/spec/generators/integration.ts
+        renders: integration_tests
+      - path: src/core/spec/generators/ui.ts
+        renders: ui_tests
+    triggers:
+      entities:
+        - spec-generators
+        - test-generation
+      mutation_patterns:
+        - "*Generator*"
+        - "*Generate*"
+    related:
+      shared: src/core/spec/generators/shared.ts
+      invariant_dsl: src/core/spec/generators/invariant-dsl.ts
+      signature: src/core/spec/generators/signature-extractor.ts
+      docs: src/core/spec/generators/docs.ts
+      barrel: src/core/spec/generators/index.ts
+    warning: "All generators share the same ResolvedSpec input schema and shared.ts utilities - changes to the spec schema affect all generators"
+
+  # LLM provider implementations
+  llm-providers:
+    description: "LLM provider implementations that share a common base class and factory pattern"
+    components:
+      - path: src/llm/providers/anthropic.ts
+        renders: anthropic
+      - path: src/llm/providers/openai.ts
+        renders: openai
+    triggers:
+      entities:
+        - llm-providers
+        - ai
+      mutation_patterns:
+        - "*Provider*"
+        - "*LLM*"
+    related:
+      base: src/llm/providers/base.ts
+      factory: src/llm/providers/factory.ts
+      prompt: src/llm/providers/prompt.ts
+      barrel: src/llm/providers/index.ts
+    warning: "When adding a new LLM provider, extend BaseProvider, register in factory.ts, and export from index.ts"
+
+  # Analysis checkers that evaluate different aspects of architecture health
+  analysis-checkers:
+    description: "Analysis checkers that evaluate architecture health aspects and contribute to the overall analysis report"
+    components:
+      - path: src/core/analysis/checkers/completeness.ts
+        renders: completeness
+      - path: src/core/analysis/checkers/consistency.ts
+        renders: consistency
+      - path: src/core/analysis/checkers/data.ts
+        renders: data
+      - path: src/core/analysis/checkers/logic.ts
+        renders: logic
+      - path: src/core/analysis/checkers/security.ts
+        renders: security
+      - path: src/core/analysis/checkers/other.ts
+        renders: other
+    triggers:
+      entities:
+        - analysis
+        - health
+      mutation_patterns:
+        - "*Checker*"
+        - "*Analysis*"
+    related:
+      barrel: src/core/analysis/checkers/index.ts
+      analyzer: src/core/analysis/analyzer.ts
+    warning: "When adding a new checker, register it in the barrel index.ts and ensure the analyzer orchestrates it"

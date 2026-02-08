@@ -72,8 +72,7 @@ async function runBootstrap(pattern: string | undefined, options: BootstrapOptio
   if (shouldValidate && await registryExists(projectRoot)) {
     try {
       registry = await loadRegistry(projectRoot, config.registry);
-    } catch {
-      // Registry load failed - continue without validation
+    } catch { /* registry load failed - continue without validation */
       logger.warn('Could not load registry for archId validation');
     }
   }

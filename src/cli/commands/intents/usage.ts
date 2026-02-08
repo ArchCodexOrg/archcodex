@@ -87,9 +87,7 @@ async function extractIntentDetails(
           }
         }
       }
-    } catch {
-      // TypeScript parsing failed, fall back to regex-only
-    }
+    } catch { /* TypeScript parsing failed, fall back to regex-only */ }
   }
 
   return entries;
@@ -195,8 +193,7 @@ export async function showUsage(
               }
             }
           }
-        } catch {
-          // TypeScript parsing failed, use simple extraction
+        } catch { /* TypeScript parsing failed, use simple extraction */
           for (const intent of allIntents) {
             if (!intentToEntries.has(intent)) {
               intentToEntries.set(intent, []);

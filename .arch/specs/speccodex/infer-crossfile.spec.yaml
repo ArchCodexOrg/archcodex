@@ -1,0 +1,559 @@
+# SpecCodex Cross-File Type Resolution & LLM Enrichment Specifications
+#
+# Specs for enhanced spec inference: cross-file type resolution (Phase 1)
+# and LLM-powered enrichment (Phase 2).
+
+version: "1.0"
+
+# =============================================================================
+# PHASE 1: Cross-File Type Resolution
+# =============================================================================
+
+spec.speccodex.signatureExtractor.resolveType:
+  inherits: spec.function
+  implementation: src/core/spec/generators/signature-extractor.ts#resolveTypeAcrossFiles
+
+  # === STRATEGIC ===
+  goal: "Resolve named TypeScript types across file boundaries by following imports"
+  outcomes:
+    - "Parse source file imports to find where a type is defined"
+    - "Resolve relative import paths with extension probing (.ts, .tsx, .js, index.ts)"
+    - "Extract interface/type alias fields with names, types, and optionality"
+    - "Return empty array for unresolvable types (graceful fallback)"
+    - "Handle re-exports through barrel files (one level)"
+
+  # === OPERATIONAL ===
+  intent: "Follow imports to extract fields from named types defined in other files"
+
+  inputs:
+    typeName:
+      type: string
+      required: true
+      description: "Name of the TypeScript type/interface to resolve (e.g., 'InferResult')"
+    sourceFilePath:
+      type: string
+      required: true
+      description: "Absolute path to the file that imports this type"
+    options:
+      type: object
+      properties:
+        projectRoot: { type: string, description: "Project root directory" }
+
+  outputs:
+    result:
+      type: array
+      description: "Array of resolved fields"
+      items:
+        type: object
+        properties:
+          name: { type: string, description: "Field name" }
+          type: { type: string, description: "TypeScript type string" }
+          optional: { type: boolean, description: "Whether the field has ?" }
+
+  # === INVARIANTS ===
+  invariants:
+    - "Returns empty array when type is not imported from a relative path"
+    - "Returns empty array when imported file does not exist"
+    - "Returns empty array when type is not found in the resolved file"
+    - "Returns empty array for node_modules imports (non-relative paths)"
+    - "Resolves .js extension imports to .ts source files"
+    - "Handles both interface and type alias declarations"
+    - "Each returned field has name, type, and optional properties"
+    - description: "All returned fields have non-empty names"
+      forall:
+        variable: field
+        in: result
+        then: { "field.name": "@matches('^.+$')" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "resolve interface from sibling file"
+        given:
+          typeName: "UserResult"
+          sourceFilePath: "tests/fixtures/typescript/imported-types/main.ts"
+          options: { projectRoot: "." }
+        then:
+          result: "@length(@gte(1))"
+
+      - name: "resolve interface fields include name and type"
+        given:
+          typeName: "UserResult"
+          sourceFilePath: "tests/fixtures/typescript/imported-types/main.ts"
+          options: { projectRoot: "." }
+        then:
+          result: "@hasItem({ name: 'valid' })"
+
+      - name: "resolve type with .js extension in import"
+        given:
+          typeName: "UserResult"
+          sourceFilePath: "tests/fixtures/typescript/imported-types/main-js-import.ts"
+          options: { projectRoot: "." }
+        then:
+          result: "@length(@gte(1))"
+
+    errors:
+      - name: "non-relative import returns empty"
+        given:
+          typeName: "SomeType"
+          sourceFilePath: "tests/fixtures/typescript/imported-types/node-module-import.ts"
+          options: { projectRoot: "." }
+        then:
+          result: "@length(0)"
+
+      - name: "type not found in file returns empty"
+        given:
+          typeName: "NonExistentType"
+          sourceFilePath: "tests/fixtures/typescript/imported-types/main.ts"
+          options: { projectRoot: "." }
+        then:
+          result: "@length(0)"
+
+      - name: "missing source file returns empty"
+        given:
+          typeName: "SomeType"
+          sourceFilePath: "/nonexistent/path/file.ts"
+          options: { projectRoot: "." }
+        then:
+          result: "@length(0)"
+
+# =============================================================================
+# PHASE 2: Code Context Gathering
+# =============================================================================
+
+spec.speccodex.infer.context:
+  inherits: spec.function
+  implementation: src/core/spec/infer-context.ts#gatherCodeContext
+
+  # === STRATEGIC ===
+  goal: "Gather code context from an implementation for LLM-powered spec enrichment"
+  outcomes:
+    - "Extract imported type definitions used by the function"
+    - "Identify function calls made from the implementation"
+    - "Track which files were read for context"
+    - "Respect size limits to stay within LLM token budgets"
+
+  # === OPERATIONAL ===
+  intent: "Collect implementation code and its dependencies as context for LLM analysis"
+
+  inputs:
+    filePath:
+      type: string
+      required: true
+      description: "Source file path relative to projectRoot"
+    exportName:
+      type: string
+      required: true
+      description: "Name of the exported function to analyze"
+    options:
+      type: object
+      properties:
+        projectRoot: { type: string, description: "Project root directory" }
+        maxFiles: { type: number, default: 10, description: "Maximum number of context files" }
+        maxContextSize: { type: number, default: 50000, description: "Maximum total context in bytes" }
+
+  outputs:
+    importedTypes:
+      type: array
+      description: "Type definitions imported by the function"
+      items:
+        type: object
+        properties:
+          name: { type: string }
+          definition: { type: string }
+          filePath: { type: string }
+    calledFunctions:
+      type: array
+      description: "Names of functions called from the implementation"
+      items: { type: string }
+    contextFiles:
+      type: array
+      description: "Files read for context with relevance notes"
+      items:
+        type: object
+        properties:
+          path: { type: string }
+          relevance: { type: string }
+
+  # === INVARIANTS ===
+  invariants:
+    - "Returns empty context when source file does not exist"
+    - "Returns empty context when export is not found in file"
+    - "Number of context files never exceeds maxFiles option"
+    - "Total size of importedTypes definitions never exceeds maxContextSize"
+    - "Only follows relative imports (skips node_modules)"
+    - "calledFunctions are deduplicated"
+    - description: "Each imported type has a non-empty definition"
+      forall:
+        variable: type
+        in: result.importedTypes
+        then: { "type.definition": "@matches('^.+$')" }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "gather context for function with imports"
+        given:
+          filePath: "src/core/spec/inferrer.ts"
+          exportName: "inferSpec"
+          options: { projectRoot: "." }
+        then:
+          result.importedTypes: "@length(@gte(1))"
+          result.contextFiles: "@length(@gte(0))"
+          result.calledFunctions: "@defined"
+
+      - name: "respect maxFiles limit"
+        given:
+          filePath: "src/core/spec/inferrer.ts"
+          exportName: "inferSpec"
+          options: { projectRoot: ".", maxFiles: 2 }
+        then:
+          result.importedTypes: "@length(@lte(2))"
+
+    errors:
+      - name: "nonexistent file returns empty context"
+        given:
+          filePath: "nonexistent/file.ts"
+          exportName: "fn"
+          options: { projectRoot: "." }
+        then:
+          result.importedTypes: "@length(0)"
+          result.calledFunctions: "@length(0)"
+          result.contextFiles: "@length(0)"
+
+      - name: "nonexistent export returns empty context"
+        given:
+          filePath: "src/core/spec/inferrer.ts"
+          exportName: "nonExistentFunction"
+          options: { projectRoot: "." }
+        then:
+          result.importedTypes: "@length(0)"
+          result.calledFunctions: "@length(0)"
+
+# =============================================================================
+# PHASE 2: LLM Enrichment — Prompt Building
+# =============================================================================
+
+spec.speccodex.infer.enrichPrompt:
+  inherits: spec.function
+  implementation: src/core/spec/infer-prompts.ts#buildEnrichmentPrompt
+
+  # === STRATEGIC ===
+  goal: "Build an LLM prompt that generates goal, intent, examples, and invariants from code"
+  outcomes:
+    - "Include implementation source code in prompt"
+    - "Include imported type definitions for context"
+    - "Include structural skeleton (inputs, outputs, effects)"
+    - "Specify JSON output format for parsing"
+    - "Instruct LLM to use concrete values and match error codes"
+
+  # === OPERATIONAL ===
+  intent: "Assemble all code context into a structured prompt for LLM spec enrichment"
+
+  inputs:
+    request:
+      type: object
+      required: true
+      properties:
+        filePath: { type: string, description: "Implementation file path" }
+        content: { type: string, description: "Implementation source code" }
+        exportName: { type: string, description: "Exported function name" }
+        skeleton:
+          type: object
+          description: "InferResult from structural inference"
+        context:
+          type: object
+          description: "CodeContext from gatherCodeContext"
+
+  outputs:
+    result:
+      type: string
+      description: "Complete LLM prompt"
+
+  # === INVARIANTS ===
+  invariants:
+    - "Prompt always contains the implementation source code"
+    - "Prompt always contains the export name"
+    - "Prompt always contains JSON output format instructions"
+    - "Prompt contains 'goal' and 'intent' in the output format"
+    - "Prompt contains 'successExamples' in the output format"
+    - "Prompt contains 'invariants' in the output format"
+    - "When context has imported types, prompt includes their definitions"
+    - "When skeleton has error codes, prompt includes them"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "build prompt with full context"
+        given:
+          request:
+            filePath: "src/utils/format.ts"
+            content: "export function formatDate(d: Date): string { return d.toISOString(); }"
+            exportName: "formatDate"
+            skeleton:
+              valid: true
+              specId: "spec.utils.format.formatDate"
+              yaml: "spec:\n  inherits: spec.function"
+              detectedPatterns:
+                baseSpec: "spec.function"
+                security: { authentication: "none" }
+                effects: []
+                errorCodes: []
+              errors: []
+            context:
+              importedTypes: []
+              calledFunctions: ["toISOString"]
+              contextFiles: []
+        then:
+          result: "@contains('formatDate')"
+          result: "@contains('goal')"
+          result: "@contains('successExamples')"
+          result: "@contains('JSON')"
+
+      - name: "prompt includes imported types when present"
+        given:
+          request:
+            filePath: "src/test.ts"
+            content: "export function fn(): Result { return { valid: true }; }"
+            exportName: "fn"
+            skeleton:
+              valid: true
+              specId: "spec.test.fn"
+              yaml: ""
+              detectedPatterns:
+                baseSpec: "spec.function"
+                security: { authentication: "none" }
+                effects: []
+                errorCodes: []
+              errors: []
+            context:
+              importedTypes:
+                - { name: "Result", definition: "interface Result { valid: boolean }", filePath: "src/types.ts" }
+              calledFunctions: []
+              contextFiles: []
+        then:
+          result: "@contains('Result')"
+          result: "@contains('interface Result')"
+
+---
+
+# =============================================================================
+# PHASE 2: LLM Enrichment — Response Parsing
+# =============================================================================
+
+spec.speccodex.infer.enrichParse:
+  inherits: spec.function
+  implementation: src/core/spec/infer-prompts.ts#parseEnrichmentResponse
+
+  # === STRATEGIC ===
+  goal: "Parse LLM JSON response into structured enriched sections"
+  outcomes:
+    - "Extract goal, intent, examples, invariants from JSON"
+    - "Handle markdown code block wrapping"
+    - "Gracefully handle malformed JSON with TODO fallbacks"
+
+  # === OPERATIONAL ===
+  intent: "Convert raw LLM text response into typed EnrichedSections object"
+
+  inputs:
+    response:
+      type: string
+      required: true
+      description: "Raw LLM response text (may be wrapped in markdown code blocks)"
+
+  outputs:
+    goal:
+      type: string
+      description: "High-level goal"
+    intent:
+      type: string
+      description: "Operational intent"
+    successExamples:
+      type: array
+      description: "Success examples with given/then"
+    errorExamples:
+      type: array
+      description: "Error examples with given/then"
+    invariants:
+      type: array
+      description: "Behavioral invariants"
+
+  # === INVARIANTS ===
+  invariants:
+    - "Always returns a valid EnrichedSections object (never throws)"
+    - "goal is always a non-empty string"
+    - "intent is always a non-empty string"
+    - "invariants is always an array"
+    - "Strips markdown ```json code blocks before parsing"
+    - "Falls back to TODO values when JSON is invalid"
+    - description: "Fallback goal starts with TODO"
+      condition: "when JSON is invalid, result.goal starts with 'TODO'"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "parse valid JSON response"
+        given:
+          response: '{"goal":"Process payments","intent":"Handle payment flow","successExamples":[{"name":"basic payment","given":{"amount":100},"then":{"status":"completed"}}],"errorExamples":[{"name":"invalid amount","given":{"amount":-1},"then":{"errorCode":"INVALID_AMOUNT"}}],"invariants":["amount must be positive"]}'
+        then:
+          result.goal: "Process payments"
+          result.intent: "Handle payment flow"
+          result.successExamples: "@length(1)"
+          result.errorExamples: "@length(1)"
+          result.invariants: "@hasItem('amount must be positive')"
+
+      - name: "parse JSON wrapped in markdown code block"
+        given:
+          response: "```json\n{\"goal\":\"Test goal\",\"intent\":\"Test intent\",\"successExamples\":[],\"errorExamples\":[],\"invariants\":[]}\n```"
+        then:
+          result.goal: "Test goal"
+          result.intent: "Test intent"
+
+      - name: "handles partial JSON with missing fields"
+        given:
+          response: '{"goal":"Partial goal"}'
+        then:
+          result.goal: "Partial goal"
+          result.successExamples: "@length(0)"
+          result.invariants: "@defined"
+
+    errors:
+      - name: "malformed JSON falls back to TODO values"
+        given:
+          response: "This is not valid JSON at all"
+        then:
+          result.goal: "@contains('TODO')"
+          result.intent: "@contains('TODO')"
+          result.invariants: "@length(@gte(1))"
+
+      - name: "empty response falls back to TODO values"
+        given:
+          response: ""
+        then:
+          result.goal: "@contains('TODO')"
+          result.intent: "@contains('TODO')"
+
+---
+
+# =============================================================================
+# PHASE 2: LLM Enrichment — YAML Merging
+# =============================================================================
+
+spec.speccodex.infer.enrichMerge:
+  inherits: spec.function
+  implementation: src/core/spec/infer-prompts.ts#mergeEnrichedSections
+
+  # === STRATEGIC ===
+  goal: "Merge LLM-enriched sections back into the structural spec skeleton YAML"
+  outcomes:
+    - "Replace TODO goal with enriched goal"
+    - "Replace TODO intent with enriched intent"
+    - "Replace TODO examples with concrete enriched examples"
+    - "Replace TODO invariants with enriched invariants"
+    - "Preserve all structural sections (inputs, outputs, effects, security)"
+
+  # === OPERATIONAL ===
+  intent: "Combine structural skeleton with LLM-generated semantic content into final spec YAML"
+
+  inputs:
+    skeletonYaml:
+      type: string
+      required: true
+      description: "Skeleton spec YAML with TODO placeholders"
+    enriched:
+      type: object
+      required: true
+      description: "EnrichedSections from parseEnrichmentResponse"
+      properties:
+        goal: { type: string }
+        intent: { type: string }
+        successExamples: { type: array }
+        errorExamples: { type: array }
+        invariants: { type: array }
+
+  outputs:
+    result:
+      type: string
+      description: "Final spec YAML with enriched content"
+
+  # === INVARIANTS ===
+  invariants:
+    - "Result is valid YAML"
+    - "mergeEnrichedSections preserves inputs, outputs, effects sections from skeletonYaml"
+    - "goal: 'TODO:*' is replaced by enriched.goal when !enriched.goal.startsWith('TODO')"
+    - "intent: 'TODO:*' is replaced by enriched.intent when !enriched.intent.startsWith('TODO')"
+    - "invariants section is replaced by enriched.invariants via buildExamplesYaml"
+    - "examples section is replaced by buildExamplesYaml(enriched) when enriched has examples"
+    - "When enriched sections are all TODO, skeleton is returned unchanged"
+    - "implementation field is never modified by replace() calls"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "merge replaces TODO goal and intent"
+        given:
+          skeletonYaml: |
+            spec.test.fn:
+              inherits: spec.function
+              implementation: src/test.ts#fn
+              goal: "TODO: Describe the high-level goal"
+              intent: "TODO: Describe what this function does"
+              invariants:
+                - "TODO: Define invariants"
+          enriched:
+            goal: "Process user data efficiently"
+            intent: "Validate and transform user input"
+            successExamples: []
+            errorExamples: []
+            invariants:
+              - "Input must not be empty"
+              - "Output preserves field order"
+        then:
+          result: "@contains('Process user data efficiently')"
+          result: "@contains('Validate and transform user input')"
+          result: "@contains('Input must not be empty')"
+
+      - name: "merge preserves structural sections"
+        given:
+          skeletonYaml: |
+            spec.test.fn:
+              inherits: spec.function
+              implementation: src/test.ts#fn
+              goal: "TODO: Describe the high-level goal"
+              intent: "TODO: Describe what this function does"
+              inputs:
+                name:
+                  type: string
+                  required: true
+              invariants:
+                - "TODO: Define invariants"
+          enriched:
+            goal: "Format names"
+            intent: "Format a name string"
+            successExamples: []
+            errorExamples: []
+            invariants: []
+        then:
+          result: "@contains('inputs:')"
+          result: "@contains('name:')"
+          result: "@contains('type: string')"
+          result: "@contains('implementation: src/test.ts#fn')"
+
+    errors:
+      - name: "TODO fallback sections leave skeleton unchanged"
+        given:
+          skeletonYaml: |
+            spec.test.fn:
+              goal: "TODO: Describe the high-level goal"
+              intent: "TODO: Describe what this function does"
+              invariants:
+                - "TODO: Define invariants"
+          enriched:
+            goal: "TODO: Describe the high-level goal"
+            intent: "TODO: Describe what this function does"
+            successExamples: []
+            errorExamples: []
+            invariants:
+              - "TODO: Define invariants"
+        then:
+          result: "@contains('TODO')"

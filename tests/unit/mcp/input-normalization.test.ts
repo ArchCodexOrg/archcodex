@@ -1,10 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.core.domain.constraint
- * @intent:tested
  *
  * Tests for MCP input normalization:
  * - Tools accepting both string and object file formats

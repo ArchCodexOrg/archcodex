@@ -76,6 +76,12 @@ web_modules/
 # ArchCodex validation cache
 .arch/cache/
 
+# ArchCodex SQLite database (local analysis state)
+.arch/*.db
+.arch/*.db-shm
+.arch/*.db-wal
+
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

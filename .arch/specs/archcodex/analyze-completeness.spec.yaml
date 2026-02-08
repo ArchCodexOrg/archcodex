@@ -1,0 +1,233 @@
+# Completeness Checker - Schema-Inferred Analysis
+#
+# Detects completeness gaps by analyzing spec coverage of inputs,
+# boundaries, CRUD operations, invariants, and UI accessibility.
+# 8 analyses: CMP-1 through CMP-8.
+
+version: "1.0"
+
+spec.archcodex.analyze.completeness:
+  inherits: spec.function
+  implementation: src/core/analysis/checkers/completeness.ts#checkCompleteness
+
+  # === STRATEGIC ===
+  goal: "Detect completeness gaps inferable from spec schemas"
+  outcomes:
+    - "Detect missing boundary examples for constrained inputs"
+    - "Detect mixin-contributed effects not in spec"
+    - "Detect orphaned specs with no relationships"
+    - "Detect incomplete CRUD coverage for entities"
+    - "Detect missing error examples for input constraints"
+    - "Detect mutations without invariants"
+    - "Detect UI specs without accessibility"
+    - "Detect optimistic UI without feedback"
+
+  # === OPERATIONAL ===
+  intent: "Analyze spec completeness for examples, invariants, CRUD coverage, and accessibility"
+
+  inputs:
+    specs:
+      type: array
+      required: true
+      description: "Array of resolved spec nodes"
+    graph:
+      type: object
+      required: true
+      description: "CrossReferenceGraph"
+
+  outputs:
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          category: { type: enum, values: [completeness] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string }
+          field: { type: string, optional: true }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "All issues have category 'completeness'"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.category: "completeness"
+
+    - description: "Issue IDs follow CMP-N pattern"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@matches('^CMP-[1-8]$')"
+
+  # === EXAMPLES ===
+  defaults: &minimal_graph
+    graph: { entityToSpecs: {}, tableToWriters: {}, tableToReaders: {}, specDependents: {}, archToSpecs: {} }
+
+  examples:
+    success:
+      # --- CMP-1: Missing boundary examples ---
+      - name: "CMP-1: detects missing boundary for max constraint"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                name: { type: string, max: 50 }
+              examples:
+                success:
+                  - { name: "basic", given: { name: "test" }, then: { result: "@exists" } }
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'CMP-1', severity: 'warning', field: 'name' })"
+
+      # --- CMP-2: Missing mixin effects ---
+      - name: "CMP-2: detects mixin effects not surfaced in spec"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              mixins: [logs_audit]
+              effects:
+                - { database: { table: tags, operation: insert } }
+                # Missing audit_log effect that logs_audit mixin would contribute
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'CMP-2', severity: 'info' })"
+
+      # --- CMP-3: Orphaned spec ---
+      - name: "CMP-3: detects isolated spec with no relationships"
+        given:
+          specs:
+            - specId: spec.widget.validate
+              intent: "Validate widget"
+          graph:
+            entityToSpecs: { widget: [spec.widget.validate] }
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'CMP-3', severity: 'info', specId: 'spec.widget.validate' })"
+
+      # --- CMP-4: Missing CRUD coverage ---
+      - name: "CMP-4: detects incomplete CRUD for entity"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+            - specId: spec.tag.get
+              intent: "Get tag"
+          graph:
+            entityToSpecs: { tag: [spec.tag.create, spec.tag.get] }
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'CMP-4', severity: 'info' })"
+
+      # --- CMP-5: Missing constraint error examples ---
+      - name: "CMP-5: detects missing validation error for max constraint"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                name: { type: string, max: 50 }
+              examples:
+                success:
+                  - { name: "basic", given: { name: "test" }, then: { result: "@exists" } }
+                errors:
+                  - { name: "empty", given: { name: "" }, then: { error: "NAME_REQUIRED" } }
+                  # Missing: error for name > 50 chars
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'CMP-5', severity: 'warning' })"
+
+      # --- CMP-6: Mutation without invariants ---
+      - name: "CMP-6: detects mutation with no behavioral contract"
+        given:
+          specs:
+            - specId: spec.product.archive
+              intent: "Archive product"
+              inherits: spec.mutation
+              inputs:
+                productId: { type: id, table: products }
+              effects:
+                - { database: { table: products, operation: update } }
+              # No invariants at all
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'CMP-6', severity: 'warning' })"
+
+      # --- CMP-7: UI without accessibility ---
+      - name: "CMP-7: detects missing accessibility in UI spec"
+        given:
+          specs:
+            - specId: spec.dialog.share
+              intent: "Share dialog"
+              ui:
+                trigger: { location: toolbar, element: "[data-share]", label: "Share" }
+                interaction:
+                  flow: ["User clicks share", "Dialog opens"]
+                feedback:
+                  success: "Shared successfully"
+                # No accessibility section
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'CMP-7', severity: 'warning' })"
+
+      # --- CMP-8: Optimistic UI without feedback ---
+      - name: "CMP-8: detects optimistic update without feedback definition"
+        given:
+          specs:
+            - specId: spec.product.star
+              intent: "Star product"
+              ui:
+                trigger: { location: inline, element: "[data-star]" }
+                interaction:
+                  optimistic: true
+                # No feedback section
+          <<: *minimal_graph
+        then:
+          result.issues: "@hasItem({ id: 'CMP-8', severity: 'warning' })"
+
+      # --- No false positives ---
+      - name: "no issue for complete spec"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              inputs:
+                name: { type: string, max: 50 }
+              outputs:
+                _id: { type: id, table: tags }
+              invariants:
+                - { condition: "result._id is defined" }
+              examples:
+                success:
+                  - { name: "basic", given: { name: "test" }, then: { result._id: "@exists" } }
+                errors:
+                  - { name: "too long", given: { name: "@string(51)" }, then: { error: "NAME_TOO_LONG" } }
+                boundaries:
+                  - { name: "at max", given: { name: "@string(50)" }, then: { result._id: "@exists" } }
+            - specId: spec.tag.delete
+              intent: "Delete tag"
+            - specId: spec.tag.update
+              intent: "Update tag"
+            - specId: spec.tag.list
+              intent: "List tags"
+          graph:
+            entityToSpecs: { tag: [spec.tag.create, spec.tag.delete, spec.tag.update, spec.tag.list] }
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@empty"

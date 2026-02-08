@@ -1,0 +1,217 @@
+# Base Constraint Validator Specification
+#
+# Abstract base class providing common utilities for constraint validators.
+# Handles violation creation with structured suggestions, value normalization,
+# and default fix hints.
+
+version: "1.0"
+
+spec.archcodex.constraintBase.createViolation:
+  inherits: spec.function
+  implementation: src/core/constraints/base.ts#BaseConstraintValidator.createViolation
+
+  # === STRATEGIC ===
+  goal: "Create structured violation objects with optional suggestions and did-you-mean hints"
+  outcomes:
+    - "Violations contain error code, rule, value, severity, and message"
+    - "Structured suggestions are included when provided"
+    - "Did-you-mean hints guide developers to canonical implementations"
+    - "Constraint alternatives are propagated from constraint definition"
+
+  # === OPERATIONAL ===
+  intent: "Build a Violation object from constraint, message, context, and optional ViolationOptions including line/column, suggestion, and didYouMean"
+
+  inputs:
+    constraint:
+      type: object
+      required: true
+      description: "The constraint being validated"
+      properties:
+        value: { type: string, description: "Constraint value" }
+        severity: { type: string, description: "error or warning" }
+        why: { type: string, description: "Why the constraint exists" }
+        alternatives: { type: array, description: "Alternative modules/patterns" }
+    message:
+      type: string
+      required: true
+      description: "Human-readable violation message"
+    context:
+      type: object
+      required: true
+      description: "Constraint context with file info"
+      properties:
+        constraintSource: { type: string, description: "Architecture ID that defines this constraint" }
+    options:
+      type: object
+      required: false
+      description: "Additional violation options"
+      properties:
+        line: { type: number, description: "Line number of violation" }
+        column: { type: number, description: "Column number" }
+        suggestion: { type: object, description: "Structured fix suggestion" }
+        didYouMean: { type: object, description: "Did-you-mean hint" }
+
+  outputs:
+    violation:
+      type: object
+      description: "Complete Violation object"
+      properties:
+        code: { type: string }
+        rule: { type: string }
+        value: { type: string }
+        severity: { type: string }
+        line: { type: number, nullable: true }
+        column: { type: number, nullable: true }
+        message: { type: string }
+        why: { type: string }
+        fixHint: { type: string }
+        source: { type: string }
+        suggestion: { type: object }
+        didYouMean: { type: object }
+        alternatives: { type: array }
+
+  examples:
+    success:
+      - name: "basic violation without options"
+        given:
+          constraint: { value: "chalk", severity: "error", why: "Use logger instead" }
+          message: "Import 'chalk' is forbidden"
+          context: { constraintSource: "archcodex.core.engine" }
+          options: {}
+        then:
+          result.message: "Import 'chalk' is forbidden"
+          result.severity: "error"
+          result.source: "archcodex.core.engine"
+          result.why: "Use logger instead"
+          result.line: null
+          result.column: null
+
+      - name: "violation with line and column"
+        given:
+          constraint: { value: "chalk", severity: "error" }
+          message: "Import 'chalk' is forbidden"
+          context: { constraintSource: "archcodex.core.engine" }
+          options: { line: 5, column: 10 }
+        then:
+          result.line: 5
+          result.column: 10
+
+      - name: "violation with structured suggestion"
+        given:
+          constraint: { value: "chalk", severity: "error" }
+          message: "Import 'chalk' is forbidden"
+          context: { constraintSource: "base.util" }
+          options:
+            suggestion: { action: "replace", target: "chalk", replacement: "src/utils/logger.ts" }
+        then:
+          result.suggestion: "@hasProperties({action: 'replace', target: 'chalk'})"
+
+      - name: "violation with did-you-mean"
+        given:
+          constraint: { value: "chalk", severity: "error" }
+          message: "Import 'chalk' is forbidden"
+          context: { constraintSource: "base.util" }
+          options:
+            didYouMean: { file: "src/utils/logger.ts", description: "Use the canonical logger" }
+        then:
+          result.didYouMean: "@hasProperties({file: 'src/utils/logger.ts'})"
+
+      - name: "violation propagates alternatives from constraint"
+        given:
+          constraint:
+            value: "chalk"
+            severity: "error"
+            alternatives:
+              - { module: "src/utils/logger.ts", export: "logger" }
+          message: "Import 'chalk' is forbidden"
+          context: { constraintSource: "base.util" }
+          options: {}
+        then:
+          result.alternatives: "@length(1)"
+
+    errors:
+      - name: "missing options defaults line and column to null"
+        given:
+          constraint: { value: "x", severity: "warning" }
+          message: "test"
+          context: { constraintSource: "test" }
+        then:
+          result.line: null
+          result.column: null
+
+  invariants:
+    - description: "violation always has error code from validator"
+      condition: "result.code is defined"
+
+    - description: "violation always has rule from validator"
+      condition: "result.rule is defined"
+
+    - description: "source comes from context.constraintSource"
+      condition: "result.source === context.constraintSource"
+
+---
+
+spec.archcodex.constraintBase.normalizeToArray:
+  inherits: spec.function
+  implementation: src/core/constraints/base.ts#BaseConstraintValidator.normalizeToArray
+
+  # === STRATEGIC ===
+  goal: "Normalize constraint values to a string array for uniform processing"
+  outcomes:
+    - "Arrays pass through unchanged"
+    - "Single string values become single-element arrays"
+    - "Object values (coverage constraints) return empty array"
+
+  # === OPERATIONAL ===
+  intent: "Convert constraint values of varying types into a consistent string array format"
+
+  inputs:
+    value:
+      type: unknown
+      required: true
+      description: "Constraint value which may be string, array, or object"
+
+  outputs:
+    result:
+      type: array
+      description: "Normalized string array"
+
+  examples:
+    success:
+      - name: "array value passes through"
+        given:
+          value: ["chalk", "ora", "commander"]
+        then:
+          result: "@all(@length(3), @hasItem('chalk'))"
+
+      - name: "single string value becomes array"
+        given:
+          value: "chalk"
+        then:
+          result: "@all(@length(1), @hasItem('chalk'))"
+
+      - name: "object value returns empty array"
+        given:
+          value: { lines: 100, functions: 80 }
+        then:
+          result: "@length(0)"
+
+      - name: "number value becomes string array"
+        given:
+          value: 42
+        then:
+          result: "@all(@length(1), @hasItem('42'))"
+
+    errors:
+      - name: "null object returns empty array"
+        given:
+          value: null
+        then:
+          result: "@length(1)"
+
+  invariants:
+    - description: "result is always an array"
+      condition: "Array.isArray(result)"
+
+    - description: "array input length equals output length"
+      condition: "Array.isArray(value) implies result.length === value.length"

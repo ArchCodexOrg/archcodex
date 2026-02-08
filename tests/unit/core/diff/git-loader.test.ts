@@ -1,9 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.test
  *
  * Tests for git-loader utilities.
  */
@@ -31,7 +28,7 @@ vi.mock('child_process', () => {
   });
 
   // Add custom promisify behavior that returns { stdout, stderr }
-  (mockExec as any)[promisify.custom] = (cmd: string, opts?: any) => {
+  (mockExec as Record<symbol, unknown>)[promisify.custom] = (cmd: string, opts?: Record<string, unknown>) => {
     return new Promise((resolve, reject) => {
       process.nextTick(() => {
         if (mockExecBehavior.error) {

@@ -37,9 +37,8 @@ export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.promises.access(filePath, fs.constants.F_OK);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { /* file not found */ }
+  return false;
 }
 
 /**
@@ -56,9 +55,8 @@ export async function isDirectory(filePath: string): Promise<boolean> {
   try {
     const stat = await fs.promises.stat(filePath);
     return stat.isDirectory();
-  } catch {
-    return false;
-  }
+  } catch { /* path not found or not accessible */ }
+  return false;
 }
 
 /**

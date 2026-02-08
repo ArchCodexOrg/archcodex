@@ -200,7 +200,7 @@ export class GraphBuilder {
           existing.push(filePath);
           usage.set(archId, existing);
         }
-      } catch {
+      } catch { /* file read error */
         // Skip files that can't be read
       }
     }

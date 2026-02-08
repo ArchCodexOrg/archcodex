@@ -225,7 +225,7 @@ export class ProjectAnalyzer {
       const archId = extractArchId(content);
       this.archIdCache.set(filePath, archId);
       return archId;
-    } catch {
+    } catch { /* file read error */
       this.archIdCache.set(filePath, null);
       return null;
     }
@@ -257,7 +257,7 @@ export class ProjectAnalyzer {
       }
 
       return resolvedImports;
-    } catch {
+    } catch { /* file read or parse error */
       return [];
     }
   }

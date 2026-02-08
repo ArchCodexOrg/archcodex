@@ -140,7 +140,7 @@ export async function verifyFiles(
     try {
       const result = await verifyFile(filePath, registry, options);
       results.push(result);
-    } catch {
+    } catch { /* file verification failed, add empty result */
       results.push({
         filePath,
         archId: null,

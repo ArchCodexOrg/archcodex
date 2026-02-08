@@ -11,6 +11,17 @@ Main configuration file for ArchCodex settings.
 ```yaml
 version: "1.0"
 
+# Spec analysis settings (for archcodex analyze --deep)
+analysis:
+  deep_patterns:
+    auth_check: ['req\.user\b', 'authenticate\(']
+    ownership_check: ['\.userId\s*===?\s*']
+    permission_call: "checkPermission\\([^)]*,\\s*['\"]([\\w]+)['\"]\\s*\\)"
+    soft_delete_filter: ['deletedAt', 'whereNotDeleted']
+    db_query: ['prisma\.\w+\.findMany']
+    db_get: ['prisma\.\w+\.findUnique']
+  tool_entities: ['archcodex', 'speccodex', 'test']
+
 files:
   scan:
     include: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
@@ -255,6 +266,71 @@ Monorepo package boundary definitions:
 | `path` | Yes | Package path relative to project root |
 | `name` | No | Package name (defaults to path) |
 | `can_import` | No | List of packages this package can import from |
+
+### `analysis`
+
+Spec analysis settings for `archcodex analyze` (including `--deep` mode):
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `deep_patterns.auth_check` | `[]` | Regex patterns to detect auth checks in code (e.g., `ctx\.userId`, `req\.user`) |
+| `deep_patterns.ownership_check` | `[]` | Regex patterns to detect ownership verification (e.g., `\.userId\s*===`) |
+| `deep_patterns.permission_call` | `""` | Regex with capture group for permission checks (e.g., `checkPermission\([^)]*,\s*['"](\w+)['"]\)`) |
+| `deep_patterns.soft_delete_filter` | `[]` | Regex patterns to detect soft-delete filtering (e.g., `deletedAt`, `whereNotDeleted`) |
+| `deep_patterns.db_query` | `[]` | Regex patterns to detect database query calls (e.g., `prisma\.\w+\.findMany`) |
+| `deep_patterns.db_get` | `[]` | Regex patterns to detect single-record fetches (e.g., `prisma\.\w+\.findUnique`) |
+| `tool_entities` | `["archcodex", "speccodex", "test"]` | Entity namespaces excluded from CMP-4 CRUD coverage checks |
+
+Deep patterns default to empty arrays, which disables the corresponding deep-analysis rules (SEC-10 through SEC-14). Configure them for your framework to enable spec-to-code verification.
+
+**Example — Express/Prisma project:**
+
+```yaml
+analysis:
+  deep_patterns:
+    auth_check: ['req\.user\b', 'req\.session\.userId', 'authenticate\(']
+    ownership_check: ['\.userId\s*===?\s*', 'belongsTo\(']
+    permission_call: "checkPermission\\([^)]*,\\s*['\"]([\\w]+)['\"]\\s*\\)"
+    soft_delete_filter: ['deletedAt', 'whereNotDeleted']
+    db_query: ['prisma\.\w+\.findMany', '\.where\(']
+    db_get: ['prisma\.\w+\.findUnique']
+  tool_entities: ['internal', 'test']
+```
+
+**Example — Convex project:**
+
+```yaml
+analysis:
+  deep_patterns:
+    auth_check: ['ctx\.userId\b', 'ctx\.user\b', 'makeAuth(?:Query|Mutation|Action)', 'requireAuth']
+    ownership_check: ['\.userId\s*[!=]==?\s*', 'canAccess\w*\(']
+    permission_call: "canAccess\\w*\\([^)]*,\\s*['\"]([\\w]+)['\"]\\s*\\)"
+    soft_delete_filter: ['isDeleted', 'deletedFilter', "\.eq\\s*\\(\\s*['\"]isDeleted['\"]"]
+    db_query: ['ctx\.db\.query\s*\(', '\.filter\s*\(']
+    db_get: ['ctx\.db\.get\s*\(']
+```
+
+**Example — Django project:**
+
+```yaml
+analysis:
+  deep_patterns:
+    auth_check: ['request\.user', '@login_required', 'IsAuthenticated']
+    ownership_check: ['\.owner\s*==', 'user=request\.user']
+    permission_call: "has_perm\\(['\"]([\\w.]+)['\"]\\)"
+    soft_delete_filter: ['is_deleted=False', 'exclude\\(is_deleted=True\\)']
+    db_query: ['\.objects\.filter\(', '\.objects\.all\(']
+    db_get: ['\.objects\.get\(']
+```
+
+**Which rules are affected:**
+
+| Rule | Patterns Used | Description |
+|------|---------------|-------------|
+| SEC-10 | `auth_check` | Auth required but code never checks user identity |
+| SEC-11 | `ownership_check`, `db_get` | Owner-scoped invariant without ownership check |
+| SEC-13 | `permission_call` | Permission drift between spec and code |
+| SEC-14 | `soft_delete_filter`, `db_query` | Query without soft-delete filter |
 
 ### `health`
 

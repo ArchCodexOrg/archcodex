@@ -1,0 +1,391 @@
+# SpecCodex Parser Specification
+#
+# Dogfooding: This spec defines the parser that will parse specs.
+# The parser must handle all features used in this file.
+
+version: "1.0"
+
+spec.speccodex.parse:
+  inherits: spec.function
+  implementation: src/core/spec/loader.ts#loadSpecFile
+
+  # === STRATEGIC ===
+  goal: "Parse YAML spec files into validated AST with inheritance and mixin resolution"
+  outcomes:
+    - "Parse any valid spec YAML file"
+    - "Resolve inheritance chains (inherits)"
+    - "Expand mixins with variable substitution"
+    - "Handle YAML anchors and aliases"
+    - "Return structured errors with line numbers"
+
+  # === OPERATIONAL ===
+  intent: "Parse a spec YAML file and return its resolved AST"
+
+  inputs:
+    filepath: { type: string, required: true, description: "Path to spec YAML file" }
+    content: { type: string, description: "Raw YAML content (for testing)" }
+    options:
+      type: object
+      properties:
+        resolveMixins: { type: boolean, default: true }
+        resolveInherits: { type: boolean, default: true }
+        validateStructure: { type: boolean, default: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "if result.valid then result.ast is defined": true }
+    - { "if result.valid then result.errors is empty": true }
+    - { "if not result.valid then result.errors is not empty": true }
+    - { "error.line is number when error exists": true }
+    - { "result.specId matches spec.* pattern": true }
+
+  # === EXAMPLES ===
+  defaults: &valid_file
+    filepath: "test.spec.yaml"
+
+  examples:
+    success:
+      # Basic parsing
+      - name: "parse valid spec"
+        given: { <<: *valid_file, content: "spec.test: { intent: 'Test' }" }
+        then: { result.valid: true, result.ast.intent: "Test" }
+
+      # Inheritance
+      - name: "resolve inheritance"
+        given:
+          <<: *valid_file
+          content: "spec.test: { inherits: spec.mutation, intent: 'Test' }"
+        then:
+          result.valid: true
+          result.ast.security.authentication: required  # From spec.mutation
+
+      # Mixin expansion
+      - name: "expand mixins"
+        given:
+          <<: *valid_file
+          content: "spec.test: { mixins: [requires_auth], intent: 'Test' }"
+        then:
+          result.valid: true
+          result.ast.examples.errors: "@contains({ error: 'NOT_AUTHENTICATED' })"
+
+      # Mixin with variables
+      - name: "substitute mixin variables"
+        given:
+          <<: *valid_file
+          content: "spec.test: { mixins: [logs_audit: { action: 'test.create', resource: 'test' }], intent: 'Test' }"
+        then:
+          result.valid: true
+          result.ast.effects: "@contains({ audit_log: { action: 'test.create' } })"
+
+      # YAML anchors
+      - name: "handle YAML anchors"
+        given:
+          <<: *valid_file
+          content: |
+            spec.test:
+              defaults: &auth
+                user: "@authenticated"
+              examples:
+                success:
+                  - { <<: *auth, url: "https://x.com" }
+        then:
+          result.valid: true
+          result.ast.examples.success[0].user: "@authenticated"
+
+      # Multiple inheritance
+      - name: "chain inheritance"
+        given:
+          <<: *valid_file
+          content: "spec.test: { inherits: spec.action, intent: 'Test' }"
+        then:
+          result.valid: true
+          result.ast.security.rate_limit.requests: 30  # From spec.action
+
+    errors:
+      # Invalid YAML
+      - name: "invalid YAML syntax"
+        given: { filepath: "invalid.yaml", content: "spec.test: { intent: missing quote }" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "YAML_PARSE_ERROR"
+
+      # Missing required field
+      - name: "missing intent"
+        given: { <<: *valid_file, content: "spec.test: { goal: 'No intent' }" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_FIELD"
+          "result.errors[0].field": "intent"
+
+      # Unknown mixin
+      - name: "unknown mixin"
+        given: { <<: *valid_file, content: "spec.test: { mixins: [nonexistent], intent: 'Test' }" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "UNKNOWN_MIXIN"
+          "result.errors[0].mixin": "nonexistent"
+
+      # Circular inheritance
+      - name: "circular inheritance"
+        given: { <<: *valid_file, content: "spec.test: { inherits: spec.test, intent: 'Loop' }" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "CIRCULAR_INHERITANCE"
+
+      # Invalid spec ID
+      - name: "invalid spec ID format"
+        given: { <<: *valid_file, content: "invalid-id: { intent: 'Bad ID' }" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "INVALID_SPEC_ID"
+
+      # File not found
+      - name: "file not found"
+        given: { filepath: "nonexistent.spec.yaml" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "FILE_NOT_FOUND"
+
+      - name: "invalid spec structure"
+        then: { error: "INVALID_SPEC_STRUCTURE" }
+
+      - name: "schema validation error"
+        then: { error: "SCHEMA_VALIDATION_ERROR" }
+
+      - name: "unknown field"
+        then: { error: "UNKNOWN_FIELD" }
+
+      - name: "goal without outcomes"
+        then: { error: "GOAL_WITHOUT_OUTCOMES" }
+
+      - name: "example missing name"
+        then: { error: "EXAMPLE_MISSING_NAME" }
+
+spec.speccodex.resolve:
+  inherits: spec.function
+  implementation: src/core/spec/resolver.ts#resolveSpec
+
+  # === STRATEGIC ===
+  goal: "Resolve a spec by ID, expanding inheritance and mixins"
+  outcomes:
+    - "Look up spec in registry by ID"
+    - "Fully expand all inherited fields"
+    - "Substitute all mixin variables"
+    - "Return flattened spec ready for consumption"
+
+  # === OPERATIONAL ===
+  intent: "Resolve a spec ID to its fully expanded form"
+
+  inputs:
+    registry:
+      type: object
+      required: true
+      description: "SpecRegistry containing nodes and mixins"
+    specId:
+      type: string
+      required: true
+      pattern: "spec\\.[a-z][a-z0-9_.]*"
+    options:
+      type: object
+      properties:
+        expandMixins: { type: boolean, default: true }
+        resolveInherits: { type: boolean, default: true }
+        variables: { type: object, description: "Mixin variable substitution" }
+
+  outputs:
+    valid:
+      type: boolean
+    spec:
+      type: object
+      description: "ResolvedSpec with specId, inheritanceChain, appliedMixins, node"
+    errors:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+          field: { type: string, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "result has no unresolved ${} variables (UNRESOLVED_VARIABLE error if found)": true }
+    - { "result has no inherits field (fully resolved, stripped after merge)": true }
+    - { "result has no mixins field (fully expanded, stripped after merge)": true }
+    - { "valid is true when spec is found and resolution succeeds": true }
+    - { "arrays (outcomes, invariants) concatenate from parent to child": true }
+    - { "inputs merge at field-name level (child replaces entire field definition)": true }
+    - { "variable values are coerced to strings": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "resolve by ID"
+        given:
+          registry:
+            nodes:
+              spec.product.create: { intent: "Create product", implementation: "src/create.ts#create" }
+            mixins: {}
+          specId: "spec.product.create"
+        then:
+          result.valid: true
+          result.spec.node.intent: "@defined"
+          result.errors: []
+
+      - name: "resolve with inheritance"
+        given:
+          registry:
+            nodes:
+              spec.function: { required_fields: [intent] }
+              spec.test: { inherits: spec.function, intent: "Test" }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: true
+          result.spec.inheritanceChain: "@length(@gt(0))"
+
+    errors:
+      - name: "unknown spec ID"
+        given:
+          registry:
+            nodes: {}
+            mixins: {}
+          specId: "spec.nonexistent"
+        then:
+          result.valid: false
+          "result.errors[0].code": "SPEC_NOT_FOUND"
+
+      - name: "unknown mixin reference"
+        given:
+          registry:
+            nodes:
+              spec.test: { intent: "Test", mixins: [nonexistent] }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "UNKNOWN_MIXIN"
+
+      - name: "circular inheritance"
+        given:
+          registry:
+            nodes:
+              spec.a: { inherits: spec.b, intent: "A" }
+              spec.b: { inherits: spec.a, intent: "B" }
+            mixins: {}
+          specId: "spec.a"
+        then:
+          result.valid: false
+          "result.errors[0].code": "CIRCULAR_INHERITANCE"
+
+      - name: "resolution error"
+        then: { error: "RESOLUTION_ERROR" }
+
+      - name: "unresolved variable"
+        then: { error: "UNRESOLVED_VARIABLE" }
+
+# === SCHEMA DISCOVERY ===
+
+spec.speccodex.schema:
+  inherits: spec.function
+  implementation: src/core/spec/schema-docs.ts#getSpecSchema
+
+  # === STRATEGIC ===
+  goal: "Provide schema documentation for LLMs to understand spec structure"
+  outcomes:
+    - "List all available spec fields with descriptions"
+    - "Show input field types and their options"
+    - "Show example structures (success, errors, warnings, boundaries)"
+    - "List available @ placeholders with examples"
+    - "List effect types with examples"
+    - "Provide complete spec examples"
+
+  # === OPERATIONAL ===
+  intent: "Get schema information for writing specs"
+
+  inputs:
+    filter:
+      type: enum
+      values: [all, fields, inputs, examples, placeholders, effects, base-specs]
+      default: all
+      description: "Filter to specific category"
+    includeExamples:
+      type: boolean
+      default: false
+      description: "Include working YAML examples"
+
+  # === INVARIANTS ===
+  invariants:
+    - "output is valid YAML or structured text"
+    - "all field descriptions include type info"
+    - "placeholders include usage examples"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "list all schema"
+        given: { filter: all }
+        then:
+          result.sections: ["fields", "inputs", "examples", "placeholders", "effects"]
+
+      - name: "uses default filter 'all'"
+        given:
+          # filter omitted — should default to 'all'
+          includeExamples: false
+        then:
+          result.sections: "@defined"
+
+      - name: "list spec fields"
+        given: { filter: fields }
+        then:
+          result.fields: "@contains('intent')"
+          result.fields: "@contains('goal')"
+          result.fields: "@contains('inputs')"
+          result.fields: "@contains('invariants')"
+          result.fields: "@contains('examples')"
+          result.fields: "@contains('effects')"
+
+      - name: "list input types"
+        given: { filter: inputs }
+        then:
+          result.types: "@contains('string')"
+          result.types: "@contains('number')"
+          result.types: "@contains('boolean')"
+          result.types: "@contains('enum')"
+          result.types: "@contains('id')"
+          result.types: "@contains('object')"
+
+      - name: "list placeholders"
+        given: { filter: placeholders }
+        then:
+          result.placeholders: "@contains('@authenticated')"
+          result.placeholders: "@contains('@string(N)')"
+          result.placeholders: "@contains('@now')"
+          result.placeholders: "@contains('@created')"
+
+      - name: "list effect types"
+        given: { filter: effects }
+        then:
+          result.effects: "@contains('audit_log')"
+          result.effects: "@contains('database')"
+          result.effects: "@contains('embedding')"
+          result.effects: "@contains('cache')"
+
+      - name: "list base specs"
+        given: { filter: base-specs }
+        then:
+          result.baseSpecs: "@contains('spec.function')"
+          result.baseSpecs: "@contains('spec.mutation')"
+          result.baseSpecs: "@contains('spec.query')"
+
+      - name: "include examples"
+        given: { filter: fields, includeExamples: true }
+        then:
+          result.examples: "@defined"
+
+    errors:
+      - name: "invalid URL"
+        then: { error: "INVALID_URL" }
+
+      - name: "error code"
+        then: { error: "ERROR_CODE" }

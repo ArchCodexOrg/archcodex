@@ -1,0 +1,213 @@
+# LLM Evaluation Test Scenarios
+# Tests the archcodex_context tool with different models and configurations
+
+settings:
+  runsPerScenario: 3
+  projectRoot: /Users/stefanvanegmond/development/ArchCodex
+
+models:
+  haiku:
+    apiName: claude-3-5-haiku-20241022
+    maxTokens: 4096
+  opus:
+    apiName: claude-opus-4-5-20251101
+    maxTokens: 4096
+
+scenarios:
+  # Easy Tasks (single file, obvious constraints)
+  - id: E1
+    difficulty: easy
+    task: Add checksum field to FileRecord type
+    module: src/core/db/
+    prompts:
+      detailed: prompts/easy/E1-detailed.md
+      oneliner: prompts/easy/E1-oneliner.md
+    expected:
+      filesModified:
+        - src/core/db/types.ts
+      modificationOrder:
+        - types.ts
+      mustPass: true
+      rubric:
+        - Field added to correct interface
+        - Field has appropriate type (string)
+        - Optional marker if appropriate
+        - No unrelated changes
+
+  - id: E2
+    difficulty: easy
+    task: Rename formatOutput to formatResult
+    module: src/core/unified-context/
+    prompts:
+      detailed: prompts/easy/E2-detailed.md
+      oneliner: prompts/easy/E2-oneliner.md
+    expected:
+      filesModified:
+        - src/core/unified-context/formatter.ts
+      modificationOrder:
+        - formatter.ts
+      mustPass: true
+      rubric:
+        - Function renamed correctly
+        - All call sites identified
+        - Export updated if public
+        - No broken references
+      consumers:
+        - src/mcp/handlers/unified-context.ts
+
+  - id: E3
+    difficulty: easy
+    task: Add validation to synthesizeUnifiedContext
+    module: src/core/unified-context/
+    prompts:
+      detailed: prompts/easy/E3-detailed.md
+      oneliner: prompts/easy/E3-oneliner.md
+    expected:
+      filesModified:
+        - src/core/unified-context/synthesizer.ts
+      modificationOrder:
+        - synthesizer.ts
+      mustPass: true
+      rubric:
+        - Validation added at function start
+        - Uses early return pattern
+        - Error message is descriptive
+        - No changes to core logic
+
+  # Medium Tasks (multi-file awareness)
+  - id: M1
+    difficulty: medium
+    task: Create archcodex metrics CLI command
+    module: src/cli/commands/
+    prompts:
+      detailed: prompts/medium/M1-detailed.md
+      oneliner: prompts/medium/M1-oneliner.md
+    expected:
+      filesModified:
+        - src/cli/commands/metrics.ts
+        - src/cli/index.ts
+      modificationOrder:
+        - metrics.ts
+        - index.ts
+      mustPass: true
+      rubric:
+        - Uses archcodex.cli.command architecture tag
+        - Imports only from allowed layers (core, utils)
+        - Does NOT import from mcp layer
+        - Follows existing command patterns
+        - Registered in CLI index
+
+  - id: M2
+    difficulty: medium
+    task: Add MCP handler for architecture statistics
+    module: src/mcp/handlers/
+    prompts:
+      detailed: prompts/medium/M2-detailed.md
+      oneliner: prompts/medium/M2-oneliner.md
+    expected:
+      filesModified:
+        - src/mcp/handlers/architecture-stats.ts
+        - src/mcp/handlers/index.ts
+      modificationOrder:
+        - architecture-stats.ts
+        - index.ts
+      mustPass: true
+      rubric:
+        - Uses archcodex.cli.mcp.handler architecture tag
+        - Does NOT import commander or @modelcontextprotocol/sdk/server/index.js
+        - Delegates to core engine
+        - Follows existing handler patterns
+
+  - id: M3
+    difficulty: medium
+    task: Rename getImportGraph function
+    module: src/core/db/repositories/
+    prompts:
+      detailed: prompts/medium/M3-detailed.md
+      oneliner: prompts/medium/M3-oneliner.md
+    expected:
+      filesModified:
+        - src/core/db/repositories/imports.ts
+      modificationOrder:
+        - imports.ts
+      mustPass: true
+      rubric:
+        - Function renamed correctly
+        - Identifies all 4+ consumers
+        - Plans updates to all consumers
+        - Acknowledges high impact
+      consumers:
+        - src/core/unified-context/synthesizer.ts
+        - src/core/db/formatters.ts
+        - src/mcp/handlers/architecture-map.ts
+
+  # Hard Tasks (complex architectural reasoning)
+  - id: H1
+    difficulty: hard
+    task: Add caching layer to unified context synthesizer
+    module: src/core/unified-context/
+    prompts:
+      detailed: prompts/hard/H1-detailed.md
+      oneliner: prompts/hard/H1-oneliner.md
+    expected:
+      filesModified:
+        - src/core/unified-context/types.ts
+        - src/core/unified-context/cache.ts
+        - src/core/unified-context/synthesizer.ts
+      modificationOrder:
+        - types.ts
+        - cache.ts
+        - synthesizer.ts
+      mustPass: true
+      rubric:
+        - Cache types defined first
+        - Cache implementation separate
+        - Synthesizer updated last
+        - Respects layer boundaries
+        - Uses existing caching patterns if any
+
+  - id: H2
+    difficulty: hard
+    task: Create new src/core/metrics module
+    module: src/core/
+    prompts:
+      detailed: prompts/hard/H2-detailed.md
+      oneliner: prompts/hard/H2-oneliner.md
+    expected:
+      filesModified:
+        - src/core/metrics/types.ts
+        - src/core/metrics/collector.ts
+        - src/core/metrics/index.ts
+      modificationOrder:
+        - types.ts
+        - collector.ts
+        - index.ts
+      mustPass: true
+      rubric:
+        - Uses archcodex.core.types for types
+        - Uses archcodex.core.engine for collector
+        - Barrel exports in index
+        - Does NOT import from cli/mcp layers
+        - Follows existing core module patterns
+
+  - id: H3
+    difficulty: hard
+    task: Refactor entity context to use unified infrastructure
+    module: src/core/context/
+    prompts:
+      detailed: prompts/hard/H3-detailed.md
+      oneliner: prompts/hard/H3-oneliner.md
+    expected:
+      filesModified:
+        - src/core/context/types.ts
+        - src/core/context/synthesizer.ts
+      modificationOrder:
+        - types.ts
+        - synthesizer.ts
+      mustPass: true
+      rubric:
+        - Identifies shared code with unified-context
+        - Plans migration without breaking changes
+        - Maintains backward compatibility
+        - Documents deprecation if needed
+        - Tests still pass

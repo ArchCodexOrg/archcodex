@@ -1,0 +1,62 @@
+version: "1.0"
+
+spec.test.e2e.placeholderFull:
+  type: test
+  inherits: spec.function
+  goal: "End-to-end placeholder expansion with nested and combined operators"
+  intent: "Test all placeholder expansions"
+
+  inputs:
+    text: { type: string, max: 100 }
+    count: { type: number, min: 0, max: 1000 }
+    items: { type: array, items: { type: object } }
+
+  outputs:
+    result: { type: object }
+
+  examples:
+    success:
+      - name: "string generator"
+        given: { text: "@string(50)" }
+        then: { result: "@exists" }
+
+      - name: "url generator"
+        given: { text: "@url(100)" }
+        then: { result: "@exists" }
+
+      - name: "timestamp now"
+        given: { count: "@now" }
+        then: { result.time: "@defined" }
+
+      - name: "numeric comparisons"
+        given: { count: 50 }
+        then:
+          result.a: "@gt(0)"
+          result.b: "@gte(1)"
+          result.c: "@lt(100)"
+          result.d: "@lte(99)"
+          result.e: "@between(1, 100)"
+
+      - name: "array assertions"
+        given: { items: [{ id: 1 }, { id: 2 }] }
+        then:
+          result.items: "@length(2)"
+          result.items2: "@hasItem({ id: 1 })"
+          result.type: "@type('array')"
+
+      - name: "string assertions"
+        given: { text: "hello world" }
+        then:
+          result.text: "@contains('world')"
+          result.pattern: "@matches('^hello')"
+
+      - name: "object assertions"
+        given: { text: "test" }
+        then:
+          result.obj: "@hasProperties({ success: true })"
+          result.status: "@oneOf(['ok', 'pending'])"
+
+      - name: "composite assertions"
+        given: { count: 50 }
+        then:
+          result.value: "@all(@gt(0), @lt(100))"

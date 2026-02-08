@@ -1,10 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.core.domain.constraint
- * @intent:tested
  *
  * Tests for additional parameter flexibility fixes:
  * - archcodex_validate_plan: newImports and codePatterns as string or array

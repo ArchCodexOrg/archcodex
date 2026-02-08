@@ -1,0 +1,77 @@
+version: "1.0"
+
+spec.resource.archive:
+  type: test
+  goal: "Archive a resource with cleanup and collaborator notification"
+  intent: "User archives a resource, triggering cleanup and notifications"
+
+  inputs:
+    resourceId:
+      type: id
+      table: resources
+      required: true
+    reason:
+      type: string
+      max: 500
+    notifyCollaborators:
+      type: boolean
+      default: true
+
+  outputs:
+    success:
+      type: boolean
+    archivedAt:
+      type: number
+    notificationsSent:
+      type: number
+
+  security:
+    authentication: required
+    permissions:
+      - resource.archive
+
+  invariants:
+    - "archivedAt is greater than or equal to request timestamp"
+    - "notificationsSent is greater than or equal to 0"
+
+  effects:
+    - action: audit_log
+      audit_action: "resource.archive"
+      resourceType: "resource"
+    - action: database
+      table: "resources"
+      operation: "update"
+    - action: cache
+      invalidated: "resource_list"
+    - action: notification
+      type: "resource_archived"
+      channel: "email"
+    - action: scheduler
+      job: "cleanupResourceAssets"
+      delay: "24h"
+
+  examples:
+    success:
+      - name: "archive with notification"
+        given:
+          user: "@authenticated"
+          resourceId: "res_123"
+          notifyCollaborators: true
+        then:
+          result.success: true
+          result.notificationsSent: "@gte(1)"
+      - name: "archive without notification"
+        given:
+          user: "@authenticated"
+          resourceId: "res_456"
+          notifyCollaborators: false
+        then:
+          result.success: true
+          result.notificationsSent: 0
+    errors:
+      - name: "missing resource"
+        given:
+          user: "@authenticated"
+          resourceId: "nonexistent"
+        then:
+          error: "RESOURCE_NOT_FOUND"

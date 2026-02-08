@@ -1,0 +1,57 @@
+version: "1.0"
+
+spec.test.parseTags:
+  inherits: spec.function
+  implementation: tests/spec/e2e/tag-parser.ts#parseTags
+
+  goal: "Parse hashtags from text"
+  outcomes:
+    - "Extracts hashtags from text and returns them without # prefix"
+    - "Supports lowercase normalization and max tag limit"
+  intent: "Extract #tags from a string"
+
+  inputs:
+    text:
+      type: string
+      required: true
+      description: "Text containing hashtags"
+    options:
+      type: object
+      properties:
+        lowercase: { type: boolean, default: true }
+        maxTags: { type: number, default: 10 }
+
+  outputs:
+    tags: { type: array, description: "Extracted tags without # prefix" }
+    count: { type: number }
+    error: { type: string, optional: true }
+
+  examples:
+    success:
+      - name: "single tag"
+        given: { text: "Hello #world" }
+        then:
+          result.tags: "@hasItem('world')"
+          result.count: 1
+          result.error: "@undefined"
+      - name: "multiple tags"
+        given: { text: "I love #coding and #typescript" }
+        then:
+          result.tags: "@all(@hasItem('coding'), @hasItem('typescript'), @length(2))"
+          result.count: 2
+      - name: "max tags limit"
+        given: { text: "#a #b #c #d #e", options: { maxTags: 3 } }
+        then:
+          result.tags: "@length(@lte(3))"
+          result.count: "@lte(3)"
+      - name: "lowercase normalization"
+        given: { text: "#Hello #WORLD", options: { lowercase: true } }
+        then:
+          result.tags: "@all(@hasItem('hello'), @hasItem('world'))"
+    errors:
+      - name: "empty text"
+        given: { text: "" }
+        then: { result.error: "EMPTY_INPUT", result.count: 0 }
+      - name: "no tags found"
+        given: { text: "No hashtags here" }
+        then: { result.tags: "@length(0)", result.count: 0 }

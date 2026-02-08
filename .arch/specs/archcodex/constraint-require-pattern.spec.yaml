@@ -1,0 +1,148 @@
+# Require Pattern Constraint Specification
+#
+# Validates that required regex patterns exist in file content.
+# Used for enforcing code patterns like soft-delete filters, security annotations,
+# error handling structures, etc.
+
+version: "1.0"
+
+spec.archcodex.constraintRequirePattern:
+  inherits: spec.function
+  implementation: src/core/constraints/require-pattern.ts#RequirePatternValidator
+
+  # === STRATEGIC ===
+  goal: "Ensure required code patterns exist in files matching an architecture"
+  outcomes:
+    - "Files contain required patterns (e.g. isDeleted filter in queries)"
+    - "Missing patterns produce clear violation messages"
+    - "Invalid regex patterns are reported as violations, not crashes"
+    - "Fix hints guide developers to add the missing pattern"
+
+  # === OPERATIONAL ===
+  intent: "Extract regex from constraint.pattern, test it against file content with multiline+dotAll flags, report violations"
+
+  inputs:
+    constraint:
+      type: object
+      required: true
+      description: "Constraint object with rule='require_pattern', pattern field, and optional value description"
+      properties:
+        rule:
+          type: string
+          enum: ["require_pattern"]
+        pattern:
+          type: string
+          description: "Regex pattern to require"
+        value:
+          type: string
+          description: "Human-readable description of the requirement"
+    context:
+      type: object
+      required: true
+      description: "ConstraintContext with parsedFile containing file content"
+      properties:
+        parsedFile:
+          type: object
+          properties:
+            content:
+              type: string
+              description: "Full file content to check"
+
+  outputs:
+    passed:
+      type: boolean
+      description: "Whether the pattern was found in the file"
+    violations:
+      type: array
+      description: "List of violations (empty if passed)"
+
+  examples:
+    success:
+      - name: "pattern found in file content"
+        given:
+          constraint:
+            rule: "require_pattern"
+            pattern: "isDeleted.*false"
+            value: "Soft delete filter required"
+          context:
+            parsedFile:
+              content: "const items = db.query().filter(q => q.eq(q.field('isDeleted'), false));"
+        then:
+          result.passed: true
+          result.violations: "@length(0)"
+
+      - name: "multiline pattern matches across lines"
+        given:
+          constraint:
+            rule: "require_pattern"
+            pattern: "export class.*\\{[\\s\\S]*dispose"
+            value: "Class must have dispose method"
+          context:
+            parsedFile:
+              content: "export class Scanner {\n  private cache = new Map();\n  dispose(): void {\n    this.cache.clear();\n  }\n}"
+        then:
+          result.passed: true
+          result.violations: "@length(0)"
+
+      - name: "pattern not found produces violation"
+        given:
+          constraint:
+            rule: "require_pattern"
+            pattern: "@security-reviewed"
+            value: "Security review annotation required"
+          context:
+            parsedFile:
+              content: "export function processInput(data: string) { return data; }"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+      - name: "violation message includes description from value field"
+        given:
+          constraint:
+            rule: "require_pattern"
+            pattern: "isDeleted"
+            value: "Soft delete filter required"
+          context:
+            parsedFile:
+              content: "export function getAll() { return db.query(); }"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+      - name: "missing pattern field produces violation"
+        given:
+          constraint:
+            rule: "require_pattern"
+          context:
+            parsedFile:
+              content: "any content"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+    errors:
+      - name: "invalid regex produces violation instead of throwing"
+        given:
+          constraint:
+            rule: "require_pattern"
+            pattern: "[invalid(regex"
+          context:
+            parsedFile:
+              content: "some content"
+        then:
+          result.passed: false
+          result.violations: "@length(1)"
+
+  invariants:
+    - description: "passed is true if and only if violations is empty"
+      condition: "result.passed === (result.violations.length === 0)"
+
+    - description: "error code is always E018"
+      condition: "validator.errorCode === 'E018'"
+
+    - description: "rule name is always require_pattern"
+      condition: "validator.rule === 'require_pattern'"
+
+    - description: "never throws on any input"
+      condition: "validate() always returns a ConstraintResult, never throws"

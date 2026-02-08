@@ -1,0 +1,101 @@
+version: "1.0"
+
+spec.item.duplicate:
+  type: test
+  inherits: spec.mutation
+  architectures: [convex.mutation]
+
+  goal: "Duplicate an item preserving metadata and optional attachments"
+  intent: "User duplicates an existing item from context menu"
+
+  inputs:
+    itemId: {type: id, table: items, required: true}
+    includeAttachments: {type: boolean, default: false}
+
+  outputs:
+    _id: {type: id, table: items}
+    title: {type: string}
+    originalId: {type: id, table: items}
+    attachmentCount: {type: number}
+
+  security:
+    authentication: required
+    rate_limit: {requests: 30, window: "1m"}
+
+  invariants:
+    - condition: "result.title.startsWith('Copy of ')"
+    - condition: "result.originalId === input.itemId"
+    - { "result.attachmentCount": "@gte(0)" }
+
+  defaults: &auth_user
+    user: "@authenticated"
+
+  examples:
+    success:
+      - name: "duplicate without attachments"
+        given:
+          <<: *auth_user
+          itemId: "item_123"
+          includeAttachments: false
+        then:
+          result._id: "@exists"
+          result.title: "@contains('Copy of')"
+          result.attachmentCount: 0
+      - name: "duplicate with attachments"
+        given:
+          <<: *auth_user
+          itemId: "item_456"
+          includeAttachments: true
+        then:
+          result._id: "@exists"
+          result.attachmentCount: "@gte(0)"
+    errors:
+      - name: "item not found"
+        given:
+          <<: *auth_user
+          itemId: "nonexistent"
+        then:
+          error: "ITEM_NOT_FOUND"
+      - name: "no permission"
+        given:
+          user: "@no_access"
+          itemId: "item_123"
+        then:
+          error: "PERMISSION_DENIED"
+    boundaries:
+      - name: "item at attachment limit"
+        itemId: "@string(24)"
+        includeAttachments: true
+        then:
+          result: "@exists"
+        property: "forall valid items, duplication succeeds"
+
+  effects:
+    - audit_log: {action: "item.duplicate", resourceType: "item"}
+    - database: {table: "items", operation: "insert"}
+
+  ui:
+    trigger:
+      location: "context menu"
+      element: "[data-item-row]"
+      label: "Duplicate"
+      icon: "copy"
+      shortcut: "Cmd+D"
+    interaction:
+      flow:
+        - "User right-clicks on item row"
+        - "Context menu appears"
+        - "User clicks Duplicate"
+        - "New item appears below original"
+        - "Focus moves to new item title"
+      optimistic: true
+      loading: "Inline spinner on row"
+    accessibility:
+      role: "menuitem"
+      label: "Duplicate item"
+      keyboardNav:
+        - {key: "Enter", action: "duplicate"}
+        - {key: "Escape", action: "close menu"}
+    feedback:
+      success: "Item duplicated"
+      error: "Failed to duplicate item"

@@ -3,6 +3,10 @@
 archcodex.cli:
   inherits: base
   description: Presentation layer - CLI commands and formatters
+  reference_implementations:
+    - src/cli/index.ts
+  file_pattern: "*.ts"
+  default_path: src/cli
   rationale: |
     The outermost layer handling user interaction via command line.
     Thin layer that parses input, delegates to core, and formats output.

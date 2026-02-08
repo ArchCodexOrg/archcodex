@@ -186,8 +186,7 @@ export function createCheckCommand(): Command {
 
             cacheManager = new CacheManager(projectRoot, registryContent, configContent);
             await cacheManager.load();
-          } catch {
-            // Cache loading failed, continue without cache
+          } catch { /* cache loading failed, continue without cache */
             cacheManager = undefined;
           }
         }

@@ -1,0 +1,90 @@
+# ADR: {{TITLE}}
+
+## Status
+
+{{#if DEPRECATED_FROM}}
+**Deprecated** (since {{DEPRECATED_FROM}})
+{{#if MIGRATION_GUIDE}}
+
+See [Migration Guide]({{MIGRATION_GUIDE}})
+{{/if}}
+{{else}}
+**Active**
+{{/if}}
+
+## Context
+
+{{CONTEXT}}
+
+{{#if INHERITANCE_CHAIN}}
+### Inheritance
+
+Inherits from: {{INHERITANCE_CHAIN}}
+
+{{/if}}
+{{#if APPLIED_MIXINS}}
+### Applied Mixins
+
+{{APPLIED_MIXINS}}
+
+{{/if}}
+## Decision
+
+{{#if HAS_CONSTRAINTS}}
+Files using this architecture must follow these constraints:
+
+{{CONSTRAINTS_SECTION}}
+{{else}}
+No specific constraints defined. Inherits base constraints only.
+{{/if}}
+
+{{#if FILE_CONVENTIONS}}
+### File Conventions
+
+{{FILE_CONVENTIONS}}
+
+{{/if}}
+## Consequences
+
+{{#if FORBIDDEN_SECTION}}
+### Forbidden
+
+{{FORBIDDEN_SECTION}}
+
+{{/if}}
+{{#if REQUIRED_SECTION}}
+### Required
+
+{{REQUIRED_SECTION}}
+
+{{/if}}
+{{#unless FORBIDDEN_SECTION}}{{#unless REQUIRED_SECTION}}
+This architecture has no explicit forbidden or required items.
+{{/unless}}{{/unless}}
+
+{{#if HINTS_SECTION}}
+## Guidelines
+
+{{HINTS_SECTION}}
+
+{{/if}}
+{{#if REFERENCES_SECTION}}
+## References
+
+{{REFERENCES_SECTION}}
+
+{{/if}}
+{{#if CODE_PATTERN}}
+### Code Pattern
+
+```typescript
+{{CODE_PATTERN}}
+```
+
+{{/if}}
+{{#if INTENTS_SECTION}}
+### Intent Annotations
+
+{{INTENTS_SECTION}}
+
+{{/if}}

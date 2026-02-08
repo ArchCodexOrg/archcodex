@@ -1,0 +1,53 @@
+version: "1.0"
+
+spec.test.validatePhone:
+  inherits: spec.function
+  implementation: tests/spec/e2e/phone-validator.ts#validatePhone
+
+  goal: "Validate phone numbers in various formats"
+  outcomes:
+    - "Returns valid: true and normalized form for valid phone numbers"
+    - "Returns valid: false with error code for invalid inputs"
+  intent: "Check if string is a valid phone number"
+
+  inputs:
+    phone:
+      type: string
+      required: true
+      description: "Phone number to validate"
+    options:
+      type: object
+      properties:
+        country: { type: string, default: "US" }
+        strict: { type: boolean, default: false }
+
+  outputs:
+    valid: { type: boolean }
+    error: { type: string, optional: true }
+    normalized: { type: string, optional: true }
+
+  invariants:
+    - "if valid then error is undefined"
+    - "if valid then normalized contains only digits"
+
+  examples:
+    success:
+      - name: "valid US phone"
+        given: { phone: "(555) 123-4567" }
+        then: { result.valid: true, result.normalized: "@length(10)", result.error: "@undefined" }
+      - name: "valid with country code"
+        given: { phone: "+1-555-123-4567" }
+        then: { result.valid: true, result.normalized: "@defined" }
+      - name: "valid international"
+        given: { phone: "+44 20 7946 0958", options: { country: "UK" } }
+        then: { result.valid: true }
+    errors:
+      - name: "too short"
+        given: { phone: "123" }
+        then: { result.valid: false, result.error: "TOO_SHORT", result.normalized: "@undefined" }
+      - name: "invalid characters"
+        given: { phone: "555-abc-1234" }
+        then: { result.valid: false, result.error: "INVALID_CHARS" }
+      - name: "empty string"
+        given: { phone: "" }
+        then: { result.valid: false, result.error: "EMPTY_INPUT" }

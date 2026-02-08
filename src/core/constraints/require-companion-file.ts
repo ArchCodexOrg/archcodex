@@ -157,7 +157,7 @@ export class RequireCompanionFileValidator extends BaseConstraintValidator {
         new RegExp(`from\\s+['"]\\./${sourceName}['"]`),
       ];
       return { exports: patterns.some(p => p.test(content)), suggestedExport };
-    } catch {
+    } catch { /* file read error */
       return { exports: false, suggestedExport };
     }
   }

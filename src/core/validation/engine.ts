@@ -222,7 +222,7 @@ export class ValidationEngine {
             // Pattern not found, skip this constraint
             continue;
           }
-        } catch {
+        } catch { /* invalid regex pattern */
           // Invalid regex, skip (should we warn?)
           continue;
         }
@@ -708,11 +708,6 @@ function getUntaggedHint(filePath: string): string {
   // Web workers
   if (lowerPath.includes('worker.') || lowerPath.endsWith('worker.js') || lowerPath.endsWith('worker.ts')) {
     return 'Worker files may need .archignore if they have special bundling';
-  }
-
-  // Bookmarklets / browser scripts
-  if (lowerPath.includes('bookmarklet')) {
-    return 'Bookmarklet files typically belong in .archignore';
   }
 
   // Generated / build output

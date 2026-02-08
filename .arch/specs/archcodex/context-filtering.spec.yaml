@@ -1,0 +1,201 @@
+# Context Filtering Specification
+#
+# Relevance scoring and truncation for entity file references.
+# Reduces noise when agents request entity context by prioritizing
+# files directly related to the current operation.
+
+version: "1.0"
+
+spec.archcodex.contextRelevance:
+  inherits: spec.function
+  implementation: src/core/context/synthesizer.ts#scoreFileRelevance
+
+  # === STRATEGIC ===
+  goal: "Score file relevance for entity operations"
+  outcomes:
+    - "Files directly related to the operation are ranked highest"
+    - "Same-entity CRUD files are ranked as related"
+    - "Type definitions, tests, and barrels are ranked lowest"
+
+  # === OPERATIONAL ===
+  intent: "Rank files by relevance to reduce context noise for agents"
+
+  inputs:
+    file:
+      type: object
+      required: true
+      description: "EntityFileReference with path, refType, and lineNumber"
+      properties:
+        path: { type: string }
+        refType: { type: string }
+        lineNumber: { type: number, required: false, description: "Line number or null" }
+    operation:
+      type: string
+      required: false
+      description: "Operation name like 'createEntry' for relevance hint"
+
+  outputs:
+    result:
+      type: enum
+      values: [direct, related, peripheral]
+
+  examples:
+    success:
+      - name: "direct match - operation in filename"
+        given:
+          file: { path: "src/entries/mutations/createEntry.ts", refType: "operation", lineNumber: null }
+          operation: "createEntry"
+        then:
+          result: "direct"
+
+      - name: "direct match - kebab-case filename"
+        given:
+          file: { path: "src/entries/mutations/create-entry.ts", refType: "operation", lineNumber: null }
+          operation: "createEntry"
+        then:
+          result: "direct"
+
+      - name: "related - same entity CRUD in same dir"
+        given:
+          file: { path: "src/entries/mutations/updateEntry.ts", refType: "operation", lineNumber: null }
+          operation: "createEntry"
+        then:
+          result: "related"
+
+      - name: "peripheral - type definition"
+        given:
+          file: { path: "src/entries/types.ts", refType: "type", lineNumber: null }
+          operation: "createEntry"
+        then:
+          result: "peripheral"
+
+      - name: "peripheral - test file"
+        given:
+          file: { path: "tests/unit/entries/createEntry.test.ts", refType: "test", lineNumber: null }
+          operation: "createEntry"
+        then:
+          result: "peripheral"
+
+      - name: "peripheral - barrel export"
+        given:
+          file: { path: "src/entries/index.ts", refType: "barrel", lineNumber: null }
+          operation: "createEntry"
+        then:
+          result: "peripheral"
+
+      - name: "no operation hint - defaults to peripheral"
+        given:
+          file: { path: "src/entries/types.ts", refType: "type", lineNumber: null }
+        then:
+          result: "peripheral"
+
+  invariants:
+    - description: "operation in filename is always direct"
+      condition: "operation && file.path.includes(operation) implies result === 'direct'"
+
+    - description: "type definitions are always peripheral"
+      condition: "file.refType === 'type' implies result === 'peripheral'"
+
+    - description: "test files are always peripheral"
+      condition: "file.refType === 'test' implies result === 'peripheral'"
+
+    - description: "barrel files are always peripheral"
+      condition: "file.refType === 'barrel' implies result === 'peripheral'"
+
+
+spec.archcodex.contextFiltering:
+  inherits: spec.function
+  implementation: src/core/context/synthesizer.ts#filterFileReferences
+
+  # === STRATEGIC ===
+  goal: "Filter and truncate file references by relevance"
+  outcomes:
+    - "Direct and related files are always kept"
+    - "Peripheral files are truncated when over limit"
+    - "Agents receive manageable file lists"
+
+  # === OPERATIONAL ===
+  intent: "Return top N most relevant files, prioritizing direct/related matches"
+
+  inputs:
+    fileGroups:
+      type: array
+      required: true
+      description: "EntityFilesByArchitecture[] - file references grouped by architecture ID"
+    maxFiles:
+      type: number
+      default: 15
+    operation:
+      type: string
+      required: false
+      description: "Operation name for relevance scoring"
+
+  outputs:
+    filtered:
+      type: array
+      description: "Top N files by relevance"
+    truncated:
+      type: number
+      description: "Count of files omitted"
+
+  examples:
+    success:
+      - name: "keeps all files when under limit"
+        given:
+          fileGroups:
+            - archId: "test"
+              files:
+                - { path: "a.ts", refType: "operation", lineNumber: null }
+                - { path: "b.ts", refType: "operation", lineNumber: null }
+          maxFiles: 10
+        then:
+          result.filtered: "@exists"
+          result.truncated: 0
+
+      - name: "uses default maxFiles of 15"
+        given:
+          fileGroups:
+            - archId: "test"
+              files:
+                - { path: "a.ts", refType: "operation", lineNumber: null }
+          # maxFiles omitted — should default to 15
+        then:
+          result.truncated: 0
+
+      - name: "truncates peripheral when over limit"
+        given:
+          fileGroups:
+            - archId: "test"
+              files:
+                - { path: "createEntry.ts", refType: "operation", lineNumber: null }
+                - { path: "updateEntry.ts", refType: "operation", lineNumber: null }
+                - { path: "types.ts", refType: "type", lineNumber: null }
+                - { path: "index.ts", refType: "barrel", lineNumber: null }
+          maxFiles: 3
+          operation: "createEntry"
+        then:
+          result.truncated: "@gt(0)"
+
+      - name: "keeps direct and related even when over limit"
+        given:
+          fileGroups:
+            - archId: "test"
+              files:
+                - { path: "createEntry.ts", refType: "operation", lineNumber: null }
+                - { path: "deleteEntry.ts", refType: "operation", lineNumber: null }
+                - { path: "types.ts", refType: "type", lineNumber: null }
+          maxFiles: 2
+          operation: "createEntry"
+        then:
+          # Direct (createEntry) + related (deleteEntry) kept; peripheral (types) dropped
+          result.truncated: 1
+
+  invariants:
+    - description: "truncated count equals omitted files"
+      condition: "files.length === result.filtered.length + result.truncated"
+
+    - description: "direct matches are never truncated"
+      condition: "all direct files appear in result.filtered"
+
+    - description: "related matches are never truncated"
+      condition: "all related files appear in result.filtered"

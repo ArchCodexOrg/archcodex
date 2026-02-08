@@ -1,0 +1,91 @@
+version: "1.0"
+
+spec.test.e2e.fileUpload:
+  type: test
+  inherits: spec.mutation
+  architectures: [convex.mutation, frontend.component]
+
+  goal: "Test file upload with validation, progress tracking, and accessibility"
+  intent: "Upload a file with progress tracking and drag-drop support"
+
+  inputs:
+    file: { type: object, properties: { name: { type: string }, size: { type: number }, type: { type: string } } }
+    projectId: { type: id, table: projects, required: true }
+    tags: { type: array, items: { type: string }, default: [] }
+
+  outputs:
+    fileId: { type: id, table: files }
+    uploadUrl: { type: string }
+    progress: { type: number }
+
+  security:
+    authentication: required
+    permissions: [file.upload]
+
+  invariants:
+    - condition: "result.progress >= 0 && result.progress <= 100"
+    - condition: "result.uploadUrl.startsWith('https://')"
+
+  ui:
+    trigger:
+      location: "toolbar"
+      element: "[data-upload-button]"
+      action: click
+      label: "Upload File"
+      icon: "upload"
+      shortcut: "Cmd+U"
+
+    interaction:
+      flow:
+        - "User clicks upload or drags file"
+        - "File validation (size, type)"
+        - "Progress bar appears"
+        - "Success/error feedback"
+      loading: "Progress bar with percentage"
+      optimistic: false
+      states:
+        idle: { when: "no file selected", then: { button.disabled: false } }
+        validating: { when: "file dropped", then: { spinner: "@exists" } }
+        uploading: { when: "upload in progress", then: { progress: "@gte(0)" } }
+        complete: { when: "upload finished", then: { successIcon: "@exists" } }
+
+    accessibility:
+      role: "button"
+      label: "Upload file to project"
+      keyboardNav:
+        - { key: "Enter", action: "open file picker" }
+        - { key: "Escape", action: "cancel upload" }
+      focusTrap: true
+      announcements:
+        - { when: "upload starts", message: "Upload started", priority: "polite" }
+        - { when: "upload complete", message: "File uploaded successfully", priority: "assertive" }
+
+    feedback:
+      success: "File uploaded successfully"
+      error: "Upload failed. Please try again."
+      loading:
+        indicator: "progress"
+        delay: "0ms"
+        ariaLive: "polite"
+
+  effects:
+    - database: { table: files, operation: insert }
+    - notification: { type: "file_uploaded", recipients: ["owner"] }
+    - scheduler: { job: "processFile", delay: "0s" }
+
+  examples:
+    success:
+      - name: "uploads image file"
+        given:
+          file: { name: "photo.jpg", size: 1024000, type: "image/jpeg" }
+          projectId: "@string(24)"
+        then:
+          result.fileId: "@exists"
+          result.progress: 100
+
+    errors:
+      - name: "rejects oversized file"
+        given:
+          file: { name: "huge.zip", size: 1073741824, type: "application/zip" }
+          projectId: "@string(24)"
+        then: { error: "FILE_TOO_LARGE" }

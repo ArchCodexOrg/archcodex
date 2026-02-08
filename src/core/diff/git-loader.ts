@@ -125,7 +125,7 @@ export async function gitRefExists(projectRoot: string, ref: string): Promise<bo
       encoding: 'utf-8',
     });
     return true;
-  } catch {
+  } catch { /* git ref does not exist or git unavailable */
     return false;
   }
 }
@@ -143,7 +143,7 @@ export async function getShortHash(projectRoot: string, ref: string): Promise<st
       encoding: 'utf-8',
     });
     return stdout.trim();
-  } catch {
+  } catch { /* git command failed, return ref as-is */
     return ref;
   }
 }

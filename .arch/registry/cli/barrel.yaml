@@ -6,6 +6,26 @@ archcodex.cli.barrel:
   mixins:
     - barrel
   description: CLI barrel/index files - re-exports only
+  reference_implementations:
+    - src/cli/index.ts
+  file_pattern: index.ts
+  default_path: src/cli
+  code_pattern: |-
+    /**
+     * @arch archcodex.cli.barrel
+     */
+    import { Command } from 'commander';
+    import { createXxxCommand } from './commands/xxx.js';
+    import { createYyyCommand } from './commands/yyy.js';
+    // ... import all commands
+
+    export function createCli(): Command {
+      const program = new Command()
+        .name('archcodex')
+        .description('...');
+      [createXxxCommand, createYyyCommand].forEach((cmd) => program.addCommand(cmd()));
+      return program;
+    }
   rationale: |
     Index files that re-export from other modules for cleaner imports.
     No implementation logic, only export statements.

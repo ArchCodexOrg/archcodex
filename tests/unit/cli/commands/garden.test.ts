@@ -689,4 +689,301 @@ describe('garden command', () => {
       expect(loadConfig).toHaveBeenCalledWith('/project', 'custom/config.yaml');
     });
   });
+
+  describe('apply cleanup', () => {
+    it('should apply keyword cleanups when --apply-cleanup is used', async () => {
+      mockGardenReport.keywordCleanups = [{
+        archId: 'test.arch',
+        keywordsToRemove: [{ keyword: 'stale', reason: 'too common' }],
+      }];
+      mockGardenReport.summary.hasIssues = true;
+
+      vi.mocked(readFile).mockResolvedValue('entries: []');
+      vi.mocked(parseYaml).mockReturnValue({
+        entries: [{ arch_id: 'test.arch', keywords: ['stale', 'good'] }],
+      });
+
+      const command = createGardenCommand();
+      try {
+        await command.parseAsync(['node', 'test', '--apply-cleanup']);
+      } catch {
+        // process.exit may throw
+      }
+
+      expect(writeFile).toHaveBeenCalled();
+    });
+
+    it('should not write when no cleanups available', async () => {
+      mockGardenReport.keywordCleanups = [];
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--apply-cleanup']);
+
+      expect(writeFile).not.toHaveBeenCalled();
+    });
+
+    it('should handle missing index file during cleanup', async () => {
+      mockGardenReport.keywordCleanups = [{
+        archId: 'test.arch',
+        keywordsToRemove: [{ keyword: 'bad', reason: 'too generic' }],
+      }];
+
+      vi.mocked(readFile).mockImplementation(async (filePath: string) => {
+        if (filePath.includes('index.yaml')) {
+          throw new Error('File not found');
+        }
+        return '';
+      });
+
+      const command = createGardenCommand();
+      try {
+        await command.parseAsync(['node', 'test', '--apply-cleanup']);
+      } catch {
+        // process.exit may throw
+      }
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Could not read'));
+    });
+  });
+
+  describe('apply keywords edge cases', () => {
+    it('should create new entry when arch_id not in index', async () => {
+      mockGardenReport.keywordSuggestions = [{
+        archId: 'new.arch',
+        currentKeywords: [],
+        suggestedKeywords: ['fresh', 'keyword'],
+        basedOnFiles: ['src/new.ts'],
+      }];
+
+      vi.mocked(parseYaml).mockReturnValue({ entries: [] });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--apply-keywords']);
+
+      expect(writeFile).toHaveBeenCalled();
+    });
+
+    it('should not duplicate existing keywords', async () => {
+      mockGardenReport.keywordSuggestions = [{
+        archId: 'test.arch',
+        currentKeywords: ['existing'],
+        suggestedKeywords: ['existing', 'new'],
+        basedOnFiles: ['src/test.ts'],
+      }];
+
+      vi.mocked(parseYaml).mockReturnValue({
+        entries: [{ arch_id: 'test.arch', keywords: ['existing'] }],
+      });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--apply-keywords']);
+
+      expect(writeFile).toHaveBeenCalled();
+      const writeCall = vi.mocked(writeFile).mock.calls[0];
+      expect(writeCall).toBeDefined();
+    });
+
+    it('should handle missing index file during keyword apply', async () => {
+      mockGardenReport.keywordSuggestions = [{
+        archId: 'test.arch',
+        currentKeywords: [],
+        suggestedKeywords: ['new'],
+        basedOnFiles: [],
+      }];
+
+      vi.mocked(readFile).mockRejectedValue(new Error('File not found'));
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--apply-keywords']);
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Could not read'));
+    });
+
+    it('should initialize keywords array when entry has no keywords', async () => {
+      mockGardenReport.keywordSuggestions = [{
+        archId: 'test.arch',
+        currentKeywords: [],
+        suggestedKeywords: ['new-kw'],
+        basedOnFiles: [],
+      }];
+
+      vi.mocked(parseYaml).mockReturnValue({
+        entries: [{ arch_id: 'test.arch' }],
+      });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--apply-keywords']);
+
+      expect(writeFile).toHaveBeenCalled();
+    });
+  });
+
+  describe('LLM mode edge cases', () => {
+    it('should merge LLM keywords with existing heuristic suggestions', async () => {
+      mockGlobResult = ['/project/src/test.ts'];
+      mockFileContents['/project/src/test.ts'] = '/** @arch test.arch */\nconst x = 1;';
+      vi.mocked(extractArchId).mockReturnValue('test.arch');
+
+      // Pre-populate a heuristic suggestion
+      mockGardenReport.keywordSuggestions = [{
+        archId: 'test.arch',
+        currentKeywords: [],
+        suggestedKeywords: ['heuristic-kw'],
+        basedOnFiles: ['src/test.ts'],
+      }];
+
+      vi.mocked(getAvailableProvider).mockReturnValue({
+        name: 'openai',
+        isAvailable: vi.fn().mockReturnValue(true),
+      } as ReturnType<typeof getAvailableProvider>);
+
+      vi.mocked(reindexArchitecture).mockResolvedValue({
+        keywords: ['llm-kw'],
+        error: undefined,
+        success: true,
+        archId: 'test.arch',
+      });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--llm']);
+
+      // The suggestion should have merged keywords
+      expect(mockGardenReport.keywordSuggestions[0].suggestedKeywords).toContain('heuristic-kw');
+      expect(mockGardenReport.keywordSuggestions[0].suggestedKeywords).toContain('llm-kw');
+    });
+
+    it('should create new suggestion when LLM finds keywords for unlisted arch', async () => {
+      mockGlobResult = ['/project/src/new.ts'];
+      mockFileContents['/project/src/new.ts'] = '/** @arch new.arch */\nconst x = 1;';
+      vi.mocked(extractArchId).mockReturnValue('new.arch');
+
+      // No pre-existing heuristic suggestions for this arch
+      mockGardenReport.keywordSuggestions = [];
+
+      vi.mocked(getAvailableProvider).mockReturnValue({
+        name: 'openai',
+        isAvailable: vi.fn().mockReturnValue(true),
+      } as ReturnType<typeof getAvailableProvider>);
+
+      vi.mocked(reindexArchitecture).mockResolvedValue({
+        keywords: ['brand-new'],
+        error: undefined,
+        success: true,
+        archId: 'new.arch',
+      });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--llm']);
+
+      expect(mockGardenReport.keywordSuggestions.length).toBe(1);
+      expect(mockGardenReport.keywordSuggestions[0].archId).toBe('new.arch');
+    });
+
+    it('should handle concepts generation failure gracefully', async () => {
+      vi.mocked(getAvailableProvider).mockReturnValue({
+        name: 'openai',
+        isAvailable: vi.fn().mockReturnValue(true),
+      } as ReturnType<typeof getAvailableProvider>);
+
+      vi.mocked(generateConcepts).mockResolvedValue({
+        success: false,
+        conceptCount: 0,
+        coverage: 0,
+        error: 'LLM unavailable',
+      });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--llm', '--concepts']);
+
+      const output = consoleLogSpy.mock.calls.map(c => c[0]).join('\n');
+      expect(output).toContain('LLM unavailable');
+    });
+
+    it('should show invalid reference warnings in concepts output', async () => {
+      vi.mocked(getAvailableProvider).mockReturnValue({
+        name: 'openai',
+        isAvailable: vi.fn().mockReturnValue(true),
+      } as ReturnType<typeof getAvailableProvider>);
+
+      vi.mocked(generateConcepts).mockResolvedValue({
+        success: true,
+        conceptCount: 3,
+        coverage: 60,
+        validation: {
+          invalidReferences: [
+            { conceptName: 'broken-ref', archId: 'nonexistent.arch' },
+          ],
+        },
+      });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--llm', '--concepts']);
+
+      const output = consoleLogSpy.mock.calls.map(c => c[0]).join('\n');
+      expect(output).toContain('broken-ref');
+    });
+  });
+
+  describe('default config fallbacks', () => {
+    it('should use default include patterns when config has none', async () => {
+      mockConfigResult = {
+        version: '1.0',
+        files: { scan: {} },
+        llm: {},
+      } as typeof mockConfigResult;
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test']);
+
+      expect(globFiles).toHaveBeenCalledWith(
+        '**/*.ts',
+        expect.any(Object),
+      );
+    });
+
+    it('should use default exclude patterns when config has none', async () => {
+      mockConfigResult = {
+        version: '1.0',
+        files: { scan: {} },
+        llm: {},
+      } as typeof mockConfigResult;
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test']);
+
+      expect(globFiles).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          ignore: expect.arrayContaining(['**/node_modules/**']),
+        }),
+      );
+    });
+  });
+
+  describe('type duplicate detection details', () => {
+    it('should only scan .ts and .tsx files for duplicates', async () => {
+      mockGlobResult = ['/project/src/a.ts', '/project/src/b.js', '/project/src/c.tsx'];
+      mockFileContents['/project/src/a.ts'] = '/** @arch a */';
+      mockFileContents['/project/src/b.js'] = '/** @arch b */';
+      mockFileContents['/project/src/c.tsx'] = '/** @arch c */';
+
+      const mockScanFiles = vi.fn().mockResolvedValue({ groups: [] });
+      vi.mocked(DuplicateDetector).mockImplementation(function() {
+        return {
+          scanFiles: mockScanFiles,
+          dispose: vi.fn(),
+        } as ReturnType<typeof DuplicateDetector>;
+      });
+
+      const command = createGardenCommand();
+      await command.parseAsync(['node', 'test', '--detect-type-duplicates']);
+
+      // Should be called with only .ts and .tsx files
+      expect(mockScanFiles).toHaveBeenCalledWith(
+        expect.arrayContaining(['/project/src/a.ts', '/project/src/c.tsx']),
+      );
+      const calledFiles = mockScanFiles.mock.calls[0][0] as string[];
+      expect(calledFiles).not.toContain('/project/src/b.js');
+    });
+  });
 });

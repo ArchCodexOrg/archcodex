@@ -152,7 +152,7 @@ src/
 │   ├── discovery/   # Architecture discovery
 │   ├── graph/       # Architecture graph building
 │   ├── health/      # Health metrics analyzer
-│   ├── hydration/   # Context injection
+│   ├── hydration/   # Context hydration for read command
 │   ├── neighborhood/# Import boundary analysis
 │   ├── patterns/    # Pattern registry loading
 │   ├── pointers/    # URI resolution

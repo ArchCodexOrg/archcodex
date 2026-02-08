@@ -45,7 +45,7 @@ export class FeedbackStore {
         // For now, just migrate by resetting (future: proper migration)
         this.data = this.createEmptyData();
       }
-    } catch {
+    } catch { /* file not found or corrupt JSON */
       // File doesn't exist or is invalid - create empty
       this.data = this.createEmptyData();
     }
@@ -186,7 +186,7 @@ export class FeedbackStore {
     try {
       await fs.access(this.feedbackPath);
       return true;
-    } catch {
+    } catch { /* file does not exist */
       return false;
     }
   }

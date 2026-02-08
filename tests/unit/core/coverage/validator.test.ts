@@ -1,9 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.test.unit
  *
  * Unit tests for CoverageValidator.
  */
@@ -101,15 +98,15 @@ describe('CoverageValidator', () => {
     it('should extract string literals from union type', async () => {
       createFile('src/events/types.ts', `
         export type DomainEventType =
-          | "bookmark.created"
-          | "bookmark.archived"
-          | "bookmark.deleted";
+          | "product.created"
+          | "product.archived"
+          | "product.deleted";
       `);
 
       createFile('src/handlers/index.ts', `
         const handlers = {
-          "bookmark.created": handleCreated,
-          "bookmark.deleted": handleDeleted,
+          "product.created": handleCreated,
+          "product.deleted": handleDeleted,
         };
       `);
 
@@ -129,7 +126,7 @@ describe('CoverageValidator', () => {
       expect(result.totalSources).toBe(3);
       expect(result.coveredSources).toBe(2);
       expect(result.gaps).toHaveLength(1);
-      expect(result.gaps[0].value).toBe('bookmark.archived');
+      expect(result.gaps[0].value).toBe('product.archived');
     });
 
     it('should handle empty source files gracefully', async () => {
@@ -280,15 +277,15 @@ describe('CoverageValidator', () => {
     it('should extract string literals from union type', async () => {
       createFile('src/events/types.ts', `
         export type DomainEventType =
-          | "bookmark.created"
-          | "bookmark.archived"
-          | "bookmark.deleted";
+          | "product.created"
+          | "product.archived"
+          | "product.deleted";
       `);
 
       createFile('src/handlers/index.ts', `
         const handlers = {
-          "bookmark.created": handleCreated,
-          "bookmark.deleted": handleDeleted,
+          "product.created": handleCreated,
+          "product.deleted": handleDeleted,
         };
       `);
 
@@ -307,7 +304,7 @@ describe('CoverageValidator', () => {
       expect(result.totalSources).toBe(3);
       expect(result.coveredSources).toBe(2);
       expect(result.gaps).toHaveLength(1);
-      expect(result.gaps[0].value).toBe('bookmark.archived');
+      expect(result.gaps[0].value).toBe('product.archived');
     });
 
     it('should handle nested union types with parentheses', async () => {

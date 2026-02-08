@@ -13,6 +13,36 @@ archcodex.core.types:
 
     Use for: Files named types.ts containing interfaces and type aliases.
     Don't use for: Zod schemas (use core.domain.schema), runtime code.
+  reference_implementations:
+    - src/core/hydration/types.ts
+    - src/core/health/types.ts
+  file_pattern: "**/types.ts"
+  default_path: src/core
+  code_pattern: |-
+    /**
+     * @arch archcodex.core.types
+     *
+     * Domain type definitions.
+     */
+
+    /** Description of the enum. */
+    export type MyFormat = 'option-a' | 'option-b' | 'option-c';
+
+    /** Description of the interface. */
+    export interface MyEntity {
+      /** Field description */
+      readonly id: string;
+      /** Field description */
+      name: string;
+      /** Optional field description */
+      details?: Record<string, unknown>;
+    }
+
+    /** Description of the result type. */
+    export interface MyResult {
+      success: boolean;
+      data: MyEntity[];
+    }
   hints:
     - Use readonly modifiers where appropriate
     - Group related types together

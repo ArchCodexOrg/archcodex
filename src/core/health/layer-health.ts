@@ -170,7 +170,7 @@ export async function detectStaleExclusions(
             allTagged = false;
             break;
           }
-        } catch {
+        } catch { /* file read error */
           // Can't read file, assume not tagged
           allTagged = false;
           break;

@@ -1,9 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.test.unit
  *
  * Tests for DuplicateDetector - finding duplicate types across a codebase.
  */

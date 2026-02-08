@@ -6,6 +6,17 @@ archcodex.util.barrel:
   mixins:
     - barrel
   description: Utility barrel/index files - re-exports only
+  reference_implementations:
+    - src/utils/index.ts
+  file_pattern: index.ts
+  default_path: src/utils
+  code_pattern: |-
+    /**
+     * @arch archcodex.util.barrel
+     */
+    export * from './file-system.js';
+    export * from './logger.js';
+    export * from './path-utils.js';
   rationale: |
     Index files that consolidate utility exports.
 

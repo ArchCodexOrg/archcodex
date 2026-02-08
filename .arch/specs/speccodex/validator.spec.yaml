@@ -1,0 +1,497 @@
+# SpecCodex Validator Specification
+#
+# Validates spec structure, required fields, and content correctness.
+# Two main entry points: validateSpec (single spec) and validateSpecRegistry (full registry).
+
+version: "1.0"
+
+spec.speccodex.validate:
+  inherits: spec.function
+  implementation: src/core/spec/validator.ts#validateSpec
+
+  # === STRATEGIC ===
+  goal: "Validate a single spec by ID within a registry"
+  outcomes:
+    - "Look up spec by ID in registry"
+    - "Validate required fields (intent)"
+    - "Validate example structure and types"
+    - "Validate inheritance references"
+    - "Return structured errors and warnings with stats"
+
+  # === OPERATIONAL ===
+  intent: "Validate a single spec's structure and content correctness"
+
+  inputs:
+    registry:
+      type: object
+      required: true
+      description: "SpecRegistry containing nodes and mixins"
+    specId:
+      type: string
+      required: true
+      description: "ID of the spec to validate"
+    options:
+      type: object
+      properties:
+        checkMixinRefs: { type: boolean, default: true, description: "Validate mixin references" }
+        checkInheritance: { type: boolean, default: true, description: "Validate inheritance chain" }
+        checkExamples: { type: boolean, default: true, description: "Validate examples vs schema" }
+        checkCircular: { type: boolean, default: true, description: "Detect circular dependencies" }
+        strict: { type: boolean, default: false, description: "Treat warnings as errors" }
+
+  outputs:
+    valid:
+      type: boolean
+      description: "True if no errors found"
+    errors:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+          field: { type: string }
+    warnings:
+      type: array
+      items:
+        type: object
+        properties:
+          code: { type: string }
+          message: { type: string }
+          field: { type: string }
+    stats:
+      type: object
+      properties:
+        specsChecked: { type: number }
+        mixinsChecked: { type: number }
+        examplesChecked: { type: number }
+
+  # === INVARIANTS ===
+  invariants:
+    - { "if result.valid then result.errors is empty": true }
+    - { "if result.warnings exist then result.valid can still be true": true }
+    - { "each error has code and message; field is optional": true }
+    - { "stats.specsChecked equals number of specs in registry": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "valid minimal spec"
+        given:
+          registry:
+            nodes:
+              spec.test: { intent: "Test something" }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: true
+          result.errors: []
+          result.warnings: "@defined"
+          result.stats: "@exists"
+
+      - name: "valid full spec"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test something"
+                goal: "Test goal"
+                outcomes: ["Outcome 1"]
+                inputs: { name: { type: string } }
+                examples:
+                  success: [{ name: "X", given: { name: "test" }, then: { result: true } }]
+            mixins: {}
+          specId: "spec.test"
+        then: { result.valid: true }
+
+    errors:
+      - name: "missing intent"
+        given:
+          registry:
+            nodes:
+              spec.test: { goal: "No intent" }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_INTENT"
+
+      - name: "example incomplete - missing then"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test"
+                examples: { success: [{ name: "missing then" }] }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "EXAMPLE_INCOMPLETE"
+
+      - name: "unknown input field in example"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test"
+                inputs: { url: { type: string } }
+                examples:
+                  success:
+                    - name: "uses wrong field"
+                      given: { nonexistent: "value" }
+                      then: { result: true }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "UNKNOWN_INPUT_FIELD"
+
+      - name: "example type mismatch"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test"
+                inputs: { count: { type: number } }
+                examples:
+                  success:
+                    - name: "wrong type"
+                      given: { count: "not-a-number" }
+                      then: { result: true }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "EXAMPLE_TYPE_MISMATCH"
+
+      - name: "missing required input in success example"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test"
+                inputs:
+                  url: { type: string, required: true }
+                  title: { type: string, required: true }
+                examples:
+                  success:
+                    - name: "missing title"
+                      given: { url: "https://example.com" }
+                      then: { result: true }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_REQUIRED_INPUT"
+
+      - name: "unknown parent spec"
+        given:
+          registry:
+            nodes:
+              spec.test: { inherits: spec.nonexistent, intent: "Test" }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "UNKNOWN_PARENT"
+
+      - name: "circular inheritance"
+        given:
+          registry:
+            nodes:
+              spec.a: { inherits: spec.b, intent: "A" }
+              spec.b: { inherits: spec.a, intent: "B" }
+            mixins: {}
+          specId: "spec.a"
+        then:
+          result.valid: false
+          "result.errors[0].code": "CIRCULAR_INHERITANCE"
+
+      - name: "unknown mixin reference"
+        given:
+          registry:
+            nodes:
+              spec.test: { intent: "Test", mixins: [nonexistent_mixin] }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: false
+          "result.errors[0].code": "UNKNOWN_MIXIN"
+
+      - name: "goal without outcomes"
+        then: { error: "GOAL_WITHOUT_OUTCOMES" }
+
+      - name: "missing auth error example"
+        then: { error: "MISSING_AUTH_ERROR_EXAMPLE" }
+
+      - name: "missing errors"
+        then: { error: "MISSING_ERRORS" }
+
+      - name: "unknown composed mixin"
+        then: { error: "UNKNOWN_COMPOSED_MIXIN" }
+
+      - name: "unknown field"
+        then: { error: "UNKNOWN_FIELD" }
+
+      - name: "unknown mixin field"
+        then: { error: "UNKNOWN_MIXIN_FIELD" }
+
+    warnings:
+      - name: "goal without outcomes"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test"
+                goal: "Do something"
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: true
+          "result.warnings[0].code": "GOAL_WITHOUT_OUTCOMES"
+
+      - name: "missing error examples for auth spec"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test"
+                security: { authentication: required }
+                examples:
+                  success:
+                    - name: "works"
+                      given: {}
+                      then: { result: true }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: true
+          "result.warnings[0].code": "MISSING_AUTH_ERROR_EXAMPLE"
+
+      - name: "success examples but no error examples"
+        given:
+          registry:
+            nodes:
+              spec.test:
+                intent: "Test"
+                examples:
+                  success:
+                    - name: "works"
+                      given: {}
+                      then: { result: true }
+            mixins: {}
+          specId: "spec.test"
+        then:
+          result.valid: true
+          "result.warnings[0].code": "MISSING_ERRORS"
+
+---
+
+spec.speccodex.validateRegistry:
+  inherits: spec.function
+  implementation: src/core/spec/validator.ts#validateSpecRegistry
+
+  goal: "Validate all specs in a registry"
+  outcomes:
+    - "Iterate all specs and validate each"
+    - "Check cross-spec references (inheritance, mixins)"
+    - "Detect circular dependencies"
+    - "Aggregate errors and warnings"
+
+  intent: "Validate an entire spec registry for structural correctness"
+
+  inputs:
+    registry:
+      type: object
+      required: true
+      description: "SpecRegistry containing nodes and mixins"
+    options:
+      type: object
+      properties:
+        checkMixinRefs: { type: boolean, default: true }
+        checkInheritance: { type: boolean, default: true }
+        checkExamples: { type: boolean, default: true }
+        checkCircular: { type: boolean, default: true }
+        strict: { type: boolean, default: false }
+
+  outputs:
+    valid:
+      type: boolean
+    errors:
+      type: array
+    warnings:
+      type: array
+    stats:
+      type: object
+      properties:
+        specsChecked: { type: number }
+        mixinsChecked: { type: number }
+        examplesChecked: { type: number }
+
+  invariants:
+    - { "if result.valid then result.errors is empty": true }
+    - { "stats.specsChecked equals number of specs in registry": true }
+
+  examples:
+    success:
+      - name: "valid registry"
+        given:
+          registry:
+            nodes:
+              spec.a: { intent: "A" }
+              spec.b: { intent: "B" }
+            mixins: {}
+        then:
+          result.valid: true
+          result.errors: []
+          result.warnings: "@defined"
+          result.stats.specsChecked: 2
+
+    errors:
+      - name: "registry with invalid spec"
+        given:
+          registry:
+            nodes:
+              spec.a: { intent: "A" }
+              spec.b: { goal: "Missing intent" }
+            mixins: {}
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_INTENT"
+
+      - name: "unknown mixin"
+        then: { error: "UNKNOWN_MIXIN" }
+
+      - name: "unknown parent"
+        then: { error: "UNKNOWN_PARENT" }
+
+      - name: "circular inheritance"
+        then: { error: "CIRCULAR_INHERITANCE" }
+
+      - name: "goal without outcomes"
+        then: { error: "GOAL_WITHOUT_OUTCOMES" }
+
+      - name: "missing auth error example"
+        then: { error: "MISSING_AUTH_ERROR_EXAMPLE" }
+
+      - name: "missing errors"
+        then: { error: "MISSING_ERRORS" }
+
+      - name: "unknown composed mixin"
+        then: { error: "UNKNOWN_COMPOSED_MIXIN" }
+
+      - name: "example incomplete"
+        then: { error: "EXAMPLE_INCOMPLETE" }
+
+      - name: "unknown input field"
+        then: { error: "UNKNOWN_INPUT_FIELD" }
+
+      - name: "example type mismatch"
+        then: { error: "EXAMPLE_TYPE_MISMATCH" }
+
+      - name: "missing required input"
+        then: { error: "MISSING_REQUIRED_INPUT" }
+
+      - name: "unknown field"
+        then: { error: "UNKNOWN_FIELD" }
+
+      - name: "unknown mixin field"
+        then: { error: "UNKNOWN_MIXIN_FIELD" }
+
+---
+
+spec.speccodex.detectUnknownFields:
+  inherits: spec.function
+  implementation: src/core/spec/validator.ts#detectUnknownFields
+
+  goal: "Detect unrecognized fields in a spec node"
+  outcomes:
+    - "Compare spec fields against known schema"
+    - "Return warnings for unknown fields"
+    - "Suggest alternatives for common typos"
+
+  intent: "Find fields in a spec that are not part of the schema"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec ID for error reporting"
+    node:
+      type: object
+      required: true
+      description: "SpecNode to check for unknown fields"
+
+  outputs:
+    result:
+      type: array
+      description: "Array of SpecValidationError objects with code UNKNOWN_FIELD"
+
+  invariants:
+    - "All returned errors have code UNKNOWN_FIELD"
+    - "Known schema fields are never flagged"
+
+  examples:
+    success:
+      - name: "no unknown fields"
+        given:
+          specId: "spec.test"
+          node: { intent: "Test", goal: "Goal" }
+        then:
+          result: "@length(0)"
+
+      - name: "detects unknown field"
+        given:
+          specId: "spec.test"
+          node: { intent: "Test", unknownField: "value" }
+        then:
+          result: "@gt(0)"
+          "result[0].code": "UNKNOWN_FIELD"
+
+---
+
+spec.speccodex.formatValidationSummary:
+  inherits: spec.function
+  implementation: src/core/spec/validator.ts#formatValidationSummary
+
+  goal: "Format validation results as a human-readable summary"
+  outcomes:
+    - "Show check/error icons for valid/invalid"
+    - "List errors and warnings"
+    - "Include stats summary"
+
+  intent: "Format SpecValidationResult for terminal display"
+
+  inputs:
+    result:
+      type: object
+      required: true
+      description: "SpecValidationResult to format"
+
+  outputs:
+    result:
+      type: string
+      description: "Formatted text summary"
+
+  invariants:
+    - "Valid results contain '✓ Validation passed' in lines array"
+    - "Invalid results contain '✗ Validation failed' and iterate result.errors to list all errors"
+
+  examples:
+    success:
+      - name: "format valid result"
+        given:
+          result: { valid: true, errors: [], warnings: [], stats: { specsChecked: 1, mixinsChecked: 0, examplesChecked: 3 } }
+        then:
+          result: "@defined"
+
+      - name: "format invalid result"
+        given:
+          result:
+            valid: false
+            errors: [{ code: "MISSING_INTENT", message: "Missing intent", field: "intent" }]
+            warnings: []
+            stats: { specsChecked: 1, mixinsChecked: 0, examplesChecked: 0 }
+        then:
+          result: "@contains('MISSING_INTENT')"

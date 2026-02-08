@@ -2,9 +2,6 @@
  * @arch archcodex.test.unit
  * @intent:cli-output
  */
-/**
- * @arch archcodex.test
- */
 import { describe, it, expect } from 'vitest';
 import {
   getAllFunctionsWithIntents,

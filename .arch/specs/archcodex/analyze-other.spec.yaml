@@ -1,0 +1,304 @@
+# Other Checker - Schema-Inferred Analysis
+#
+# Detects miscellaneous issues: effect complexity, deprecated architectures,
+# high-impact specs, scheduler idempotency, webhook errors, N+1 risks,
+# mixin parameters, cross-spec invariant consistency,
+# and unspecified component group handlers.
+# 9 analyses: OTH-1 through OTH-10 (OTH-7 reserved).
+
+version: "1.0"
+
+spec.archcodex.analyze.other:
+  inherits: spec.function
+  implementation: src/core/analysis/checkers/other.ts#checkOther
+
+  # === STRATEGIC ===
+  goal: "Detect miscellaneous issues inferable from spec schemas"
+  outcomes:
+    - "Detect excessive effect chains (complexity)"
+    - "Detect deprecated architecture usage"
+    - "Detect high-impact specs with many dependents"
+    - "Detect schedulers without idempotency guarantees"
+    - "Detect webhooks without error handling"
+    - "Detect N+1 query risk patterns"
+    - "Detect mixin parameter validation errors"
+    - "Detect cross-spec invariant contradictions"
+    - "Detect component group handlers without spec coverage"
+
+  # === OPERATIONAL ===
+  intent: "Analyze specs for complexity, staleness, parameter errors, and coverage gaps"
+
+  inputs:
+    specs:
+      type: array
+      required: true
+      description: "Array of resolved spec nodes"
+    archRegistry:
+      type: object
+      required: true
+      description: "Loaded ArchCodex registry"
+    componentGroups:
+      type: object
+      required: true
+      description: "Component groups registry"
+    graph:
+      type: object
+      required: true
+      description: "CrossReferenceGraph"
+
+  outputs:
+    issues:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          category: { type: enum, values: [other] }
+          severity: { type: enum, values: [error, warning, info] }
+          specId: { type: string, optional: true }
+          archId: { type: string, optional: true }
+          message: { type: string }
+          suggestion: { type: string, optional: true }
+          relatedSpecs: { type: array, items: { type: string }, optional: true }
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "All issues have category 'other'"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.category: "other"
+
+    - description: "Issue IDs follow OTH-N pattern"
+      forall:
+        variable: issue
+        in: result.issues
+        then:
+          issue.id: "@matches('^OTH-(10|[1-9])$')"
+
+  # === EXAMPLES ===
+  defaults: &empty_context
+    archRegistry: { nodes: {}, mixins: {} }
+    componentGroups: {}
+    graph: { entityToSpecs: {}, tableToWriters: {}, tableToReaders: {}, specDependents: {}, archToSpecs: {} }
+
+  examples:
+    success:
+      # --- OTH-1: Effect chain complexity ---
+      - name: "OTH-1: detects too many effects"
+        given:
+          specs:
+            - specId: spec.import.batch
+              intent: "Batch import"
+              effects:
+                - { database: { table: items, operation: insert } }
+                - { audit_log: { action: "import.batch", resourceType: items } }
+                - { cache: { key: item_list, action: invalidate } }
+                - { notification: { type: import_complete, channel: email } }
+                - { scheduler: { job: generateReport, delay: "1h" } }
+                - { webhook: { url: "https://api.example.com/hook", event: "import.complete" } }
+                - { embedding: { timing: async } }
+                - { metrics: { counter: imports_total } }
+          <<: *empty_context
+        then:
+          result.issues: "@hasItem({ id: 'OTH-1', severity: 'error' })"
+
+      - name: "OTH-1: warning at 5-7 effects"
+        given:
+          specs:
+            - specId: spec.import.small
+              intent: "Small import"
+              effects:
+                - { database: { table: items, operation: insert } }
+                - { audit_log: { action: "import", resourceType: items } }
+                - { cache: { key: items, action: invalidate } }
+                - { notification: { type: done, channel: push } }
+                - { metrics: { counter: imports } }
+          <<: *empty_context
+        then:
+          result.issues: "@hasItem({ id: 'OTH-1', severity: 'warning' })"
+
+      # --- OTH-2: Deprecated architecture usage ---
+      - name: "OTH-2: detects deprecated architecture reference"
+        given:
+          specs:
+            - specId: spec.widget.create
+              intent: "Create widget"
+              architectures: [archcodex.legacy.handler]
+          archRegistry:
+            nodes:
+              archcodex.legacy.handler:
+                description: "Legacy handler"
+                deprecated_from: "2.0"
+                migration_guide: "Use archcodex.core.engine"
+            mixins: {}
+          componentGroups: {}
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: { "archcodex.legacy.handler": [spec.widget.create] }
+        then:
+          result.issues: "@hasItem({ id: 'OTH-2', severity: 'warning' })"
+
+      # --- OTH-3: High-impact spec ---
+      - name: "OTH-3: detects high fan-in spec"
+        given:
+          specs:
+            - specId: spec.user.get
+              intent: "Get user"
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+          graph:
+            entityToSpecs:
+              user: ["spec.user.get"]
+            tableToWriters: {}
+            tableToReaders:
+              users:
+                - { specId: "spec.product.create", inputField: "userId" }
+                - { specId: "spec.tag.create", inputField: "userId" }
+                - { specId: "spec.project.create", inputField: "ownerId" }
+                - { specId: "spec.comment.create", inputField: "authorId" }
+                - { specId: "spec.file.upload", inputField: "uploaderId" }
+            specDependents:
+              "spec.user.get":
+                - "spec.product.create"
+                - "spec.tag.create"
+                - "spec.project.create"
+                - "spec.comment.create"
+                - "spec.file.upload"
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'OTH-3', severity: 'info' })"
+
+      # --- OTH-4: Scheduler without idempotency ---
+      - name: "OTH-4: detects non-idempotent scheduler job"
+        given:
+          specs:
+            - specId: spec.cleanup.run
+              intent: "Run cleanup"
+              effects:
+                - { scheduler: { job: cleanupAssets, delay: "24h" } }
+              invariants:
+                - { condition: "cleanup removes expired items" }
+                # No idempotency invariant
+          <<: *empty_context
+        then:
+          result.issues: "@hasItem({ id: 'OTH-4', severity: 'warning' })"
+
+      # --- OTH-5: Webhook without error handling ---
+      - name: "OTH-5: detects webhook without failure error example"
+        given:
+          specs:
+            - specId: spec.notify.external
+              intent: "Notify external service"
+              effects:
+                - { webhook: { url: "https://api.example.com/hook", event: "notify" } }
+              examples:
+                success:
+                  - { name: "works", given: { data: "test" }, then: { result: "@exists" } }
+          <<: *empty_context
+        then:
+          result.issues: "@hasItem({ id: 'OTH-5', severity: 'warning' })"
+
+      # --- OTH-6: N+1 query risk ---
+      - name: "OTH-6: detects forall with per-item database effect"
+        given:
+          specs:
+            - specId: spec.batch.process
+              intent: "Process batch"
+              invariants:
+                - forall:
+                    variable: item
+                    in: input.items
+                    then: { item.processed: true }
+              effects:
+                - { database: { table: items, operation: update } }
+          <<: *empty_context
+        then:
+          result.issues: "@hasItem({ id: 'OTH-6', severity: 'info' })"
+
+      # --- OTH-8: Mixin parameter validation ---
+      - name: "OTH-8: detects missing mixin parameter"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              mixins:
+                - logs_audit: { action: "tag.create" }
+                # Missing: resource parameter (logs_audit expects ${resource})
+          <<: *empty_context
+        then:
+          result.issues: "@hasItem({ id: 'OTH-8', severity: 'error' })"
+
+      # --- OTH-9: Cross-spec invariant consistency ---
+      - name: "OTH-9: detects contradictory defaults across specs for same table"
+        given:
+          specs:
+            - specId: spec.product.create
+              intent: "Create product"
+              invariants:
+                - { condition: "result.isArchived defaults to false" }
+              effects:
+                - { database: { table: products, operation: insert } }
+            - specId: spec.product.import
+              intent: "Import product"
+              effects:
+                - { database: { table: products, operation: insert } }
+              # No invariant about isArchived default
+          graph:
+            entityToSpecs:
+              product: ["spec.product.create", "spec.product.import"]
+            tableToWriters:
+              products:
+                - { specId: "spec.product.create", operation: "insert" }
+                - { specId: "spec.product.import", operation: "insert" }
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups: {}
+        then:
+          result.issues: "@hasItem({ id: 'OTH-9', severity: 'warning' })"
+
+      # --- OTH-10: Component group handler without spec ---
+      - name: "OTH-10: detects unspecified component group handler"
+        given:
+          specs:
+            - specId: spec.product.create
+              intent: "Create product"
+              implementation: src/components/products/ProductCard.tsx#ProductCard
+          archRegistry: { nodes: {}, mixins: {} }
+          componentGroups:
+            component-groups:
+              product-cards:
+                components:
+                  - { path: src/components/products/ProductCard.tsx }
+                triggers:
+                  entities: [entries]
+                related:
+                  handlers: src/hooks/useEntryHandlers.ts
+          graph:
+            entityToSpecs: {}
+            tableToWriters: {}
+            tableToReaders: {}
+            specDependents: {}
+            archToSpecs: {}
+        then:
+          result.issues: "@hasItem({ id: 'OTH-10', severity: 'info' })"
+
+      # --- No false positives ---
+      - name: "no issues for well-formed spec with 3 effects"
+        given:
+          specs:
+            - specId: spec.tag.create
+              intent: "Create tag"
+              effects:
+                - { database: { table: tags, operation: insert } }
+                - { audit_log: { action: "tag.create", resourceType: tag } }
+                - { cache: { key: tags, action: invalidate } }
+          <<: *empty_context
+        then:
+          result.issues: "@empty"

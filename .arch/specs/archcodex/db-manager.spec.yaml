@@ -1,0 +1,356 @@
+# Database Manager Specification
+#
+# SQLite database manager for ArchCodex.
+# Provides singleton connection management, WAL mode optimization,
+# schema initialization/migration, transactions, and metadata storage.
+
+version: "1.0"
+
+spec.archcodex.dbManager.getDbPath:
+  inherits: spec.function
+  implementation: src/core/db/manager.ts#getDbPath
+
+  # === STRATEGIC ===
+  goal: "Resolve the database file path for a project"
+  outcomes:
+    - "Path is always under .arch/ directory in project root"
+    - "Returns absolute path regardless of input format"
+
+  # === OPERATIONAL ===
+  intent: "Resolve projectRoot/.arch/archcodex.db as absolute path"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Absolute path to the project root directory"
+
+  outputs:
+    dbPath:
+      type: string
+      description: "Absolute path to the SQLite database file"
+
+  examples:
+    success:
+      - name: "standard project root"
+        given:
+          projectRoot: "/home/user/my-project"
+        then:
+          result: "@contains('.arch/archcodex.db')"
+
+      - name: "project root with trailing slash"
+        given:
+          projectRoot: "/home/user/my-project/"
+        then:
+          result: "@contains('.arch/archcodex.db')"
+
+      - name: "nested project path"
+        given:
+          projectRoot: "/home/user/workspace/deep/project"
+        then:
+          result: "@contains('.arch/archcodex.db')"
+
+  invariants:
+    - description: "path always ends with archcodex.db"
+      condition: "result.endsWith('archcodex.db')"
+
+    - description: "path always contains .arch directory"
+      condition: "result.includes('.arch')"
+
+---
+
+spec.archcodex.dbManager.getDb:
+  inherits: spec.function
+  implementation: src/core/db/manager.ts#getDb
+
+  # === STRATEGIC ===
+  goal: "Get or create a database connection with singleton pattern and optimized settings"
+  outcomes:
+    - "Same project root always returns the same connection instance"
+    - "New connections use WAL mode for better concurrency"
+    - "Schema is initialized or migrated automatically"
+    - ".arch directory is created if it does not exist"
+
+  # === OPERATIONAL ===
+  intent: "Check connection cache, create new connection with WAL/NORMAL pragmas if missing, initialize or migrate schema, cache and return"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Absolute path to the project root"
+
+  outputs:
+    db:
+      type: object
+      description: "better-sqlite3 Database instance"
+
+  examples:
+    success:
+      - name: "first call creates new connection"
+        given:
+          projectRoot: "/tmp/test-project"
+        then:
+          result: "@exists"
+
+      - name: "second call returns cached connection"
+        given:
+          projectRoot: "/tmp/test-project"
+        then:
+          result: "@exists"
+
+      - name: "different project roots get different connections"
+        given:
+          projectRoot: "/tmp/project-a"
+        then:
+          result: "@exists"
+
+  invariants:
+    - description: "always returns a database instance"
+      condition: "result is defined"
+
+---
+
+spec.archcodex.dbManager.closeDb:
+  inherits: spec.function
+  implementation: src/core/db/manager.ts#closeDb
+
+  # === STRATEGIC ===
+  goal: "Close and remove a database connection for a specific project"
+  outcomes:
+    - "Connection is closed and removed from cache"
+    - "No-op if no connection exists for the project"
+
+  # === OPERATIONAL ===
+  intent: "Look up connection by project root, close it, and delete from cache map"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Project root whose connection to close"
+
+  outputs:
+    result:
+      type: void
+
+  examples:
+    success:
+      - name: "closes existing connection"
+        given:
+          projectRoot: "/tmp/test-project"
+        then:
+          result: "@exists"
+
+      - name: "no-op for non-existent connection"
+        given:
+          projectRoot: "/tmp/nonexistent-project"
+        then:
+          result: "@exists"
+
+---
+
+spec.archcodex.dbManager.transaction:
+  inherits: spec.function
+  implementation: src/core/db/manager.ts#transaction
+
+  # === STRATEGIC ===
+  goal: "Run a function within an atomic database transaction"
+  outcomes:
+    - "Function result is returned on success"
+    - "Transaction is committed on success"
+    - "Transaction is rolled back on error"
+
+  # === OPERATIONAL ===
+  intent: "Wrap the given function in a better-sqlite3 transaction and execute it"
+
+  inputs:
+    db:
+      type: object
+      required: true
+      description: "Database connection"
+    fn:
+      type: function
+      required: true
+      description: "Function to execute within the transaction"
+
+  outputs:
+    result:
+      type: unknown
+      description: "Return value of the function"
+
+  examples:
+    success:
+      - name: "successful transaction returns function result"
+        given:
+          db: "<db instance>"
+          fn: "() => 42"
+        then:
+          result: 42
+
+      - name: "transaction with multiple operations"
+        given:
+          db: "<db instance>"
+          fn: "() => { db.prepare('INSERT ...').run(); return 'done'; }"
+        then:
+          result: "done"
+
+    errors:
+      - name: "throwing function rolls back transaction"
+        given:
+          db: "<db instance>"
+          fn: "() => { throw new Error('fail'); }"
+        then:
+          error: "@contains('fail')"
+
+---
+
+spec.archcodex.dbManager.getMeta:
+  inherits: spec.function
+  implementation: src/core/db/manager.ts#getMeta
+
+  # === STRATEGIC ===
+  goal: "Retrieve a metadata value from the database by key"
+  outcomes:
+    - "Returns the value string when key exists"
+    - "Returns null when key does not exist"
+
+  # === OPERATIONAL ===
+  intent: "Query the meta table for the given key and return value or null"
+
+  inputs:
+    db:
+      type: object
+      required: true
+      description: "Database connection"
+    key:
+      type: string
+      required: true
+      description: "Metadata key to look up"
+
+  outputs:
+    result:
+      type: string
+      nullable: true
+      description: "Metadata value or null if not found"
+
+  examples:
+    success:
+      - name: "existing key returns value"
+        given:
+          db: "<db instance>"
+          key: "schema_version"
+        then:
+          result: "@exists"
+
+      - name: "non-existent key returns null"
+        given:
+          db: "<db instance>"
+          key: "nonexistent_key"
+        then:
+          result: null
+
+---
+
+spec.archcodex.dbManager.setMeta:
+  inherits: spec.function
+  implementation: src/core/db/manager.ts#setMeta
+
+  # === STRATEGIC ===
+  goal: "Set or delete a metadata value in the database"
+  outcomes:
+    - "Non-null value inserts or replaces the key"
+    - "Null value deletes the key"
+
+  # === OPERATIONAL ===
+  intent: "If value is null, DELETE the key from meta table; otherwise INSERT OR REPLACE"
+
+  inputs:
+    db:
+      type: object
+      required: true
+      description: "Database connection"
+    key:
+      type: string
+      required: true
+      description: "Metadata key"
+    value:
+      type: string
+      nullable: true
+      required: true
+      description: "Value to set, or null to delete"
+
+  outputs:
+    result:
+      type: void
+
+  examples:
+    success:
+      - name: "set a value"
+        given:
+          db: "<db instance>"
+          key: "last_scan"
+          value: "2025-01-15T10:00:00Z"
+        then:
+          result: "@exists"
+
+      - name: "null value deletes the key"
+        given:
+          db: "<db instance>"
+          key: "last_scan"
+          value: null
+        then:
+          result: "@exists"
+
+---
+
+spec.archcodex.dbManager.dbExists:
+  inherits: spec.function
+  implementation: src/core/db/manager.ts#dbExists
+
+  # === STRATEGIC ===
+  goal: "Check if a database file exists for a project"
+  outcomes:
+    - "Returns true when database file exists and is readable"
+    - "Returns false when database file does not exist"
+
+  # === OPERATIONAL ===
+  intent: "Try opening the database in readonly mode with fileMustExist; return true on success, false on error"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Project root to check"
+
+  outputs:
+    result:
+      type: boolean
+      description: "Whether the database file exists"
+
+  examples:
+    success:
+      - name: "database exists"
+        given:
+          projectRoot: "/tmp/initialized-project"
+        then:
+          result: true
+
+      - name: "database does not exist"
+        given:
+          projectRoot: "/tmp/new-project"
+        then:
+          result: false
+
+      - name: "invalid path returns false"
+        given:
+          projectRoot: "/nonexistent/path/nowhere"
+        then:
+          result: false
+
+  invariants:
+    - description: "always returns boolean"
+      condition: "typeof result === 'boolean'"
+
+    - description: "never throws"
+      condition: "function does not throw"

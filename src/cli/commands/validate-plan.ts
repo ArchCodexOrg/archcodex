@@ -59,7 +59,7 @@ async function runValidatePlan(
   let input: PlanValidationInput;
   try {
     input = JSON.parse(planJson) as PlanValidationInput;
-  } catch {
+  } catch { /* JSON parsing failed */
     logger.error('Invalid JSON input. Expected: {"changes": [...]}');
     process.exit(1);
   }

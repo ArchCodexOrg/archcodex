@@ -1,0 +1,136 @@
+# Cache Manager Specification
+#
+# Persistent validation cache with checksum-based invalidation.
+# Avoids re-validating unchanged files by storing results keyed
+# by file path and content checksum.
+
+version: "1.0"
+
+spec.archcodex.cacheManager:
+  inherits: spec.function
+  implementation: src/core/cache/manager.ts#CacheManager
+
+  # === STRATEGIC ===
+  goal: "Manage persistent validation cache with checksum-based invalidation"
+  outcomes:
+    - "Unchanged files skip re-validation via checksum matching"
+    - "Cache invalidates entirely when registry or config changes"
+    - "Stale entries for deleted files are pruned"
+    - "Cache statistics track hits, misses, and invalidations"
+
+  # === OPERATIONAL ===
+  intent: "Store and retrieve cached validation results keyed by file path and content checksum"
+
+  inputs:
+    projectRoot:
+      type: string
+      required: true
+      description: "Absolute path to the project root"
+    registryContent:
+      type: string
+      required: true
+      description: "Raw registry YAML content for checksum computation"
+    configContent:
+      type: string
+      required: true
+      description: "Raw config YAML content for checksum computation"
+
+  outputs:
+    cacheManager:
+      type: object
+      description: "CacheManager instance with load/save/isValid/get/set/prune methods"
+
+  examples:
+    success:
+      - name: "cache hit for unchanged file"
+        given:
+          manager: "loaded with file 'src/foo.ts' checksum 'abc123'"
+          relativePath: "src/foo.ts"
+          currentChecksum: "abc123"
+        then:
+          result.isValid: true
+          result.stats.hits: "@gt(0)"
+
+      - name: "cache miss for unknown file"
+        given:
+          manager: "loaded empty cache"
+          relativePath: "src/new-file.ts"
+          currentChecksum: "def456"
+        then:
+          result.isValid: false
+          result.stats.misses: "@gt(0)"
+
+      - name: "cache invalidated when checksum changes"
+        given:
+          manager: "loaded with file 'src/foo.ts' checksum 'abc123'"
+          relativePath: "src/foo.ts"
+          currentChecksum: "changed789"
+        then:
+          result.isValid: false
+          result.stats.invalidated: "@gt(0)"
+
+      - name: "full invalidation when registry changes"
+        given:
+          manager: "loaded cache created with registryChecksum 'old'"
+          registryContent: "new registry content"
+        then:
+          result.stats.fullInvalidation: true
+          result.stats.totalCached: 0
+
+      - name: "prune removes deleted files"
+        given:
+          manager: "loaded with files ['src/a.ts', 'src/b.ts', 'src/c.ts']"
+          existingFiles: ["src/a.ts"]
+        then:
+          result.pruned: 2
+
+      - name: "set and get round-trip"
+        given:
+          manager: "loaded empty cache"
+          relativePath: "src/foo.ts"
+          result:
+            checksum: "abc123"
+            cachedAt: "2025-01-01T00:00:00Z"
+            archId: "archcodex.core.engine"
+            status: "pass"
+            violations: []
+            warnings: []
+            imports: ["../utils/helpers.js"]
+            overridesCount: 0
+        then:
+          result.get: "@hasProperties({checksum: 'abc123', archId: 'archcodex.core.engine', status: 'pass'})"
+
+      - name: "clear empties all entries"
+        given:
+          manager: "loaded with 5 cached files"
+        then:
+          result.hasCache: false
+          result.stats.totalCached: 0
+
+    errors:
+      - name: "isValid returns false when cache not loaded"
+        given:
+          manager: "not loaded (load() not called)"
+          relativePath: "src/foo.ts"
+          currentChecksum: "abc123"
+        then:
+          result.isValid: false
+
+      - name: "corrupt cache file starts fresh"
+        given:
+          cacheFileContent: "not valid json{{{}"
+        then:
+          result.hasCache: false
+
+  invariants:
+    - description: "isValid true implies checksum matches cached entry"
+      condition: "isValid(path, checksum) === true implies cache.files[path].checksum === checksum"
+
+    - description: "full invalidation resets all cached files"
+      condition: "stats.fullInvalidation === true implies Object.keys(cache.files).length === 0"
+
+    - description: "prune only removes files not in existingFiles set"
+      condition: "after prune(existingFiles), all remaining keys are in existingFiles"
+
+    - description: "stats hits + misses + invalidated equals total isValid calls"
+      condition: "stats.hits + stats.misses + stats.invalidated === totalIsValidCalls"

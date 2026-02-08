@@ -1,0 +1,287 @@
+# Health Analyzer Specification
+#
+# Analyzes architectural health of a project by computing coverage metrics,
+# override debt, registry health, intent health, layer coverage, and
+# type duplicates. Produces a comprehensive report with recommendations.
+
+version: "1.0"
+
+spec.archcodex.healthAnalyzer.getHealthScore:
+  inherits: spec.function
+  implementation: src/core/health/analyzer.ts#HealthAnalyzer.getHealthScore
+
+  # === STRATEGIC ===
+  goal: "Calculate a numeric health score (0-100) from a health report"
+  outcomes:
+    - "Score reflects coverage, override debt, registry, intent, and layer health"
+    - "Perfect project scores 100"
+    - "Each health dimension has a capped penalty to prevent single-issue dominance"
+    - "Score is always clamped between 0 and 100"
+
+  # === OPERATIONAL ===
+  intent: "Start at 100, subtract weighted penalties for coverage gaps, override debt, registry issues, intent problems, layer gaps, and type duplicates, clamp to 0-100"
+
+  inputs:
+    report:
+      type: object
+      required: true
+      description: "Complete HealthReport with all health metrics"
+      properties:
+        coverage:
+          type: object
+          description: "CoverageMetrics with coveragePercent"
+        overrideDebt:
+          type: object
+          description: "OverrideDebt with expired, noExpiry, expiringSoon counts"
+        registryHealth:
+          type: object
+          description: "RegistryHealth with unused, similar, redundant architecture counts"
+        intentHealth:
+          type: object
+          description: "IntentHealth with undefined and unused intent counts"
+        layerHealth:
+          type: object
+          description: "LayerCoverageHealth with orphan files and phantom paths"
+        typeDuplicates:
+          type: array
+          description: "TypeDuplicateReport array"
+
+  outputs:
+    score:
+      type: number
+      description: "Health score from 0 to 100 (rounded integer)"
+
+  examples:
+    success:
+      - name: "perfect health scores 100"
+        given:
+          report:
+            coverage: { coveragePercent: 100 }
+            overrideDebt: { expired: 0, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 0 }
+        then:
+          result: 100
+
+      - name: "50% coverage loses up to 12.5 points"
+        given:
+          report:
+            coverage: { coveragePercent: 50 }
+            overrideDebt: { expired: 0, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 0 }
+        then:
+          result: "@all(@lt(100), @gt(80))"
+
+      - name: "expired overrides reduce score"
+        given:
+          report:
+            coverage: { coveragePercent: 100 }
+            overrideDebt: { expired: 5, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 0 }
+        then:
+          result: "@all(@lt(100), @gt(50))"
+
+      - name: "many unused architectures reduce score"
+        given:
+          report:
+            coverage: { coveragePercent: 100 }
+            overrideDebt: { expired: 0, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 15 }
+        then:
+          result: "@all(@lt(100), @gt(70))"
+
+      - name: "undefined intents reduce score"
+        given:
+          report:
+            coverage: { coveragePercent: 100 }
+            overrideDebt: { expired: 0, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 0 }
+            intentHealth:
+              undefinedIntents: ["foo", "bar", "baz"]
+              unusedIntents: []
+              validationIssues: 0
+        then:
+          result: "@all(@lt(100), @gt(80))"
+
+      - name: "orphan files reduce score"
+        given:
+          report:
+            coverage: { coveragePercent: 100 }
+            overrideDebt: { expired: 0, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 0 }
+            layerHealth:
+              orphanFiles: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"]
+              phantomPaths: []
+              staleExclusions: []
+        then:
+          result: "@all(@lt(100), @gt(85))"
+
+      - name: "type duplicates reduce score"
+        given:
+          report:
+            coverage: { coveragePercent: 100 }
+            overrideDebt: { expired: 0, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 0 }
+            typeDuplicates:
+              - { matchType: "exact", name: "Config" }
+              - { matchType: "exact", name: "Options" }
+        then:
+          result: "@all(@lt(100), @gt(85))"
+
+      - name: "worst case scenario still returns 0 not negative"
+        given:
+          report:
+            coverage: { coveragePercent: 0 }
+            overrideDebt: { expired: 100, noExpiry: 100, expiringSoon: 100 }
+            registryHealth:
+              unusedArchitectures: 50
+              similarArchitectures: [{}, {}, {}, {}, {}]
+              redundantArchitectures: [{}, {}, {}, {}, {}, {}]
+              lowUsageArchitectures: [{}, {}, {}, {}, {}, {}, {}]
+              singletonViolations: [{}, {}, {}, {}]
+            intentHealth:
+              undefinedIntents: ["a", "b", "c", "d", "e"]
+              unusedIntents: ["x", "y", "z", "w", "v", "u"]
+              validationIssues: 10
+              registryError: "Failed to load"
+            layerHealth:
+              orphanFiles: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"]
+              phantomPaths: ["p1", "p2", "p3", "p4"]
+              staleExclusions: ["s1", "s2", "s3", "s4", "s5"]
+            typeDuplicates:
+              - { matchType: "exact" }
+              - { matchType: "exact" }
+              - { matchType: "exact" }
+              - { matchType: "exact" }
+        then:
+          result: 0
+
+    errors:
+      - name: "report without optional sections still computes score"
+        given:
+          report:
+            coverage: { coveragePercent: 80 }
+            overrideDebt: { expired: 0, noExpiry: 0, expiringSoon: 0 }
+            registryHealth: { unusedArchitectures: 0 }
+        then:
+          result: "@all(@gt(0), @lt(101))"
+
+  invariants:
+    - description: "score is always between 0 and 100"
+      condition: "result >= 0 && result <= 100"
+
+    - description: "score is always a rounded integer"
+      condition: "result === Math.round(result)"
+
+    - description: "100% coverage with no issues scores 100"
+      condition: "report.coverage.coveragePercent === 100 && report.overrideDebt.expired === 0 && report.overrideDebt.noExpiry === 0 && report.registryHealth.unusedArchitectures === 0 implies result === 100"
+
+---
+
+spec.archcodex.healthAnalyzer.analyze:
+  inherits: spec.function
+  implementation: src/core/health/analyzer.ts#HealthAnalyzer.analyze
+
+  # === STRATEGIC ===
+  goal: "Generate a comprehensive health report for a project's architecture"
+  outcomes:
+    - "Scans all source files with unified scanner for efficiency"
+    - "Computes override debt from audit data"
+    - "Calculates coverage metrics respecting archignore"
+    - "Analyzes registry health including bloat detection"
+    - "Checks intent health (undefined/unused)"
+    - "Analyzes layer coverage (orphans, phantoms)"
+    - "Generates actionable recommendations"
+    - "Report includes generation timestamp"
+
+  # === OPERATIONAL ===
+  intent: "Orchestrate UnifiedHealthScanner, AuditScanner, RegistryAnalyzer, IntentAnalyzer, and layer analysis to produce a full HealthReport with recommendations"
+
+  inputs:
+    options:
+      type: object
+      required: false
+      description: "Health check options"
+      properties:
+        include: { type: array, description: "File include patterns" }
+        exclude: { type: array, description: "File exclude patterns" }
+        expiringDays: { type: number, description: "Days threshold for expiring soon (default 30)" }
+        untaggedSampleSize: { type: number, description: "Max untagged files to sample (default 10)" }
+        includeArchUsage: { type: boolean, description: "Include per-architecture file counts" }
+        skipLayers: { type: boolean, description: "Skip layer analysis for speed" }
+        detectTypeDuplicates: { type: boolean, description: "Detect duplicate types across files" }
+
+  outputs:
+    report:
+      type: object
+      description: "Complete HealthReport"
+      properties:
+        overrideDebt: { type: object }
+        coverage: { type: object }
+        registryHealth: { type: object }
+        topViolatedConstraints: { type: array }
+        intentHealth: { type: object }
+        layerHealth: { type: object }
+        typeDuplicates: { type: array }
+        recommendations: { type: array }
+        generatedAt: { type: string }
+
+  examples:
+    success:
+      - name: "basic health analysis returns all sections"
+        given:
+          options: {}
+        then:
+          result.overrideDebt: "@exists"
+          result.coverage: "@exists"
+          result.registryHealth: "@exists"
+          result.recommendations: "@exists"
+          result.generatedAt: "@exists"
+
+      - name: "healthy project has positive recommendations"
+        given:
+          options: {}
+        then:
+          result.recommendations: "@length(@gt(0))"
+
+      - name: "skipLayers omits layer health"
+        given:
+          options: { skipLayers: true }
+        then:
+          result.overrideDebt: "@exists"
+          result.coverage: "@exists"
+
+      - name: "report always has timestamp"
+        given:
+          options: {}
+        then:
+          result.generatedAt: "@exists"
+
+    errors:
+      - name: "project with no files still returns valid report"
+        given:
+          options: { include: ["nonexistent/**"] }
+        then:
+          result.coverage: "@exists"
+          result.recommendations: "@exists"
+
+  invariants:
+    - description: "report always has overrideDebt"
+      condition: "result.overrideDebt is defined"
+
+    - description: "report always has coverage"
+      condition: "result.coverage is defined"
+
+    - description: "report always has registryHealth"
+      condition: "result.registryHealth is defined"
+
+    - description: "report always has recommendations array"
+      condition: "Array.isArray(result.recommendations)"
+
+    - description: "report always has generatedAt timestamp"
+      condition: "result.generatedAt is defined && result.generatedAt.length > 0"
+
+    - description: "coverage.totalFiles is non-negative"
+      condition: "result.coverage.totalFiles >= 0"
+
+    - description: "coverage percent is 0-100"
+      condition: "result.coverage.coveragePercent >= 0 && result.coverage.coveragePercent <= 100"

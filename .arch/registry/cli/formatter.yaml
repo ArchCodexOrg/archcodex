@@ -13,6 +13,7 @@ archcodex.cli.formatter:
 
     Use for: Files that convert result objects into displayable strings.
     Don't use for: Data processing or business logic (use core).
+  expected_intents: [cli-output]
   constraints:
     - rule: forbid_import
       value:

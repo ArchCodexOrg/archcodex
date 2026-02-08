@@ -33,6 +33,8 @@ const HELP_TOPICS: Record<string, {
       { name: 'archcodex_scaffold', summary: 'Generate file from template', example: '{"archId": "domain.service", "name": "PaymentService"}' },
       { name: 'archcodex_infer', summary: 'Suggest architecture for files', example: '{"files": ["src/utils/helper.ts"]}' },
       { name: 'archcodex_decide', summary: 'Navigate decision tree', example: '{"action": "start"}' },
+      { name: 'archcodex_action', summary: 'Get guidance for common tasks with checklists', example: '{"query": "add entry action"}' },
+      { name: 'archcodex_feature', summary: 'Multi-file scaffolding for features', example: '{"action": "list"}' },
     ],
   },
   validating: {
@@ -40,17 +42,21 @@ const HELP_TOPICS: Record<string, {
     tools: [
       { name: 'archcodex_check', summary: 'Validate constraints (post-edit)', example: '{"files": ["src/services/*.ts"]}' },
       { name: 'archcodex_validate_plan', summary: 'Pre-flight check before writing code', example: '{"changes": [{"path": "src/new.ts", "action": "create", "archId": "core.engine"}]}' },
+      { name: 'archcodex_feature_audit', summary: 'Verify feature wiring across layers', example: '{"mutation": "duplicateProduct", "entity": "products"}' },
     ],
   },
   understanding: {
     description: 'Learning what constraints apply and why',
     tools: [
+      { name: 'archcodex_context', summary: 'Unified context (module + entity + constraints)', example: '{"module": "src/core/db/"}' },
       { name: 'archcodex_session_context', summary: 'Prime context at session start (call first)', example: '{"withPatterns": true}' },
       { name: 'archcodex_plan_context', summary: 'Scoped context for a directory/task', example: '{"scope": ["src/core/health/"]}' },
+      { name: 'archcodex_entity_context', summary: 'Entity schema + relationships + UI components', example: '{"entity": "products"}' },
       { name: 'archcodex_read', summary: 'Read one file with constraints', example: '{"file": "src/service.ts", "format": "ai"}' },
       { name: 'archcodex_why', summary: 'Explain constraint origins', example: '{"file": "src/service.ts", "constraint": "forbid_import:axios"}' },
       { name: 'archcodex_neighborhood', summary: 'Per-file import boundaries', example: '{"file": "src/core/engine.ts"}' },
       { name: 'archcodex_resolve', summary: 'Show flattened architecture', example: '{"archId": "domain.service"}' },
+      { name: 'archcodex_map', summary: 'Query architecture map (files, imports, entities)', example: '{"module": "src/core/db/"}' },
     ],
   },
   refactoring: {
@@ -73,16 +79,34 @@ const HELP_TOPICS: Record<string, {
     tools: [
       { name: 'archcodex_sync_index', summary: 'Update discovery index', example: '{}' },
       { name: 'archcodex_schema', summary: 'Available rules, mixins, examples', example: '{"filter": "rules"}' },
+      { name: 'archcodex_spec_init', summary: 'Initialize SpecCodex', example: '{}' },
+    ],
+  },
+  specs: {
+    description: 'SpecCodex - Specification by Example for test generation',
+    tools: [
+      { name: 'archcodex_spec_init', summary: 'Initialize SpecCodex base specs and mixins', example: '{}' },
+      { name: 'archcodex_spec_scaffold_touchpoints', summary: 'Generate spec with UI touchpoints from component groups', example: '{"specId": "spec.product.duplicate", "entity": "products"}' },
+    ],
+  },
+  wiring: {
+    description: 'UI component awareness and feature wiring verification',
+    tools: [
+      { name: 'archcodex_feature_audit', summary: 'Comprehensive feature verification across layers', example: '{"mutation": "duplicateProduct", "entity": "products"}' },
+      { name: 'archcodex_entity_context', summary: 'Get entity schema with UI component groups', example: '{"entity": "products"}' },
+      { name: 'archcodex_action', summary: 'Get task checklist with component group expansion', example: '{"query": "add product action"}' },
     ],
   },
 };
 
 const ESSENTIAL_TOOLS = [
-  { name: 'archcodex_session_context', summary: 'Prime context at session start (call first)' },
+  { name: 'archcodex_context', summary: 'Unified context (module + entity + constraints) - call first' },
+  { name: 'archcodex_session_context', summary: 'Prime context at session start' },
   { name: 'archcodex_plan_context', summary: 'Scoped context for multi-file planning' },
   { name: 'archcodex_check', summary: 'Validate constraints after edits' },
   { name: 'archcodex_validate_plan', summary: 'Pre-flight check before writing code' },
   { name: 'archcodex_discover', summary: 'Find architecture for new files' },
+  { name: 'archcodex_feature_audit', summary: 'Verify feature wiring across layers' },
 ];
 
 export interface HelpOptions {
@@ -238,7 +262,7 @@ export async function handleSchema(projectRoot: string, options: SchemaOptions =
           description: a.description,
         }));
       }
-    } catch {
+    } catch { /* registry load failed, return empty arrays */
       if (showAll || filter === 'mixins') output.mixins = [];
       if (showAll || filter === 'architectures') output.architectures = [];
     }

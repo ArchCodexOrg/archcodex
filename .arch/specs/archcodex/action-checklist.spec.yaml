@@ -1,0 +1,287 @@
+# Structured Action Checklists Specification
+#
+# Enhances action checklists to support structured format with backend/frontend/ui
+# sections while remaining backward-compatible with flat array format.
+
+version: "1.0"
+
+spec.archcodex.actionChecklist:
+  inherits: spec.function
+  implementation: src/mcp/handlers/intents.ts#handleAction
+
+  # === STRATEGIC ===
+  goal: "Provide structured checklists that expand component groups for UI tasks"
+  outcomes:
+    - "Actions can define checklists with backend/frontend/ui sections"
+    - "UI section can reference component groups for automatic expansion"
+    - "Flat array format still works (backward compatible)"
+    - "Output clearly separates concerns for agent task tracking"
+
+  # === OPERATIONAL ===
+  intent: "Parse and expand structured action checklists with component group integration"
+
+  inputs:
+    action:
+      type: object
+      properties:
+        name:
+          type: string
+          required: true
+          description: "Action identifier"
+        description:
+          type: string
+          description: "Human-readable description"
+        triggers:
+          type: object
+          properties:
+            entities: { type: array, items: { type: string } }
+            mutation_patterns: { type: array, items: { type: string } }
+          description: "Triggers for automatic component group matching"
+        checklist:
+          oneOf:
+            - type: array
+              items: { type: string }
+              description: "Legacy flat format (backward compatible)"
+            - type: object
+              properties:
+                backend:
+                  type: array
+                  items: { type: string }
+                  description: "Backend tasks (mutations, exports, etc.)"
+                frontend:
+                  type: array
+                  items: { type: string }
+                  description: "Frontend tasks (hooks, handlers, etc.)"
+                ui:
+                  type: object
+                  properties:
+                    from_component_group:
+                      type: string
+                      description: "Component group name to expand"
+                    items:
+                      type: array
+                      items: { type: string }
+                      description: "Static UI checklist items"
+                    additional:
+                      type: array
+                      items: { type: string }
+                      description: "Additional items after expansion"
+              description: "Structured format with sections"
+
+  outputs:
+    expandedChecklist:
+      type: object
+      properties:
+        backend:
+          type: array
+          items: { type: string }
+        frontend:
+          type: array
+          items: { type: string }
+        ui:
+          type: array
+          items: { type: string }
+          description: "Expanded from component group + additional items"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "flat array format still works"
+        given:
+          action:
+            name: "simple-action"
+            checklist:
+              - "Create mutation"
+              - "Add export"
+              - "Update UI"
+        then:
+          result.expandedChecklist.backend: "@undefined"
+          result.expandedChecklist.frontend: "@undefined"
+          result.expandedChecklist.ui: "@undefined"
+          # Falls back to flat format in output
+
+      - name: "structured format with sections"
+        given:
+          action:
+            name: "add-entry-action"
+            checklist:
+              backend:
+                - "Create mutation in src/modules/orders/mutations.ts"
+                - "Add to barrel export"
+              frontend:
+                - "Add to useOrderMutations hook"
+                - "Add handler in useOrderHandlers"
+              ui:
+                items:
+                  - "Add to context menu"
+                additional:
+                  - "Add to bulk toolbar if applicable"
+        then:
+          result.expandedChecklist.backend: "@length(2)"
+          result.expandedChecklist.frontend: "@length(2)"
+          result.expandedChecklist.ui: "@length(2)"
+
+      - name: "component group expansion"
+        given:
+          action:
+            name: "add-entry-action"
+            checklist:
+              backend:
+                - "Create mutation"
+              ui:
+                from_component_group: "product-cards"
+                additional:
+                  - "Add to bulk toolbar"
+        then:
+          result.expandedChecklist.ui: "@length(7)"
+          result.expandedChecklist.ui: "@contains('Wire to ALL 5 components:')"
+          result.expandedChecklist.ui: "@contains('ProductCard')"
+          result.expandedChecklist.ui: "@contains('ProductListItem')"
+          result.expandedChecklist.ui: "@contains('Add to bulk toolbar')"
+
+      - name: "auto-match component group from triggers"
+        given:
+          action:
+            name: "add-entry-action"
+            triggers:
+              entities: ["products"]
+            checklist:
+              backend:
+                - "Create mutation"
+              ui:
+                from_component_group: "auto"
+        then:
+          result.expandedChecklist.ui: "@contains('components')"
+
+    boundaries:
+      - name: "missing component group returns warning"
+        given:
+          action:
+            name: "add-action"
+            checklist:
+              ui:
+                from_component_group: "nonexistent-group"
+        then:
+          result.expandedChecklist.ui: "@length(1)"
+          result.expandedChecklist.ui[0]: "@contains('Warning')"
+
+    boundaries:
+      - name: "empty sections are omitted"
+        given:
+          action:
+            name: "backend-only"
+            checklist:
+              backend:
+                - "Create mutation"
+              frontend: []
+              ui: {}
+        then:
+          result.expandedChecklist.backend: "@length(1)"
+          result.expandedChecklist.frontend: "@undefined"
+          result.expandedChecklist.ui: "@undefined"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "flat format always preserved when used"
+      condition: "Array.isArray(action.checklist) implies result.format === 'flat'"
+    - description: "expandedChecklist with backend/frontend/ui keys never contains flat array"
+      condition: "typeof action.checklist === 'object' implies !Array.isArray(expandedChecklist)"
+    - description: "component expansion includes all group components"
+      condition: >
+        action.checklist.ui.from_component_group !== undefined implies
+        result.expandedChecklist.ui.length >= componentGroups[action.checklist.ui.from_component_group].components.length
+
+---
+# Action Registry Schema Extension
+
+spec.archcodex.actionChecklist.schema:
+  inherits: spec.type
+  implementation: src/core/registry/action-schema.ts
+
+  intent: "Define the extended action schema for structured checklists"
+  goal: "Document the shape of the action checklist data structure"
+  outcomes:
+    - "Action schema supports both flat array and structured object formats"
+    - "Structured format includes backend, frontend, and UI sections"
+
+  fields:
+    action:
+      type: object
+      properties:
+        name:
+          type: string
+          required: true
+        description:
+          type: string
+        architecture:
+          type: string
+          description: "Recommended @arch tag"
+        triggers:
+          type: object
+          properties:
+            entities:
+              type: array
+              items: { type: string }
+            mutation_patterns:
+              type: array
+              items: { type: string }
+        checklist:
+          oneOf:
+            - type: array
+              items: { type: string }
+            - type: object
+              properties:
+                backend:
+                  type: array
+                  items: { type: string }
+                frontend:
+                  type: array
+                  items: { type: string }
+                ui:
+                  oneOf:
+                    - type: object
+                      properties:
+                        from_component_group: { type: string }
+                        items: { type: array, items: { type: string } }
+                        additional: { type: array, items: { type: string } }
+                    - type: array
+                      items: { type: string }
+        examples:
+          type: array
+          items:
+            type: object
+            properties:
+              file: { type: string }
+              description: { type: string }
+
+  examples:
+    success:
+      - name: "legacy flat checklist"
+        given:
+          action:
+            name: "simple"
+            checklist: ["Step 1", "Step 2"]
+        then:
+          result.valid: true
+
+      - name: "structured checklist"
+        given:
+          action:
+            name: "add-entry-action"
+            checklist:
+              backend: ["Create mutation"]
+              frontend: ["Add hook"]
+              ui:
+                from_component_group: "product-cards"
+        then:
+          result.valid: true
+
+    errors:
+      - name: "invalid checklist format"
+        given:
+          action:
+            name: "broken"
+            checklist: "not an array or object"
+        then:
+          result.valid: false
+          result.errors: "@contains('checklist')"

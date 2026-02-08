@@ -1,0 +1,76 @@
+version: "1.0"
+
+spec.document.share:
+  type: test
+  inherits: spec.function
+  implementation: tests/spec/ui/document-share.ts#shareDocument
+
+  goal: "User shares a document via the share dialog"
+  outcomes:
+    - "Share URL is generated for the document"
+    - "Recipients receive access to the shared document"
+  intent: "User shares a document via the share dialog"
+
+  inputs:
+    documentId:
+      type: id
+      table: documents
+      required: true
+      description: "The document to share"
+    recipients:
+      type: array
+      items: { type: string }
+      required: true
+      description: "Email addresses of recipients"
+
+  outputs:
+    shareUrl:
+      type: string
+      description: "Public share URL for the document"
+    sharedWith:
+      type: array
+      items: { type: string }
+      description: "List of email addresses the document was shared with"
+
+  invariants:
+    - { "result.shareUrl": "@exists" }
+    - { "result.shareUrl": "@matches('^https?://')" }
+    - condition: "input.recipients.every(r => result.sharedWith.includes(r))"
+
+  ui:
+    trigger:
+      location: "toolbar"
+      element: "[data-action='share-document']"
+      label: "Share"
+      icon: "share"
+      shortcut: "Cmd+Shift+S"
+
+    interaction:
+      flow:
+        - "User clicks Share button"
+        - "Dialog opens"
+        - "User enters recipients"
+        - "User clicks Send"
+      optimistic: true
+      loading: "Spinner in button"
+
+    accessibility:
+      role: "dialog"
+      label: "Share document"
+      keyboardNav:
+        - { key: "Escape", action: "close" }
+        - { key: "Enter", action: "submit" }
+
+    feedback:
+      success: "Document shared successfully"
+      error: "Failed to share document"
+
+  examples:
+    success:
+      - name: "share with single recipient"
+        given:
+          documentId: "doc_123"
+          recipients: ["user@example.com"]
+        then:
+          shareUrl: "@contains('https://')"
+          sharedWith: "@hasItem('user@example.com')"

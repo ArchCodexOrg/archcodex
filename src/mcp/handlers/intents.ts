@@ -19,6 +19,10 @@ import {
   listFeatureNames,
   getFeature,
 } from '../../core/registry/loader.js';
+import {
+  loadComponentGroupsRegistry,
+  expandChecklist,
+} from '../../core/registry/component-groups.js';
 import { extractIntents, parseArchTags } from '../../core/arch-tag/parser.js';
 import { inferArchitecture, buildRulesFromSettings } from '../../core/infer/index.js';
 import { patternMatches } from '../../utils/pattern-matcher.js';
@@ -132,9 +136,7 @@ export async function handleIntents(projectRoot: string, options: IntentsOptions
               undefinedIntents.get(intent)!.push(relativePath);
             }
           }
-        } catch {
-          // Skip files that can't be read
-        }
+        } catch { /* file unreadable, skip */ }
       }
 
       return {
@@ -239,9 +241,7 @@ export async function handleIntents(projectRoot: string, options: IntentsOptions
               }
             }
           }
-        } catch {
-          // Skip files that can't be read
-        }
+        } catch { /* file unreadable, skip */ }
       }
 
       return {
@@ -309,6 +309,7 @@ export interface ActionToolOptions {
 export async function handleAction(projectRoot: string, options: ActionToolOptions = {}) {
   const actionRegistry = await loadActionRegistry(projectRoot);
   const featureRegistry = await loadFeatureRegistry(projectRoot);
+  const componentGroupsRegistry = await loadComponentGroupsRegistry(projectRoot);
   const action = options.action || 'match';
 
   switch (action) {
@@ -368,12 +369,27 @@ export async function handleAction(projectRoot: string, options: ActionToolOptio
       // Check for linked feature
       const linkedFeature = findFeatureByAction(featureRegistry, options.name);
 
+      // Expand checklist with component groups
+      const expandedChecklist = expandChecklist(
+        actionDef.checklist,
+        componentGroupsRegistry,
+        actionDef.triggers
+      );
+
       return {
         content: [{
           type: 'text',
           text: JSON.stringify({
             name: options.name,
-            ...actionDef,
+            description: actionDef.description,
+            aliases: actionDef.aliases,
+            architecture: actionDef.architecture,
+            intents: actionDef.intents,
+            triggers: actionDef.triggers,
+            suggestedPath: actionDef.suggested_path,
+            filePattern: actionDef.file_pattern,
+            testPattern: actionDef.test_pattern,
+            checklist: expandedChecklist,
             linkedFeature: linkedFeature ? {
               components: linkedFeature.components.map(c => ({
                 role: c.role,
@@ -423,6 +439,13 @@ export async function handleAction(projectRoot: string, options: ActionToolOptio
       const bestMatch = matches[0];
       const linkedFeature = findFeatureByAction(featureRegistry, bestMatch.name);
 
+      // Expand checklist with component groups
+      const expandedChecklist = expandChecklist(
+        bestMatch.action.checklist,
+        componentGroupsRegistry,
+        bestMatch.action.triggers
+      );
+
       return {
         content: [{
           type: 'text',
@@ -435,7 +458,7 @@ export async function handleAction(projectRoot: string, options: ActionToolOptio
               description: bestMatch.action.description,
               architecture: bestMatch.action.architecture,
               intents: bestMatch.action.intents,
-              checklist: bestMatch.action.checklist,
+              checklist: expandedChecklist,
               suggestedPath: bestMatch.action.suggested_path,
               filePattern: bestMatch.action.file_pattern,
               testPattern: bestMatch.action.test_pattern,
@@ -631,9 +654,7 @@ export async function handleInfer(projectRoot: string, options: InferOptions) {
   let intentRegistry = null;
   try {
     intentRegistry = await loadIntentRegistry(projectRoot);
-  } catch {
-    // Continue without intent suggestions
-  }
+  } catch { /* intent registry optional */ }
 
   // Resolve files
   const resolvedFiles: string[] = [];

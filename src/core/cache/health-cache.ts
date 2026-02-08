@@ -68,7 +68,7 @@ export class HealthCacheManager {
       }
 
       return cache;
-    } catch {
+    } catch { /* file not found or corrupt JSON */
       // File doesn't exist or is invalid JSON
       return null;
     }
@@ -86,7 +86,7 @@ export class HealthCacheManager {
 
       // Write cache file (pretty-printed for debugging)
       await fs.writeFile(this.cachePath, JSON.stringify(cache, null, 2));
-    } catch {
+    } catch { /* cache save failed, non-critical */
       // Cache save is non-critical; silently ignore errors
     }
   }
@@ -133,7 +133,7 @@ export class HealthCacheManager {
   async clear(): Promise<void> {
     try {
       await fs.rm(this.cachePath);
-    } catch {
+    } catch { /* file does not exist */
       // Ignore if file doesn't exist
     }
   }

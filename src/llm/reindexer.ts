@@ -179,7 +179,7 @@ async function updateIndexFile(
   try {
     const content = await readFile(indexPath, 'utf-8');
     existingIndex = parseYaml(content);
-  } catch {
+  } catch { /* index.yaml doesn't exist, create new */
     existingIndex = { version: '1.0', entries: [] };
   }
 

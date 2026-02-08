@@ -1,5 +1,6 @@
 /**
  * @arch archcodex.cli.formatter
+ * @intent:cli-output
  *
  * Compact output formatter for CI/pre-commit hooks.
  * Provides single-line per issue output for easy parsing.

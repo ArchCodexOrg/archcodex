@@ -1,0 +1,191 @@
+# Discovery Keyword Extractor Specification
+#
+# Deterministic keyword extraction from architecture definitions.
+# No LLM required - extracts keywords from metadata for discovery/search.
+
+version: "1.0"
+
+spec.archcodex.discoveryKeywordExtractor:
+  inherits: spec.unit
+  implementation: src/core/discovery/keyword-extractor.ts#extractKeywords
+
+  # === STRATEGIC ===
+  goal: "Extract searchable keywords from architecture node metadata"
+  outcomes:
+    - "Discovery queries match architectures by relevant terms"
+    - "Keywords are deterministic - same input always produces same output"
+    - "Stop words and noise are filtered out"
+    - "Output is sorted alphabetically for stable comparisons"
+
+  # === OPERATIONAL ===
+  intent: "Tokenize arch ID segments, description, rationale, hints, mixin names, and constraint values into a sorted keyword list"
+
+  inputs:
+    archId:
+      type: string
+      required: true
+      description: "Architecture ID (e.g. 'archcodex.core.engine')"
+    node:
+      type: object
+      required: true
+      description: "ArchitectureNode with description, rationale, hints, mixins, constraints"
+
+  outputs:
+    type: array
+    description: "Sorted array of unique lowercase keyword strings"
+
+  examples:
+    success:
+      - name: "extracts segments from arch ID"
+        given:
+          archId: "archcodex.core.engine"
+          node: {}
+        then:
+          result: "@hasItem('archcodex')"
+          result: "@hasItem('core')"
+          result: "@hasItem('engine')"
+
+      - name: "extracts words from description"
+        given:
+          archId: "app.util"
+          node:
+            description: "Shared validation helpers"
+        then:
+          result: "@hasItem('shared')"
+          result: "@hasItem('validation')"
+          result: "@hasItem('helpers')"
+
+      - name: "filters out stop words"
+        given:
+          archId: "app.util"
+          node:
+            description: "The shared helpers for the project"
+        then:
+          # 'the' and 'for' are stop words, should not appear
+          result: "@hasItem('shared')"
+          result: "@hasItem('helpers')"
+          result: "@hasItem('project')"
+
+      - name: "extracts from hints"
+        given:
+          archId: "app.core"
+          node:
+            hints:
+              - "Prefer composition over inheritance"
+        then:
+          result: "@hasItem('composition')"
+          result: "@hasItem('inheritance')"
+
+      - name: "extracts from hints with object format"
+        given:
+          archId: "app.core"
+          node:
+            hints:
+              - text: "Domain logic should be testable"
+        then:
+          result: "@hasItem('domain')"
+          result: "@hasItem('logic')"
+          result: "@hasItem('testable')"
+
+      - name: "includes mixin names"
+        given:
+          archId: "app.core"
+          node:
+            mixins: ["stateful", "cacheable"]
+        then:
+          result: "@hasItem('stateful')"
+          result: "@hasItem('cacheable')"
+
+      - name: "extracts string constraint values"
+        given:
+          archId: "app.core"
+          node:
+            constraints:
+              - rule: "forbid_import"
+                value: ["commander", "chalk"]
+        then:
+          result: "@hasItem('commander')"
+          result: "@hasItem('chalk')"
+
+      - name: "skips regex constraint values"
+        given:
+          archId: "app.core"
+          node:
+            constraints:
+              - rule: "forbid_pattern"
+                value: "console\\.(log|error)"
+        then:
+          # Regex patterns with special chars are skipped
+          result: "@exists"
+
+      - name: "skips short segments (2 chars or fewer)"
+        given:
+          archId: "a.b.engine"
+          node: {}
+        then:
+          result: "@hasItem('engine')"
+          result: "@length(1)"
+
+      - name: "output is sorted alphabetically"
+        given:
+          archId: "z.core.alpha"
+          node: {}
+        then:
+          # alpha < core < z
+          result: "@exists"
+
+    errors:
+      - name: "empty node returns only arch ID segments"
+        given:
+          archId: "archcodex.core.engine"
+          node: {}
+        then:
+          result: "@length(3)"
+
+  invariants:
+    - description: "output is always sorted"
+      condition: "result equals [...result].sort()"
+
+    - description: "no stop words in output"
+      condition: "result does not contain any STOP_WORDS entries"
+
+    - description: "all keywords are lowercase"
+      condition: "every keyword k satisfies k === k.toLowerCase()"
+
+    - description: "no duplicates in output"
+      condition: "new Set(result).size === result.length"
+
+# --- Batch extraction ---
+
+spec.archcodex.discoveryExtractAllKeywords:
+  inherits: spec.unit
+  implementation: src/core/discovery/keyword-extractor.ts#extractAllKeywords
+
+  goal: "Extract keywords for all architectures in a registry"
+  intent: "Iterate all nodes, call extractKeywords for each, return Map of archId to keywords"
+
+  inputs:
+    nodes:
+      type: object
+      required: true
+      description: "Record<string, ArchitectureNode> from registry"
+
+  outputs:
+    type: Map
+    description: "Map of arch ID to keywords array"
+
+  examples:
+    success:
+      - name: "returns map with entry per node"
+        given:
+          nodes:
+            "app.core": { description: "Core logic" }
+            "app.util": { description: "Utilities" }
+        then:
+          result.size: 2
+
+      - name: "empty registry returns empty map"
+        given:
+          nodes: {}
+        then:
+          result.size: 0

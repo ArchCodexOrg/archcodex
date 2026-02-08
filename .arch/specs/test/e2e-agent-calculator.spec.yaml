@@ -1,0 +1,42 @@
+version: "1.0"
+
+spec.test.agent.multiply:
+  type: test
+  inherits: spec.function
+  goal: "Verify multiplication operation works correctly"
+  intent: "Multiply two numbers together"
+
+  inputs:
+    a:
+      type: number
+      required: true
+      description: "First number to multiply"
+    b:
+      type: number
+      required: true
+      description: "Second number to multiply"
+
+  outputs:
+    result:
+      type: number
+      description: "Product of a and b"
+
+  invariants:
+    - condition: "result === input.a * input.b"
+    - condition: "Number.isFinite(result)"
+
+  examples:
+    success:
+      - name: "multiply positive numbers"
+        given: { a: 3, b: 4 }
+        then: { result: 12 }
+      - name: "multiply with zero"
+        given: { a: 5, b: 0 }
+        then: { result: 0 }
+      - name: "multiply negative"
+        given: { a: -2, b: 3 }
+        then: { result: -6 }
+    boundaries:
+      - name: "large numbers"
+        given: { a: 1000000, b: 1000000 }
+        then: { result: 1000000000000 }

@@ -1,0 +1,366 @@
+# Feature Audit Tool Specification
+#
+# Comprehensive verification tool that checks feature implementation
+# across all layers: backend, frontend, and UI components.
+
+version: "1.0"
+
+spec.archcodex.featureAudit:
+  inherits: spec.function
+  implementation: src/cli/commands/feature-audit.ts#featureAudit
+
+  # === STRATEGIC ===
+  goal: "Verify complete feature implementation across all architectural layers"
+  outcomes:
+    - "Detect missing backend mutations/queries"
+    - "Detect missing barrel exports"
+    - "Detect missing frontend hooks/handlers"
+    - "Detect missing UI component wiring using component groups"
+    - "Generate actionable remediation checklist"
+
+  # === OPERATIONAL ===
+  intent: "Audit feature completeness by scanning for expected patterns across layers"
+
+  inputs:
+    mutation:
+      type: string
+      description: "Mutation name to audit (e.g., 'duplicateEntry')"
+    entity:
+      type: string
+      description: "Entity name for component group matching (e.g., 'products')"
+    projectRoot:
+      type: string
+      required: true
+      description: "Project root path"
+    verbose:
+      type: boolean
+      default: false
+      description: "Show detailed scan information"
+
+  outputs:
+    status:
+      type: enum
+      values: [complete, incomplete, error]
+      description: "Overall audit status"
+    layers:
+      type: object
+      properties:
+        backend:
+          type: object
+          properties:
+            status: { type: enum, values: [pass, fail, skip] }
+            checks:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  status: { type: enum, values: [found, missing, error] }
+                  file: { type: string, optional: true }
+                  expected: { type: string, optional: true }
+        frontend:
+          type: object
+          properties:
+            status: { type: enum, values: [pass, fail, skip] }
+            checks:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  status: { type: enum, values: [found, missing, error] }
+                  file: { type: string, optional: true }
+        ui:
+          type: object
+          properties:
+            status: { type: enum, values: [pass, fail, skip] }
+            componentGroup: { type: string, optional: true }
+            checks:
+              type: array
+              items:
+                type: object
+                properties:
+                  component: { type: string }
+                  status: { type: enum, values: [wired, missing, partial] }
+                  handler: { type: string, optional: true }
+    remediation:
+      type: array
+      items: { type: string }
+      description: "List of actions needed to complete the feature"
+    summary:
+      type: string
+      description: "Human-readable summary"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "fully implemented feature passes audit"
+        given:
+          mutation: "duplicateEntry"
+          entity: "products"
+          projectRoot: "/path/to/project"
+          # Assumes all files exist with proper wiring
+        then:
+          result.status: "complete"
+          result.layers.backend.status: "pass"
+          result.layers.frontend.status: "pass"
+          result.layers.ui.status: "pass"
+          result.remediation: "@empty"
+
+      - name: "partially implemented feature shows missing items"
+        given:
+          mutation: "duplicateEntry"
+          entity: "products"
+          projectRoot: "/path/to/project"
+          # Missing: ProductListItem and ProductGrid handler wiring
+        then:
+          result.status: "incomplete"
+          result.layers.ui.status: "fail"
+          result.layers.ui.checks: "@hasItem({ component: 'ProductListItem', status: 'missing' })"
+          result.remediation: "@length(2)"
+          result.remediation: "@contains('ProductListItem')"
+
+    boundaries:
+      - name: "mutation-only audit skips entity checks"
+        given:
+          mutation: "duplicateEntry"
+          # No entity specified
+          projectRoot: "/path/to/project"
+        then:
+          result.layers.backend.status: "@not('skip')"
+          result.layers.ui.status: "skip"
+          result.layers.ui.checks: "@empty"
+      - name: "unknown mutation returns error"
+        given:
+          mutation: "nonExistentMutation"
+          projectRoot: "/path/to/project"
+        then:
+          result.status: "error"
+          result.summary: "@contains('not found')"
+
+      - name: "entity without component group skips UI layer"
+        given:
+          mutation: "createUser"
+          entity: "users"
+          projectRoot: "/path/to/project"
+        then:
+          result.layers.ui.status: "skip"
+          result.layers.ui.componentGroup: "@undefined"
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "complete status requires all layers pass or skip"
+      condition: >
+        result.status === 'complete' implies
+        (result.layers.backend.status !== 'fail' &&
+         result.layers.frontend.status !== 'fail' &&
+         result.layers.ui.status !== 'fail')
+    - description: "incomplete status has non-empty remediation"
+      condition: "result.status === 'incomplete' implies result.remediation.length > 0"
+    - description: "UI checks match component group size when present"
+      condition: >
+        result.layers.ui.componentGroup !== undefined implies
+        result.layers.ui.checks.length === componentGroups[result.layers.ui.componentGroup].components.length
+
+  # === EFFECTS ===
+  effects:
+    - file_scan: { pattern: "src/**/*.ts" }
+    - file_scan: { pattern: "src/hooks/**/*.ts" }
+    - file_scan: { pattern: "src/components/**/*.tsx" }
+
+---
+# Backend Layer Audit
+
+spec.archcodex.featureAudit.backend:
+  inherits: spec.function
+  implementation: src/core/audit/feature-audit.ts#auditBackendLayer
+
+  goal: "Verify backend mutation exists and is exported from barrel file"
+  intent: "Check backend mutation/query exists and is properly exported"
+
+  inputs:
+    mutation:
+      type: string
+      required: true
+    projectRoot:
+      type: string
+      required: true
+
+  outputs:
+    checks:
+      type: array
+      items:
+        type: object
+        properties:
+          name: { type: string }
+          status: { type: enum, values: [found, missing, error] }
+          file: { type: string, optional: true }
+
+  examples:
+    success:
+      - name: "finds mutation in expected location"
+        given:
+          mutation: "duplicateEntry"
+          projectRoot: "/path/to/project"
+        then:
+          result.checks: "@hasItem({ name: 'mutation_exists', status: 'found' })"
+          result.checks: "@hasItem({ name: 'barrel_export', status: 'found' })"
+
+      - name: "detects missing barrel export"
+        given:
+          mutation: "orphanedMutation"
+          projectRoot: "/path/to/project"
+        then:
+          result.checks: "@hasItem({ name: 'mutation_exists', status: 'found' })"
+          result.checks: "@hasItem({ name: 'barrel_export', status: 'missing' })"
+
+    errors:
+      - name: "missing mutation name"
+        given:
+          mutation: ""
+          projectRoot: "/path/to/project"
+        then:
+          error: "MISSING_MUTATION"
+
+  invariants:
+    - description: "barrel_export only checked if mutation_exists passes"
+      condition: >
+        result.checks.find(c => c.name === 'barrel_export').status !== 'found' implies
+        result.checks.find(c => c.name === 'mutation_exists').status === 'found'
+
+---
+# Frontend Layer Audit
+
+spec.archcodex.featureAudit.frontend:
+  inherits: spec.function
+  implementation: src/core/audit/feature-audit.ts#auditFrontendLayer
+
+  goal: "Verify frontend hook wrapper and handler reference the mutation"
+  intent: "Check frontend hooks and handlers reference the mutation"
+
+  inputs:
+    mutation:
+      type: string
+      required: true
+    projectRoot:
+      type: string
+      required: true
+
+  outputs:
+    checks:
+      type: array
+      items:
+        type: object
+        properties:
+          name: { type: string }
+          status: { type: enum, values: [found, missing, error] }
+          file: { type: string, optional: true }
+
+  examples:
+    success:
+      - name: "finds hook wrapper for mutation"
+        given:
+          mutation: "duplicateEntry"
+          projectRoot: "/path/to/project"
+        then:
+          result.checks: "@hasItem({ name: 'hook_wrapper', status: 'found' })"
+
+      - name: "detects missing handler"
+        given:
+          mutation: "newMutation"
+          projectRoot: "/path/to/project"
+        then:
+          result.checks: "@hasItem({ name: 'handler', status: 'missing' })"
+
+    errors:
+      - name: "missing mutation name"
+        given:
+          mutation: ""
+          projectRoot: "/path/to/project"
+        then:
+          error: "MISSING_MUTATION"
+
+---
+# UI Layer Audit
+
+spec.archcodex.featureAudit.ui:
+  inherits: spec.function
+  implementation: src/core/audit/feature-audit.ts#auditUILayer
+
+  goal: "Verify UI components in matched component group reference the handler"
+  intent: "Check UI components in matched component group reference the handler"
+
+  inputs:
+    entity:
+      type: string
+      required: true
+    handler:
+      type: string
+      required: true
+      description: "Handler function name to look for (e.g., 'handleDuplicate')"
+    projectRoot:
+      type: string
+      required: true
+
+  outputs:
+    componentGroup:
+      type: string
+      optional: true
+      description: "Matched component group name"
+    checks:
+      type: array
+      items:
+        type: object
+        properties:
+          component: { type: string }
+          status: { type: enum, values: [wired, missing, partial] }
+          details: { type: string, optional: true }
+
+  examples:
+    success:
+      - name: "all components wired"
+        given:
+          entity: "products"
+          handler: "handleDuplicate"
+          projectRoot: "/path/to/project"
+        then:
+          result.componentGroup: "product-cards"
+          result.checks: "@length(5)"
+          result.checks: "@every({ status: 'wired' })"
+
+      - name: "partial wiring detected"
+        given:
+          entity: "products"
+          handler: "handleDuplicate"
+          projectRoot: "/path/to/project"
+          # ProductCard has the handler, ProductListItem doesn't
+        then:
+          result.checks: "@hasItem({ component: 'ProductCard', status: 'wired' })"
+          result.checks: "@hasItem({ component: 'ProductListItem', status: 'missing' })"
+
+    boundaries:
+      - name: "no component group for entity"
+        given:
+          entity: "users"
+          handler: "handleDelete"
+          projectRoot: "/path/to/project"
+        then:
+          result.componentGroup: "@undefined"
+          result.checks: "@empty"
+
+    errors:
+      - name: "missing entity name"
+        given:
+          entity: ""
+          handler: "handleDuplicate"
+          projectRoot: "/path/to/project"
+        then:
+          error: "MISSING_ENTITY"
+
+  invariants:
+    - description: "checks length matches component group size"
+      condition: "result.componentGroup !== undefined implies result.checks.length === componentGroups[result.componentGroup].components.length"
+    - description: "partial status means handler imported but not used"
+      condition: >
+        result.checks.some(c => c.status === 'partial') implies
+        result.checks.some(c => c.details.includes('imported'))

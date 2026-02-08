@@ -1,0 +1,325 @@
+# ArchCodex ADR Generator Specifications
+#
+# Specs for generating Architecture Decision Records from ArchCodex architectures.
+# Transforms registry YAML into human-readable Markdown ADRs.
+
+version: "1.0"
+
+# =============================================================================
+# ADR GENERATOR: Single Architecture
+# =============================================================================
+
+spec.archcodex.docs.adr:
+  inherits: spec.function
+  implementation: src/core/docs/adr-generator.ts#generateAdr
+
+  # === STRATEGIC ===
+  goal: "Generate ADR documentation from ArchCodex architecture"
+  outcomes:
+    - "Generate standard ADR format (Title, Status, Context, Decision, Consequences)"
+    - "Extract context from description and rationale"
+    - "Document constraints as decisions"
+    - "Document consequences (what's forbidden/required)"
+    - "Include reference implementations as examples"
+    - "Link to parent architecture and mixins"
+
+  # === OPERATIONAL ===
+  intent: "Generate an ADR Markdown document from a resolved architecture"
+
+  inputs:
+    architecture:
+      type: object
+      required: true
+      description: "Flattened/resolved architecture from registry"
+    options:
+      type: object
+      properties:
+        includeInheritance: { type: boolean, default: true, description: "Show inheritance chain" }
+        includeHints: { type: boolean, default: true, description: "Include hints as guidelines" }
+        includeReferences: { type: boolean, default: true, description: "Include reference implementations" }
+        format: { type: enum, values: [standard, compact, detailed], default: standard }
+
+  outputs:
+    valid: { type: boolean }
+    markdown: { type: string, description: "Generated ADR Markdown" }
+    sections: { type: array, items: { type: string }, description: "Sections included" }
+    errors: { type: array }
+
+  # === INVARIANTS ===
+  invariants:
+    - "sections array includes 'status', 'context', 'decision', 'consequences'"
+    - "archId is formatted as readable title"
+    - "constraints documented as decisions"
+    - "forbidden imports listed in consequences"
+    - "generated Markdown is valid CommonMark"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate from architecture with rationale"
+        given:
+          architecture:
+            archId: "domain.service"
+            description: "Domain service for business logic"
+            rationale: |
+              Services contain pure business logic.
+              They should be framework-agnostic and easily testable.
+            inheritanceChain: ["domain.service", "domain", "base"]
+            appliedMixins: ["tested", "dip"]
+            constraints:
+              - { rule: "forbid_import", value: ["express", "fastify"], why: "Services must be framework-agnostic" }
+              - { rule: "require_test_file", value: "*.test.ts", why: "All services must be tested" }
+            hints:
+              - { text: "Prefer composition over inheritance" }
+              - { text: "Use dependency injection" }
+            reference_implementations: ["src/services/user.service.ts"]
+        then:
+          result.valid: true
+          result.errors: []
+          result.markdown: "@contains('# ADR: Domain Service')"
+          result.markdown: "@contains('## Status')"
+          result.markdown: "@contains('Active')"
+          result.markdown: "@contains('## Context')"
+          result.markdown: "@contains('business logic')"
+          result.markdown: "@contains('## Decision')"
+          result.markdown: "@contains('forbid_import')"
+          result.markdown: "@contains('## Consequences')"
+          result.markdown: "@contains('express')"
+          result.sections: "@contains('context')"
+          result.sections: "@contains('decision')"
+          result.sections: "@contains('consequences')"
+
+      - name: "generate with inheritance chain"
+        given:
+          architecture:
+            archId: "convex.mutation.guarded"
+            description: "Guarded mutation with permission checks"
+            inheritanceChain: ["convex.mutation.guarded", "convex.mutation", "convex", "base"]
+            appliedMixins: []
+            constraints: []
+            hints: []
+          options: { includeInheritance: true }
+        then:
+          result.valid: true
+          result.markdown: "@contains('convex.mutation.guarded')"
+          result.markdown: "@contains('convex.mutation')"
+          result.markdown: "@contains('Inherits from')"
+
+      - name: "generate with reference implementations"
+        given:
+          architecture:
+            archId: "frontend.hook"
+            description: "React custom hook"
+            inheritanceChain: ["frontend.hook", "frontend", "base"]
+            constraints: []
+            hints: []
+            reference_implementations:
+              - "src/hooks/useAuth.ts"
+              - "src/hooks/useQuery.ts"
+          options: { includeReferences: true }
+        then:
+          result.valid: true
+          result.markdown: "@contains('## References')"
+          result.markdown: "@contains('useAuth.ts')"
+          result.markdown: "@contains('useQuery.ts')"
+
+      - name: "generate compact format"
+        given:
+          architecture:
+            archId: "util"
+            description: "Utility functions"
+            inheritanceChain: ["util", "base"]
+            constraints: []
+            hints: []
+          options: { format: compact }
+        then:
+          result.valid: true
+          # Compact format omits empty sections
+
+    errors:
+      - name: "missing archId"
+        given:
+          architecture: { description: "Test" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_ARCH_ID"
+
+      - name: "resolution failed"
+        given:
+          architecture:
+            archId: "invalid.reference"
+            inheritanceChain: ["broken.parent"]
+        then:
+          error: "RESOLVE_FAILED"
+
+# =============================================================================
+# ADR GENERATOR: All Architectures
+# =============================================================================
+
+spec.archcodex.docs.adr.all:
+  inherits: spec.function
+  implementation: src/core/docs/adr-generator.ts#generateAllAdrs
+
+  # === STRATEGIC ===
+  goal: "Generate ADRs for all architectures in registry"
+  outcomes:
+    - "Generate individual ADR for each architecture"
+    - "Generate index file linking all ADRs"
+    - "Group by layer/category"
+    - "Support output to directory"
+
+  # === OPERATIONAL ===
+  intent: "Generate ADR documentation for entire registry"
+
+  inputs:
+    registry:
+      type: object
+      required: true
+      description: "Full registry with all architectures"
+    options:
+      type: object
+      properties:
+        outputDir: { type: string, description: "Output directory" }
+        includeIndex: { type: boolean, default: true, description: "Generate index.md" }
+        groupBy: { type: enum, values: [layer, flat], default: layer }
+        skipAbstract: { type: boolean, default: true, description: "Skip base/abstract architectures" }
+
+  outputs:
+    valid: { type: boolean }
+    files: { type: array, items: { type: object }, description: "Generated files" }
+    index: { type: string, description: "Index markdown if requested" }
+    errors: { type: array }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate all with index"
+        given:
+          registry:
+            nodes:
+              domain.service: { description: "Service" }
+              domain.repository: { description: "Repository" }
+              infra.adapter: { description: "Adapter" }
+          options: { includeIndex: true }
+        then:
+          result.valid: true
+          result.errors: []
+          result.files: "@length(3)"
+          result.index: "@contains('# Architecture Decision Records')"
+          result.index: "@contains('domain.service')"
+
+      - name: "group by layer"
+        given:
+          registry:
+            nodes:
+              core.engine: { description: "Engine" }
+              core.domain: { description: "Domain" }
+              cli.command: { description: "Command" }
+          options: { groupBy: layer }
+        then:
+          result.valid: true
+          result.index: "@contains('## Core')"
+          result.index: "@contains('## CLI')"
+
+    errors:
+      - name: "empty registry"
+        given:
+          registry: { nodes: {} }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_REGISTRY"
+
+      - name: "missing archId in registry node"
+        given:
+          registry:
+            nodes:
+              "": { description: "Invalid node" }
+        then:
+          error: "MISSING_ARCH_ID"
+
+      - name: "resolution failed for registry node"
+        given:
+          registry:
+            nodes:
+              invalid.arch: { inheritanceChain: ["broken.parent"] }
+        then:
+          error: "RESOLVE_FAILED"
+
+# =============================================================================
+# CLI COMMAND: doc adr
+# =============================================================================
+
+spec.archcodex.cli.doc.adr:
+  inherits: spec.function
+  implementation: src/cli/commands/doc.ts#createDocCommand
+
+  # === STRATEGIC ===
+  goal: "CLI command for generating ADRs from architectures"
+  outcomes:
+    - "`doc adr <archId>` generates single ADR"
+    - "`doc adr --all` generates all ADRs"
+    - "`doc adr --index` generates only index"
+    - "Support output to file/directory"
+
+  # === OPERATIONAL ===
+  intent: "Generate ADR documentation via CLI"
+
+  inputs:
+    archId:
+      type: string
+      description: "Architecture ID (or --all for all)"
+    options:
+      type: object
+      properties:
+        all: { type: boolean, default: false }
+        index: { type: boolean, default: false, description: "Generate index only" }
+        output: { type: string, description: "Output path" }
+        dryRun: { type: boolean, default: false }
+        format: { type: enum, values: [standard, compact, detailed], default: standard }
+        json: { type: boolean, default: false }
+
+  outputs:
+    exitCode: { type: number }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate single ADR"
+        given:
+          archId: "domain.service"
+          options: {}
+        then:
+          result.exitCode: 0
+          result.stdout: "@contains('# ADR:')"
+
+      - name: "generate all to directory"
+        given:
+          options: { all: true, output: "docs/adr/" }
+        then:
+          result.exitCode: 0
+          result.filesWritten: "@length(@gte(1))"
+
+      - name: "generate index only"
+        given:
+          options: { all: true, index: true }
+        then:
+          result.exitCode: 0
+          result.stdout: "@contains('# Architecture Decision Records')"
+
+      - name: "dry run preview"
+        given:
+          archId: "domain.service"
+          options: { dryRun: true }
+        then:
+          result.exitCode: 0
+          result.stdout: "@contains('Would generate')"
+          result.filesWritten: []
+
+    errors:
+      - name: "architecture not found"
+        given:
+          archId: "nonexistent"
+          options: {}
+        then:
+          result.exitCode: 1
+          result.stdout: "@contains('not found')"

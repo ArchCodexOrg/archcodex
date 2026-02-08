@@ -270,12 +270,69 @@ async function printActionDetails(
     console.log();
   }
 
-  if (action.checklist.length > 0) {
-    console.log(chalk.dim('Checklist:'));
-    for (const item of action.checklist) {
-      console.log(`  ${chalk.dim('☐')} ${item}`);
+  // Handle both flat and structured checklist formats
+  if (Array.isArray(action.checklist)) {
+    // Flat format (legacy)
+    if (action.checklist.length > 0) {
+      console.log(chalk.dim('Checklist:'));
+      for (const item of action.checklist) {
+        console.log(`  ${chalk.dim('☐')} ${item}`);
+      }
+      console.log();
     }
-    console.log();
+  } else {
+    // Structured format with sections
+    const checklist = action.checklist;
+    let hasItems = false;
+
+    if (checklist.backend && checklist.backend.length > 0) {
+      hasItems = true;
+      console.log(chalk.dim('Checklist - Backend:'));
+      for (const item of checklist.backend) {
+        console.log(`  ${chalk.dim('☐')} ${item}`);
+      }
+      console.log();
+    }
+
+    if (checklist.frontend && checklist.frontend.length > 0) {
+      hasItems = true;
+      console.log(chalk.dim('Checklist - Frontend:'));
+      for (const item of checklist.frontend) {
+        console.log(`  ${chalk.dim('☐')} ${item}`);
+      }
+      console.log();
+    }
+
+    if (checklist.ui) {
+      hasItems = true;
+      console.log(chalk.dim('Checklist - UI:'));
+      if (Array.isArray(checklist.ui)) {
+        for (const item of checklist.ui) {
+          console.log(`  ${chalk.dim('☐')} ${item}`);
+        }
+      } else {
+        // Structured UI with component group reference
+        if (checklist.ui.from_component_group) {
+          console.log(`  ${chalk.yellow('⚡')} Component group: ${chalk.cyan(checklist.ui.from_component_group)}`);
+        }
+        if (checklist.ui.items) {
+          for (const item of checklist.ui.items) {
+            console.log(`  ${chalk.dim('☐')} ${item}`);
+          }
+        }
+        if (checklist.ui.additional) {
+          for (const item of checklist.ui.additional) {
+            console.log(`  ${chalk.dim('☐')} ${item}`);
+          }
+        }
+      }
+      console.log();
+    }
+
+    if (!hasItems) {
+      console.log(chalk.dim('Checklist: (empty)'));
+      console.log();
+    }
   }
 
   if (verbose) {

@@ -1,0 +1,129 @@
+# Entity Context UI Components Specification
+#
+# Enhances archcodex_entity_context to include matched component groups
+# when querying entity information.
+
+version: "1.0"
+
+spec.archcodex.entityContextUI:
+  inherits: spec.function
+  implementation: src/mcp/handlers/entity-context.ts#handleEntityContext
+
+  # === STRATEGIC ===
+  goal: "Surface UI component information when querying entity context"
+  outcomes:
+    - "Entity context includes ui_components section when groups match"
+    - "Developers see all components that render an entity"
+    - "Warning messages surface coupling between files"
+    - "Related handlers/actions are included for completeness"
+
+  # === OPERATIONAL ===
+  intent: "Include matched component groups in entity context output"
+
+  inputs:
+    entity:
+      type: string
+      required: true
+      description: "Entity name to query (e.g., 'products')"
+    projectRoot:
+      type: string
+      required: true
+      description: "Project root path"
+    format:
+      type: enum
+      values: [yaml, json, compact]
+      default: yaml
+      description: "Output format"
+
+  outputs:
+    # NEW: UI component mapping
+    ui_components:
+      type: object
+      optional: true
+      description: "Component groups that render this entity (from .arch/component-groups.yaml)"
+      properties:
+        group:
+          type: string
+          description: "Component group name"
+        warning:
+          type: string
+          description: "Warning message about coupled components"
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              renders: { type: string }
+          description: "List of components in the group"
+        related:
+          type: object
+          properties:
+            actions: { type: string }
+            handlers: { type: string }
+          description: "Related files (handlers, actions)"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "entity with matching component group shows ui_components"
+        given:
+          entity: "products"
+          projectRoot: "/path/to/project"
+        then:
+          result.fields: "@exists"
+          result.relationships: "@exists"
+          result.behaviors: "@exists"
+          result.operations: "@exists"
+          result.ui_components.group: "product-cards"
+          result.ui_components.components: "@length(5)"
+          result.ui_components.warning: "@contains('5 components')"
+          result.ui_components.components[0].path: "@contains('ProductCard')"
+          result.ui_components.related.handlers: "@exists"
+
+      - name: "entity with matching group includes related files"
+        given:
+          entity: "products"
+          projectRoot: "/path/to/project"
+        then:
+          result.ui_components.related.actions: "@contains('ProductActions')"
+          result.ui_components.related.handlers: "@contains('useProductHandlers')"
+
+    boundaries:
+      - name: "entity without matching group returns no ui_components"
+        given:
+          entity: "users"
+          projectRoot: "/path/to/project"
+        then:
+          result.fields: "@exists"
+          result.ui_components: "@undefined"
+
+      - name: "project without component-groups.yaml returns no ui_components"
+        given:
+          entity: "products"
+          projectRoot: "/path/without/component-groups"
+        then:
+          result.fields: "@exists"
+          result.ui_components: "@undefined"
+
+      - name: "multiple groups matching same entity returns first match"
+        given:
+          entity: "products"
+          projectRoot: "/path/with/multiple/groups"
+        then:
+          result.ui_components.group: "@exists"
+          # Returns first matching group
+
+  # === INVARIANTS ===
+  invariants:
+    - description: "ui_components only present when a group matches"
+      condition: "result.ui_components !== undefined implies matchingGroupExists"
+    - description: "ui_components always has group name when present"
+      condition: "result.ui_components !== undefined implies result.ui_components.group !== undefined"
+    - description: "component paths are always relative"
+      forall:
+        variable: comp
+        in: result.ui_components.components
+        then: { "comp.path": "@not(@contains('/'))" }
+        where: { "result.ui_components": "@exists" }
+

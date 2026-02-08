@@ -1,5 +1,6 @@
 /**
  * @arch archcodex.cli.formatter
+ * @intent:cli-output
  */
 import chalk from 'chalk';
 import type { ValidationResult, BatchValidationResult } from '../../core/validation/types.js';

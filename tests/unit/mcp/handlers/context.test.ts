@@ -194,6 +194,122 @@ describe('MCP Context Handlers', () => {
       expect(result.content[0].text).toContain('## Shared');
       expect(result.content[0].text).toContain('forbid_import');
     });
+
+    it('should show patterns, require, and hints in compact format', async () => {
+      vi.mocked(getSessionContext).mockResolvedValue({
+        filesScanned: 10,
+        architecturesInScope: [
+          {
+            archId: 'test.arch',
+            fileCount: 5,
+            description: 'Test',
+            forbid: [],
+            patterns: ['console\\.log'],
+            require: ['@arch tag'],
+            hints: ['Keep it simple', 'Second hint'],
+            mixins: [],
+          },
+        ],
+        layers: [],
+        sharedConstraints: [],
+        untaggedFiles: [],
+      });
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.content[0].text).toContain('patterns: console\\.log');
+      expect(result.content[0].text).toContain('require: @arch tag');
+      expect(result.content[0].text).toContain('hint: Keep it simple');
+    });
+
+    it('should show canonical patterns when included', async () => {
+      vi.mocked(getSessionContext).mockResolvedValue({
+        filesScanned: 10,
+        architecturesInScope: [],
+        layers: [],
+        sharedConstraints: [],
+        canonicalPatterns: [
+          { name: 'logger', canonical: 'src/utils/logger.ts', exports: ['logger', 'createLogger'] },
+          { name: 'config', canonical: 'src/config.ts', exports: [] },
+        ],
+        untaggedFiles: [],
+      });
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.content[0].text).toContain('## Canonical Patterns');
+      expect(result.content[0].text).toContain('logger: src/utils/logger.ts [logger, createLogger]');
+      expect(result.content[0].text).toContain('config: src/config.ts');
+    });
+
+    it('should show untagged files count', async () => {
+      vi.mocked(getSessionContext).mockResolvedValue({
+        filesScanned: 10,
+        architecturesInScope: [],
+        layers: [],
+        sharedConstraints: [],
+        untaggedFiles: ['src/a.ts', 'src/b.ts'],
+      });
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.content[0].text).toContain('## Untagged: 2 files');
+    });
+
+    it('should show leaf layers without imports', async () => {
+      vi.mocked(getSessionContext).mockResolvedValue({
+        filesScanned: 10,
+        architecturesInScope: [],
+        layers: [
+          { name: 'utils', canImport: [] },
+        ],
+        sharedConstraints: [],
+        untaggedFiles: [],
+      });
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.content[0].text).toContain('utils -> [(leaf)]');
+    });
+
+    it('should handle error with registry-related message', async () => {
+      vi.mocked(getSessionContext).mockRejectedValue(new Error('Registry file not found'));
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('registry might be corrupted');
+      expect(result.content[0].text).toContain('archcodex sync-index --force');
+    });
+
+    it('should handle error with non-registry message', async () => {
+      vi.mocked(getSessionContext).mockRejectedValue(new Error('File system error'));
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('File system error');
+      expect(result.content[0].text).toContain('archcodex health');
+    });
+
+    it('should handle non-Error thrown values', async () => {
+      vi.mocked(getSessionContext).mockRejectedValue('string error');
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('string error');
+    });
+
+    it('should suggest init when not initialized and no nearby project found', async () => {
+      vi.mocked(isProjectInitialized).mockResolvedValue(false);
+      vi.mocked(findNearbyProject).mockResolvedValue(null);
+
+      const result = await handleSessionContext(projectRoot);
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('archcodex init');
+    });
   });
 
   describe('handlePlanContext', () => {
@@ -232,6 +348,48 @@ describe('MCP Context Handlers', () => {
       await handlePlanContext(projectRoot, { files: ['src/a.ts', 'src/b.ts'] });
 
       expect(getPlanContext).toHaveBeenCalled();
+    });
+
+    it('should suggest nearby project when not initialized and nearby found', async () => {
+      vi.mocked(isProjectInitialized).mockResolvedValue(false);
+      vi.mocked(findNearbyProject).mockResolvedValue('/nearby/project');
+
+      const result = await handlePlanContext(projectRoot, { scope: 'src/' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('/nearby/project');
+    });
+
+    it('should suggest init when not initialized and no nearby project', async () => {
+      vi.mocked(isProjectInitialized).mockResolvedValue(false);
+      vi.mocked(findNearbyProject).mockResolvedValue(null);
+
+      const result = await handlePlanContext(projectRoot, { scope: 'src/' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('archcodex init');
+    });
+
+    it('should handle registry-related errors', async () => {
+      const { getPlanContext } = await import('../../../../src/core/plan-context/index.js');
+      vi.mocked(getPlanContext).mockRejectedValue(new Error('Registry loading failed'));
+
+      const result = await handlePlanContext(projectRoot, { scope: 'src/' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Registry loading failed');
+      expect(result.content[0].text).toContain('registry might be corrupted');
+    });
+
+    it('should handle non-registry errors', async () => {
+      const { getPlanContext } = await import('../../../../src/core/plan-context/index.js');
+      vi.mocked(getPlanContext).mockRejectedValue(new Error('File system error'));
+
+      const result = await handlePlanContext(projectRoot, { scope: 'src/' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('File system error');
+      expect(result.content[0].text).toContain('archcodex plan-context');
     });
   });
 
@@ -277,11 +435,70 @@ describe('MCP Context Handlers', () => {
 
       // This should fail because action is required
       const result = await handleValidatePlan(projectRoot, {
-        changes: ['src/test.ts'] as any,
+        changes: ['src/test.ts'] as unknown as ValidatePlanOptions['changes'],
       });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("missing required 'action'");
+    });
+
+    it('should handle invalid change format (not string or object)', async () => {
+      const result = await handleValidatePlan(projectRoot, {
+        changes: [42 as unknown as ValidatePlanOptions['changes'][0]],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error validating plan');
+    });
+
+    it('should handle change with missing path property', async () => {
+      const result = await handleValidatePlan(projectRoot, {
+        changes: [{ action: 'create' } as unknown as ValidatePlanOptions['changes'][0]],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error validating plan');
+    });
+
+    it('should handle invalid action value', async () => {
+      const result = await handleValidatePlan(projectRoot, {
+        changes: [{ path: 'src/test.ts', action: 'invalid-action' } as unknown as ValidatePlanOptions['changes'][0]],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Error validating plan');
+    });
+
+    it('should normalize newImports and codePatterns in changes', async () => {
+      const { validatePlan, formatValidationResult } = await import('../../../../src/core/validate-plan/index.js');
+
+      vi.mocked(validatePlan).mockResolvedValue({ valid: true, errors: [], warnings: [] });
+      vi.mocked(formatValidationResult).mockReturnValue('Valid');
+
+      const result = await handleValidatePlan(projectRoot, {
+        changes: [{
+          path: 'src/test.ts',
+          action: 'modify',
+          newImports: 'axios',
+          codePatterns: 'console.log',
+          newPath: 'src/renamed.ts',
+        }],
+      });
+
+      expect(result.content[0].text).toBe('Valid');
+      expect(validatePlan).toHaveBeenCalled();
+    });
+
+    it('should handle validatePlan throwing an error', async () => {
+      const { validatePlan } = await import('../../../../src/core/validate-plan/index.js');
+      vi.mocked(validatePlan).mockRejectedValue(new Error('Validation engine failed'));
+
+      const result = await handleValidatePlan(projectRoot, {
+        changes: [{ path: 'src/test.ts', action: 'create' }],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Validation engine failed');
     });
   });
 

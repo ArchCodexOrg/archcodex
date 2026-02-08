@@ -1,0 +1,160 @@
+# Hydration Engine Specification
+#
+# Generates context headers from @arch tags for AI agents and developers.
+# Reads a file, resolves its architecture from the registry, and produces
+# a formatted header with constraints, hints, overrides, and intents.
+
+version: "1.0"
+
+spec.archcodex.hydrationEngine:
+  inherits: spec.function
+  implementation: src/core/hydration/engine.ts#HydrationEngine
+
+  # === STRATEGIC ===
+  goal: "Generate architectural context headers from @arch tags"
+  outcomes:
+    - "Files with @arch tags receive full constraint/hint headers"
+    - "Untagged files receive a minimal 'NO ARCHITECTURE DEFINED' header"
+    - "AI format produces lean, action-shaped context for LLMs"
+    - "Token limits are respected via priority-based truncation"
+    - "Overrides and intents are surfaced in all formats"
+
+  # === OPERATIONAL ===
+  intent: "Read a file, parse @arch tags, resolve architecture, generate formatted header"
+
+  inputs:
+    config:
+      type: object
+      required: true
+      description: "ArchCodex config object"
+    registry:
+      type: object
+      required: true
+      description: "Architecture registry with all defined architectures"
+    filePath:
+      type: string
+      required: true
+      description: "Path to the file to hydrate"
+    options:
+      type: object
+      required: false
+      description: "HydrationOptions: format (verbose|terse|ai), tokenLimit, includePointers, includeContent"
+
+  outputs:
+    header:
+      type: string
+      description: "The generated context header"
+    content:
+      type: string
+      description: "Original file content (if includeContent is true)"
+    output:
+      type: string
+      description: "Full output (header + content)"
+    tokenCount:
+      type: number
+      description: "Estimated token count of the output"
+    truncated:
+      type: boolean
+      description: "Whether truncation was applied"
+    truncationDetails:
+      type: object
+      description: "Details about what was truncated (if truncated)"
+
+  examples:
+    success:
+      - name: "verbose format with @arch tag"
+        given:
+          fileContent: "/** @arch archcodex.core.engine */\nexport class MyEngine {}"
+          options:
+            format: "verbose"
+            includeContent: true
+        then:
+          result.header: "@contains('ARCHITECTURE: archcodex.core.engine')"
+          result.truncated: false
+          result.output: "@contains('export class MyEngine')"
+
+      - name: "untagged file gets minimal header"
+        given:
+          fileContent: "export function hello() { return 'world'; }"
+          options:
+            format: "verbose"
+            includeContent: false
+        then:
+          result.header: "@all(@contains('NO ARCHITECTURE DEFINED'), @contains('@arch'))"
+          result.truncated: false
+
+      - name: "ai format produces lean output"
+        given:
+          fileContent: "/** @arch archcodex.core.engine */\nexport class Analyzer {}"
+          options:
+            format: "ai"
+            includeContent: false
+        then:
+          result.header: "@contains('ARCH: archcodex.core.engine')"
+          result.truncated: false
+
+      - name: "terse format omits verbose details"
+        given:
+          fileContent: "/** @arch archcodex.core.engine */\nexport class Analyzer {}"
+          options:
+            format: "terse"
+            includeContent: false
+        then:
+          result.header: "@contains('ARCHITECTURE: archcodex.core.engine')"
+          result.truncated: false
+
+      - name: "truncation removes pointers first then hints"
+        given:
+          fileContent: "/** @arch archcodex.core.engine */\n// large file"
+          options:
+            format: "verbose"
+            tokenLimit: 50
+            includeContent: false
+        then:
+          result.truncated: true
+          result.truncationDetails.pointersTruncated: true
+
+      - name: "overrides are surfaced in header"
+        given:
+          fileContent: "/** @arch archcodex.core.engine */\n// @override forbid_import:lodash @reason legacy migration @expires 2025-06-01\nexport class Legacy {}"
+          options:
+            format: "verbose"
+            includeContent: false
+        then:
+          result.header: "@contains('ACTIVE OVERRIDES')"
+
+      - name: "ai format shows MUST and NEVER sections"
+        given:
+          fileContent: "/** @arch archcodex.infra.validator */\nexport class TestValidator {}"
+          options:
+            format: "ai"
+            includeContent: false
+        then:
+          result.header: "@contains('ARCH:')"
+
+    errors:
+      - name: "file with no content still produces result"
+        given:
+          fileContent: ""
+          options:
+            format: "verbose"
+            includeContent: true
+        then:
+          result.header: "@contains('NO ARCHITECTURE DEFINED')"
+          result.truncated: false
+
+  invariants:
+    - description: "untagged files always return NO ARCHITECTURE DEFINED"
+      condition: "no @arch tag in file implies header contains 'NO ARCHITECTURE DEFINED'"
+
+    - description: "constraints are never truncated"
+      condition: "truncationDetails.constraintsTruncated is always false"
+
+    - description: "pointers are truncated before hints"
+      condition: "hintsTruncated implies pointersTruncated"
+
+    - description: "output equals header + content when includeContent is true"
+      condition: "includeContent implies output === header + '\\n\\n' + content"
+
+    - description: "tokenCount is always positive"
+      condition: "tokenCount > 0"

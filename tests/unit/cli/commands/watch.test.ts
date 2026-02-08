@@ -1,11 +1,8 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.test
  *
- * Tests for the watch command.
+ * Tests for the watch command - file watching and re-validation.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createWatchCommand } from '../../../../src/cli/commands/watch.js';
@@ -27,13 +24,52 @@ vi.mock('chalk', () => ({
   },
 }));
 
+// Track watcher event registrations
+const mockFileWatcherOn = vi.fn().mockReturnThis();
+const mockFileWatcherClose = vi.fn();
+const mockRegistryWatcherOn = vi.fn().mockReturnThis();
+const mockRegistryWatcherClose = vi.fn();
+
+let watchCallIndex = 0;
+
 // Mock chokidar to prevent actual file watching
-vi.mock('chokidar', () => ({
-  watch: vi.fn().mockReturnValue({
-    on: vi.fn().mockReturnThis(),
-    close: vi.fn(),
-  }),
-}));
+vi.mock('chokidar', () => {
+  const createChokidarMock = () => ({
+    default: {
+      watch: vi.fn().mockImplementation(() => {
+        watchCallIndex++;
+        if (watchCallIndex % 2 === 1) {
+          // File watcher (first call)
+          return {
+            on: mockFileWatcherOn,
+            close: mockFileWatcherClose,
+          };
+        } else {
+          // Registry watcher (second call)
+          return {
+            on: mockRegistryWatcherOn,
+            close: mockRegistryWatcherClose,
+          };
+        }
+      }),
+    },
+    watch: vi.fn().mockImplementation(() => {
+      watchCallIndex++;
+      if (watchCallIndex % 2 === 1) {
+        return {
+          on: mockFileWatcherOn,
+          close: mockFileWatcherClose,
+        };
+      } else {
+        return {
+          on: mockRegistryWatcherOn,
+          close: mockRegistryWatcherClose,
+        };
+      }
+    }),
+  });
+  return createChokidarMock();
+});
 
 // Mock dependencies
 vi.mock('../../../../src/core/config/loader.js', () => ({
@@ -55,9 +91,9 @@ vi.mock('../../../../src/core/registry/loader.js', () => ({
 vi.mock('../../../../src/core/validation/engine.js', () => ({
   ValidationEngine: vi.fn(function() {
     return {
-    validateFiles: vi.fn().mockResolvedValue({ results: [] }),
-    dispose: vi.fn(),
-  };
+      validateFiles: vi.fn().mockResolvedValue({ results: [] }),
+      dispose: vi.fn(),
+    };
   }),
 }));
 
@@ -75,7 +111,7 @@ vi.mock('node:fs/promises', () => ({
   unlink: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('fs', () => ({
+vi.mock('node:fs', () => ({
   existsSync: vi.fn().mockReturnValue(true),
 }));
 
@@ -89,6 +125,12 @@ vi.mock('../../../../src/utils/logger.js', () => ({
   },
 }));
 
+vi.mock('../../../../src/core/cache/types.js', () => ({
+  CACHE_PATH: '.arch/.cache/validation.json',
+}));
+
+import chokidar from 'chokidar';
+import { existsSync } from 'node:fs';
 import { loadConfig } from '../../../../src/core/config/loader.js';
 import { loadRegistry } from '../../../../src/core/registry/loader.js';
 import { loadArchIgnore } from '../../../../src/utils/archignore.js';
@@ -103,10 +145,14 @@ describe('watch command', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    watchCallIndex = 0;
+    mockFileWatcherOn.mockReturnThis();
+    mockRegistryWatcherOn.mockReturnThis();
+
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
       // Don't throw, just track the call
-    }) as any);
+    }) as never);
     processCwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/project');
     processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
   });
@@ -167,7 +213,6 @@ describe('watch command', () => {
 
       const command = createWatchCommand();
 
-      // Use a promise that won't hang
       try {
         await command.parseAsync(['node', 'test']);
       } catch {
@@ -228,10 +273,7 @@ describe('watch command', () => {
     it('should load config on start', async () => {
       const command = createWatchCommand();
 
-      // Start the command (will initialize watchers)
       const promise = command.parseAsync(['node', 'test']);
-
-      // Give it time to start
       await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(loadConfig).toHaveBeenCalledWith('/project', undefined);
@@ -323,6 +365,133 @@ describe('watch command', () => {
 
       const calls = consoleLogSpy.mock.calls.map((c) => c[0]);
       expect(calls.some((c) => c?.includes('Ctrl+C'))).toBe(true);
+    });
+  });
+
+  describe('chokidar watcher setup', () => {
+    it('should create two watchers (file and registry)', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // chokidar.watch should be called twice (file watcher + registry watcher)
+      expect(watchCallIndex).toBe(2);
+    });
+
+    it('should register event handlers on file watcher', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const registeredEvents = mockFileWatcherOn.mock.calls.map(c => c[0]);
+      expect(registeredEvents).toContain('ready');
+      expect(registeredEvents).toContain('change');
+      expect(registeredEvents).toContain('add');
+      expect(registeredEvents).toContain('error');
+    });
+
+    it('should register event handlers on registry watcher', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const registeredEvents = mockRegistryWatcherOn.mock.calls.map(c => c[0]);
+      expect(registeredEvents).toContain('ready');
+      expect(registeredEvents).toContain('change');
+      expect(registeredEvents).toContain('add');
+      expect(registeredEvents).toContain('unlink');
+      expect(registeredEvents).toContain('error');
+    });
+
+    it('should register SIGINT handler for graceful shutdown', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(processOnSpy).toHaveBeenCalledWith('SIGINT', expect.anything());
+    });
+  });
+
+  describe('debounce handling', () => {
+    it('should use default debounce of 300ms', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const calls = consoleLogSpy.mock.calls.map((c) => c[0]);
+      expect(calls.some((c) => c?.includes('300ms'))).toBe(true);
+    });
+
+    it('should use custom debounce value', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test', '--debounce', '500']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const calls = consoleLogSpy.mock.calls.map((c) => c[0]);
+      expect(calls.some((c) => c?.includes('500ms'))).toBe(true);
+    });
+
+    it('should fall back to 300ms for invalid debounce value', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test', '--debounce', 'invalid']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const calls = consoleLogSpy.mock.calls.map((c) => c[0]);
+      expect(calls.some((c) => c?.includes('300ms'))).toBe(true);
+    });
+
+    it('should fall back to 300ms for negative debounce value', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test', '--debounce', '-100']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const calls = consoleLogSpy.mock.calls.map((c) => c[0]);
+      expect(calls.some((c) => c?.includes('300ms'))).toBe(true);
+    });
+  });
+
+  describe('graceful shutdown', () => {
+    it('should close watchers and exit on SIGINT', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Get the SIGINT handler
+      const sigintCall = processOnSpy.mock.calls.find(
+        (c) => c[0] === 'SIGINT'
+      );
+      expect(sigintCall).toBeDefined();
+
+      // Execute the handler
+      const sigintHandler = sigintCall![1] as () => void;
+      sigintHandler();
+
+      // Verify cleanup
+      expect(mockFileWatcherClose).toHaveBeenCalled();
+      expect(mockRegistryWatcherClose).toHaveBeenCalled();
+      expect(processExitSpy).toHaveBeenCalledWith(0);
+    });
+  });
+
+  describe('directory detection', () => {
+    it('should check for standard directories to watch', async () => {
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // existsSync should be called to check for standard directories
+      expect(existsSync).toHaveBeenCalled();
+    });
+
+    it('should fall back to cwd when no standard directories exist', async () => {
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const command = createWatchCommand();
+      const promise = command.parseAsync(['node', 'test']);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Should still create watchers even without standard dirs
+      expect(watchCallIndex).toBe(2);
     });
   });
 });

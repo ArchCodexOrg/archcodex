@@ -16,6 +16,9 @@ archcodex.core.domain.constraint:
     Use for: Files that implement a single constraint validation rule (forbid_import,
     max_file_lines, naming_pattern, etc.).
     Don't use for: Constraint orchestration or registry logic (use domain).
+  suggested_intents:
+    - name: documentation-examples
+      when: "Constraint includes counterexample code"
   reference_implementations:
     - src/core/constraints/forbid-import.ts
     - src/core/constraints/require-import.ts

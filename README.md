@@ -1,17 +1,18 @@
 # ArchCodex
 
 [![CI](https://github.com/ArchCodexOrg/archcodex/actions/workflows/ci.yml/badge.svg)](https://github.com/ArchCodexOrg/archcodex/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/archcodex.svg)](https://www.npmjs.com/package/archcodex)
 [![codecov](https://codecov.io/gh/ArchCodexOrg/archcodex/branch/main/graph/badge.svg)](https://codecov.io/gh/ArchCodexOrg/archcodex)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **The Architectural Compiler for LLM Agents**
 
-ArchCodex enforces architectural constraints through context hydration. Developers write minimal `@arch` tags; LLM agents see fully hydrated headers with constraints, hints, and documentation references.
+> **Research Project:** This is an experimental tool exploring whether explicit architectural constraints and context hydration can prevent architectural drift in AI-assisted codebases and produce more predictable, consistent agent output.
+
+ArchCodex enforces architectural constraints through context hydration. Developers write minimal `@arch` tags; LLM agents retrieve fully hydrated headers with constraints, hints, and documentation references via the `archcodex read` command.
 
 ```
-Developer sees:    /** @arch domain.payment.processor */
-LLM Agent sees:    Full constraints, hints, pointers, and documentation
+Developer writes:  /** @arch domain.payment.processor */
+Agent retrieves:   archcodex read file.ts --format ai → Full constraints, hints, documentation
 ```
 
 ## Why ArchCodex?
@@ -24,7 +25,7 @@ Worse, **drift compounds**. When inconsistency creeps into a codebase — multip
 
 ArchCodex solves this by:
 
-- **Injecting constraints** directly into file context when agents read code
+- **Hydrating constraints** via the `archcodex read` command for AI agents
 - **Validating compliance** on save, commit, and CI
 - **Guiding new file creation** with discovery and scaffolding
 - **Documenting exceptions** with auditable overrides
@@ -174,14 +175,16 @@ See [Semantic Intents](docs/intents.md) for details.
 
 ## CLI Quick Reference
 
-| Category        | Commands                                                              | Description                     |
-| --------------- | --------------------------------------------------------------------- | ------------------------------- |
-| **Validation**  | `check`, `verify`, `health`, `why`, `test-pattern`                    | Validate files and check health |
-| **Discovery**   | `discover`, `decide`, `resolve`, `diff-arch`, `schema`, `graph`       | Find and explore architectures  |
-| **Scaffolding** | `scaffold`, `action`, `feature`, `tag`, `infer`, `bootstrap`, `learn` | Create and tag files            |
-| **Analysis**    | `read`, `neighborhood`, `types`, `garden`                             | Analyze code with context       |
-| **Registry**    | `reindex`, `sync-index`, `migrate-registry`, `audit`, `intents`       | Manage registry and index       |
-| **Versioning**  | `diff`, `migrate`, `simulate`, `watch`, `init`, `fetch`, `feedback`   | Version control and migrations  |
+| Category        | Commands                                                              | Description                      |
+| --------------- | --------------------------------------------------------------------- | -------------------------------- |
+| **Validation**  | `check`, `verify`, `health`, `why`, `test-pattern`                    | Validate files and check health  |
+| **Discovery**   | `discover`, `decide`, `resolve`, `diff-arch`, `schema`, `graph`       | Find and explore architectures   |
+| **Scaffolding** | `scaffold`, `action`, `feature`, `tag`, `infer`, `bootstrap`, `learn` | Create and tag files             |
+| **Analysis**    | `read`, `neighborhood`, `types`, `garden`                             | Analyze code with context        |
+| **Registry**    | `reindex`, `sync-index`, `migrate-registry`, `audit`, `intents`       | Manage registry and index        |
+| **Versioning**  | `diff`, `migrate`, `simulate`, `watch`, `init`, `fetch`, `feedback`   | Version control and migrations   |
+| **SpecCodex**   | `spec list`, `spec generate`, `spec verify`, `spec infer`, `spec drift` | Specification by Example testing |
+| **Docs**        | `doc adr`, `doc watch`, `doc verify`, `doc templates`                 | Generate documentation           |
 
 ### Essential Commands
 
@@ -246,6 +249,208 @@ ArchCodex integrates with AI coding assistants:
 
 See [AI Integration Guide](docs/ai-integration.md) for setup.
 
+## SpecCodex: Specification by Example
+
+ArchCodex validates **structure** — imports, layer boundaries, naming patterns. SpecCodex validates **behavior** — function contracts, examples, invariants. Together they catch both structural drift and behavioral drift: code that compiles but violates boundaries *and* code that passes tests but doesn't match its documented contract.
+
+### How It Works
+
+```
+Write spec → Validate → Generate tests → Verify implementation → Detect drift
+```
+
+| Phase | Command | What it does |
+|-------|---------|-------------|
+| **Write** | Manual or `spec infer` | Define behavioral contract in YAML |
+| **Validate** | `spec check` | Verify spec structure, inheritance, mixins |
+| **Generate** | `spec generate` | Deterministic test generation (unit, property, integration) |
+| **Verify** | `spec verify` | Check implementation matches spec (bidirectional) |
+| **Drift** | `spec drift` | Find specs without implementations and vice versa |
+
+### Spec Structure
+
+```yaml
+spec.product.create:
+  inherits: spec.mutation                              # Inherits auth defaults
+  implementation: src/domain/products/mutations.ts#create
+
+  # Strategic — why this exists
+  goal: "Create a new product with validation"
+  intent: "User creates a product listing"
+
+  # Contract — inputs, outputs, security
+  inputs:
+    name: { type: string, required: true, max: 200 }
+    price: { type: number, required: true }
+    category: { type: enum, values: [electronics, clothing, food] }
+
+  outputs:
+    _id: { type: id, table: products }
+    name: { type: string }
+    createdAt: { type: number }
+
+  security:
+    authentication: required
+    authorization:
+      - { resource: products, access_level: edit }
+
+  # Behavioral rules that must always hold
+  invariants:
+    - "createdAt must be within 5 seconds of request time"
+    - "price must be greater than 0"
+
+  # Concrete test cases — deterministic test generation
+  examples:
+    success:
+      - name: "create with valid data"
+        given: { name: "Widget", price: 29.99, category: "electronics" }
+        then:
+          result._id: "@defined"
+          result.name: "Widget"
+          result.createdAt: "@gte(@now() - 5000)"
+    errors:
+      - name: "missing name"
+        given: { price: 29.99 }
+        then: { error: "INVALID_INPUT" }
+      - name: "unauthenticated"
+        given: { user: null, name: "Test", price: 10 }
+        then: { error: "NOT_AUTHENTICATED" }
+```
+
+### Inheritance & Mixins
+
+Specs inherit from base types and compose reusable behavioral patterns:
+
+```yaml
+# Base specs provide defaults
+spec.function    # Pure functions, no auth
+spec.mutation    # Authenticated writes (inherits security defaults)
+spec.query       # Authenticated reads
+spec.action      # External API calls with side effects
+
+# Mixins add cross-cutting concerns
+spec.product.create:
+  inherits: spec.mutation
+  mixins:
+    - requires_auth
+    - logs_audit: { action: "product.create", resource: "product" }
+    - rate_limited: { requests: 60, window: "15m" }
+```
+
+Mixins inject security rules, error examples, effects, and invariants automatically. `requires_auth` adds the "unauthenticated" error example. `logs_audit` adds an audit log effect. Variable substitution (`${action}`) makes mixins parameterizable.
+
+### Placeholders
+
+Specs use placeholders for value generation and assertions:
+
+| Category | Placeholder | Generated code |
+|----------|------------|----------------|
+| **Values** | `@string(50)`, `@uuid`, `@now` | `"a".repeat(50)`, UUID, `Date.now()` |
+| **Auth** | `@authenticated`, `@no_access` | Mock user objects |
+| **Assertions** | `@defined`, `@length(3)`, `@gt(0)` | `toBeDefined()`, `toHaveLength(3)`, `toBeGreaterThan(0)` |
+| **Content** | `@contains("x")`, `@matches("re")` | `toContain("x")`, `toMatch(/re/)` |
+| **Composite** | `@all(@gt(0), @lt(100))` | Both assertions must pass |
+| **Collections** | `@hasItem("x")`, `@hasProperties({...})` | `toContain("x")`, `toMatchObject({...})` |
+
+### Architecture + Spec Integration
+
+The analysis engine cross-validates architectural constraints against spec claims:
+
+```bash
+archcodex analyze
+```
+
+```
+SEC-1: Spec claims authentication required but implementation
+       is in utility layer (no auth enforcement)
+       → spec.product.create declares security.authentication: required
+       → but @arch tag is archcodex.util (utility layer forbids auth)
+
+CON-2: Spec claims audit logging but architecture has no logging constraint
+       → Move to a layer with audit requirements, or add constraint
+
+DAT-3: Spec output 'discount' is nullable but no example tests the null case
+       → Add an error example where discount is null
+```
+
+This is the key differentiator: structural analysis meets behavioral contracts. Issues that neither linting nor unit tests can catch — like a security claim that the architecture doesn't enforce — are detected automatically.
+
+### Commands
+
+```bash
+# Initialize SpecCodex in your project
+archcodex spec init
+
+# Validate spec structure
+archcodex spec check .arch/specs/products/create.spec.yaml
+
+# Generate tests (unit, property, or integration)
+archcodex spec generate spec.product.create --type unit
+
+# Verify implementation matches spec (bidirectional)
+archcodex spec verify spec.product.create
+
+# Detect unwired specs and missing implementations
+archcodex spec drift
+
+# View fully resolved spec (with inheritance + mixins expanded)
+archcodex spec resolve spec.product.create
+
+# Generate spec from existing code (reverse workflow)
+archcodex spec infer src/utils/helpers.ts#formatDate \
+  --output .arch/specs/utils/helpers.spec.yaml
+
+# Find spec by intent
+archcodex spec discover "create a product"
+```
+
+### Reverse Workflow
+
+When code exists before the spec:
+
+```bash
+# 1. Infer spec from implementation (detects patterns, types, errors)
+archcodex spec infer src/domain/products/mutations.ts#create \
+  --output .arch/specs/products/create.spec.yaml
+
+# 2. Fill in TODOs — goal, intent, examples, invariants
+
+# 3. Generate deterministic tests
+archcodex spec generate spec.product.create --type unit
+```
+
+When implementation changes, update the spec preserving hand-written content:
+
+```bash
+archcodex spec infer src/domain/products/mutations.ts#create \
+  --update spec.product.create
+```
+
+See [SpecCodex Guide](docs/speccodex.md) for comprehensive documentation.
+
+## Documentation Generation
+
+Generate Architecture Decision Records (ADRs) and API documentation from your architectures and specs.
+
+```bash
+# Generate ADR for an architecture
+archcodex doc adr domain.service -o docs/adr/
+
+# Generate all ADRs with index
+archcodex doc adr --all -o docs/adr/
+
+# Generate API docs from spec
+archcodex spec doc spec.product.create --type all
+
+# Watch mode for development
+archcodex doc watch --type all -o docs/
+
+# CI verification (exit 1 if stale)
+archcodex doc verify --type all -o docs/
+```
+
+See [Documentation Generation](docs/cli/documentation.md) for details.
+
 ## Pre-Commit Integration
 
 ```bash
@@ -268,8 +473,11 @@ See [CI Integration Guide](docs/ci-integration.md) for full setup.
 | [Analysis](docs/cli/analysis.md)                     | read, neighborhood, types, garden                       |
 | [Registry](docs/cli/registry.md)                     | reindex, sync-index, migrate-registry, audit, intents   |
 | [Versioning](docs/cli/versioning.md)                 | diff, migrate, simulate, watch, init, fetch, feedback   |
+| [SpecCodex](docs/cli/speccodex.md)                   | spec list, resolve, generate, verify, drift, discover   |
+| [Documentation](docs/cli/documentation.md)           | doc adr, watch, verify, templates                       |
 | **Guides**                                           |                                                         |
 | [Getting Started](docs/getting-started.md)           | Comprehensive tutorial for new and existing projects    |
+| [SpecCodex Guide](docs/speccodex.md)                 | Specification by Example language                       |
 | [Constraint Reference](docs/constraint-reference.md) | All constraint rules and patterns                       |
 | [Configuration](docs/configuration.md)               | Config file reference                                   |
 | [AI Integration](docs/ai-integration.md)             | LLM agent integration                                   |
@@ -283,14 +491,23 @@ See [CI Integration Guide](docs/ci-integration.md) for full setup.
 
 ```
 .arch/
-├── config.yaml      # Configuration
-├── registry/        # Architecture definitions (multi-file)
+├── config.yaml        # Configuration
+├── registry/          # Architecture definitions (multi-file)
 │   ├── base.yaml
 │   ├── _mixins.yaml
 │   └── ...
-├── index.yaml       # Discovery keywords
-├── patterns.yaml    # Canonical implementations
-└── concepts.yaml    # Semantic concept mappings
+├── specs/             # SpecCodex specs
+│   ├── _base.yaml     # Base specs (spec.mutation, spec.query)
+│   ├── _mixins.yaml   # Reusable spec mixins
+│   └── products/
+│       └── create.spec.yaml
+├── templates/         # Custom doc templates
+│   └── docs/
+│       ├── adr.md.hbs
+│       └── spec-api.md.hbs
+├── index.yaml         # Discovery keywords
+├── patterns.yaml      # Canonical implementations
+└── concepts.yaml      # Semantic concept mappings
 
 src/
 ├── domain/

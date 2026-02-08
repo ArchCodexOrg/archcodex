@@ -5,6 +5,34 @@ archcodex.infra.adapter:
   mixins:
     - tested
   description: Infrastructure adapters for external systems (config, git, etc.)
+  reference_implementations:
+    - src/utils/git.ts
+  file_pattern: "*.ts"
+  default_path: src/utils
+  code_pattern: |-
+    /**
+     * @arch archcodex.infra.adapter
+     *
+     * Adapter for external system X.
+     */
+
+    export interface AdapterOptions {
+      // Configuration for the adapter
+    }
+
+    /**
+     * Query or interact with external system X.
+     * Wraps external calls with error handling and sensible defaults.
+     */
+    export async function queryExternalSystem(options: AdapterOptions): Promise<Result> {
+      try {
+        // Wrap external system call
+        return await externalLib.call(options);
+      } catch (error) {
+        // Handle failures gracefully with defaults
+        return defaultResult;
+      }
+    }
   rationale: |
     Small, focused adapters for external system interaction (config files, git,
     environment variables). Each adapter wraps a single external concern.

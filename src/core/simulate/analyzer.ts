@@ -1,5 +1,6 @@
 /**
  * @arch archcodex.core.engine
+ * @intent:stateless
  *
  * Simulation analyzer - compares validation results between current and proposed registries.
  */
@@ -336,7 +337,7 @@ export class SimulationAnalyzer {
     }
 
     recommendations.push(
-      'After review: cp <proposed-registry> .arch/registry.yaml'
+      'After review: cp <proposed-registry> .arch/registry/'
     );
 
     return recommendations;

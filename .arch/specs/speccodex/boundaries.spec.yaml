@@ -1,0 +1,269 @@
+# SpecCodex Boundary Examples Specification
+#
+# Edge cases that generate both unit tests AND property-based tests.
+# Boundaries define the limits of valid/invalid input.
+
+version: "1.0"
+
+spec.speccodex.boundaries:
+  inherits: spec.function
+  implementation: src/core/spec/generators/unit.ts#generateUnitTests
+
+  # === STRATEGIC ===
+  goal: "Define edge cases that generate both unit and property-based tests"
+  outcomes:
+    - "Parse boundary examples from spec"
+    - "Generate unit tests for specific boundary values"
+    - "Generate property tests for boundary conditions"
+    - "Support @ placeholder expansion"
+
+  # === OPERATIONAL ===
+  intent: "Process boundary examples into test cases"
+
+  inputs:
+    boundaries:
+      type: array
+      required: true
+      description: "Array of boundary example definitions"
+    inputSchema:
+      type: object
+      description: "Input field definitions for placeholder expansion"
+
+  outputs:
+    unitTests:
+      type: number
+      description: "Number of unit tests generated from boundaries"
+    propertyTests:
+      type: number
+      description: "Number of property tests generated from boundaries"
+
+  # === INVARIANTS ===
+  invariants:
+    - "each boundary generates at least one unit test"
+    - "boundaries with 'property' field generate property tests"
+    - "@ placeholders are expanded before test generation"
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "parse simple boundary"
+        given:
+          boundaries:
+            - name: "url at max length"
+              url: "@string(2048)"
+              then: { result: "@created" }
+        then:
+          result.unitTests: 1
+          result.propertyTests: 0
+
+      - name: "boundary with property hint"
+        given:
+          boundaries:
+            - name: "url exceeds max"
+              url: "@string(2049)"
+              then: { error: "URL_TOO_LONG" }
+              property: "forall url.length > 2048, returns URL_TOO_LONG"
+        then:
+          result.unitTests: 1
+          result.propertyTests: 1
+
+      - name: "unicode boundary"
+        given:
+          boundaries:
+            - name: "title with unicode"
+              title: "日本語タイトル"
+              then: { "result.title": "日本語タイトル" }
+        then:
+          result.unitTests: 1
+
+      - name: "numeric boundaries"
+        given:
+          boundaries:
+            - name: "count at min"
+              count: 0
+              then: { result: "@exists" }
+            - name: "count at max"
+              count: 1000
+              then: { result: "@exists" }
+            - name: "count below min"
+              count: -1
+              then: { error: "INVALID_COUNT" }
+        then:
+          result.unitTests: 3
+
+    errors:
+      - name: "boundary without name"
+        given:
+          boundaries:
+            - url: "@string(100)"
+              then: { result: "@exists" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "BOUNDARY_MISSING_NAME"
+
+      - name: "boundary without then"
+        given:
+          boundaries:
+            - name: "incomplete boundary"
+              url: "@string(100)"
+        then:
+          result.valid: false
+          "result.errors[0].code": "BOUNDARY_MISSING_THEN"
+
+      - name: "no examples"
+        then: { error: "NO_EXAMPLES" }
+
+      - name: "invalid spec"
+        then: { error: "INVALID_SPEC" }
+
+      - name: "missing name"
+        then: { error: "MISSING_NAME" }
+
+      - name: "duplicate name"
+        then: { error: "DUPLICATE_NAME" }
+
+---
+# Placeholder expansion specification
+
+spec.speccodex.placeholders:
+  inherits: spec.function
+  implementation: src/core/spec/placeholders.ts#expandPlaceholder
+
+  # === STRATEGIC ===
+  goal: "Expand @ placeholders into concrete test values"
+  outcomes:
+    - "Parse all standard placeholder types"
+    - "Generate appropriate test values"
+    - "Support parameterized placeholders"
+    - "Provide deterministic and random modes"
+
+  # === OPERATIONAL ===
+  intent: "Expand @ placeholders in spec examples into concrete values"
+
+  inputs:
+    value:
+      type: string
+      required: true
+      description: "Value potentially containing @ placeholder"
+    context:
+      type: object
+      description: "Context for placeholder expansion (user, timestamp, etc.)"
+    mode:
+      type: enum
+      values: [deterministic, random]
+      default: deterministic
+      description: "Whether to generate fixed or random values"
+
+  # === INVARIANTS ===
+  invariants:
+    - "deterministic mode always returns same value for same input"
+    - "unknown placeholders return error, not silent pass-through"
+    - "@string(N) returns exactly N characters"
+    - "@url(N) returns valid URL of approximately N characters"
+
+  # === EXAMPLES ===
+  defaults: &ctx
+    context: { userId: "user_123", timestamp: 1704067200000 }
+
+  examples:
+    success:
+      # Test fixture placeholders
+      - name: "authenticated user"
+        given: { <<: *ctx, value: "@authenticated" }
+        then: { result.type: "user", result.id: "@exists" }
+
+      - name: "user without access"
+        given: { <<: *ctx, value: "@no_access" }
+        then: { result.type: "user", result.permissions: [] }
+
+      # String generation
+      - name: "string of length N"
+        given: { value: "@string(100)", mode: deterministic }
+        then: { result.length: 100, result.type: "string" }
+
+      - name: "string random mode"
+        given: { value: "@string(50)", mode: random }
+        then: { result.length: 50 }
+
+      # URL generation
+      - name: "url of length N"
+        given: { value: "@url(100)" }
+        then: { result.startsWith: "https://", result.isValidUrl: true }
+
+      # Timestamp placeholders
+      - name: "current timestamp"
+        given: { <<: *ctx, value: "@now" }
+        then: { result: 1704067200000 }
+
+      - name: "timestamp offset"
+        given: { <<: *ctx, value: "@now(-1d)" }
+        then: { result: 1703980800000 }  # 1 day before
+
+      # Assertion placeholders (for 'then' blocks)
+      - name: "created assertion"
+        given: { value: "@created" }
+        then: { result.type: "assertion", result.asserts: "created" }
+
+      - name: "exists assertion"
+        given: { value: "@exists" }
+        then: { result.type: "assertion", result.asserts: "defined" }
+
+      - name: "contains assertion"
+        given: { value: "@contains('error')" }
+        then: { result.type: "assertion", result.asserts: "contains", result.value: "error" }
+
+      - name: "less than assertion"
+        given: { value: "@lt(500)" }
+        then: { result.type: "assertion", result.asserts: "lessThan", result.value: 500 }
+
+      - name: "greater than assertion"
+        given: { value: "@gt(0)" }
+        then: { result.type: "assertion", result.asserts: "greaterThan", result.value: 0 }
+
+      - name: "defined assertion"
+        given: { value: "@defined" }
+        then: { result.type: "assertion", result.asserts: "defined" }
+
+      - name: "matches pattern"
+        given: { value: "@matches('^[a-z]+$')" }
+        then: { result.type: "assertion", result.asserts: "matches", result.pattern: "^[a-z]+$" }
+
+    errors:
+      - name: "unknown placeholder"
+        given: { value: "@unknown_placeholder" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "UNKNOWN_PLACEHOLDER"
+
+      - name: "invalid parameter"
+        given: { value: "@string(abc)" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "INVALID_PLACEHOLDER_PARAM"
+
+      - name: "missing required param"
+        given: { value: "@string()" }
+        then:
+          result.valid: false
+          "result.errors[0].code": "MISSING_PLACEHOLDER_PARAM"
+
+      - name: "invalid placeholder"
+        then: { error: "INVALID_PLACEHOLDER" }
+
+      - name: "fixture resolution error"
+        then: { error: "FIXTURE_RESOLUTION_ERROR" }
+
+    # Edge cases for placeholder parsing
+    boundaries:
+      - name: "max string length"
+        value: "@string(1000000)"
+        then: { result.length: 1000000 }
+        property: "forall N in 1..1000000, @string(N).length == N"
+
+      - name: "zero length string"
+        value: "@string(0)"
+        then: { result: "", result.length: 0 }
+
+      - name: "nested placeholder (not supported)"
+        value: "@string(@lt(100))"
+        then: { error: "NESTED_PLACEHOLDER_NOT_SUPPORTED" }

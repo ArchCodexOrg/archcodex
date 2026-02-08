@@ -1,0 +1,871 @@
+# SpecCodex UI Section, Fixtures, and Schema Drift Prevention Specs
+# These specs dogfood SpecCodex to define the new features added in this iteration.
+
+version: "1.0"
+
+# =============================================================================
+# UI SECTION SCHEMA
+# =============================================================================
+
+spec.ui.trigger:
+  implementation: src/core/spec/schema.ts:UITriggerSchema
+  goal: "Define and validate UI trigger specifications"
+  intent: Define UI trigger specification schema
+  description: |
+    Validates UITriggerSchema - specifies how UI actions are triggered
+    (buttons, menu items, keyboard shortcuts).
+
+  inputs:
+    location:
+      type: string
+      description: Where the trigger appears (context menu, toolbar, inline)
+    element:
+      type: string
+      description: CSS selector or semantic identifier
+    action:
+      type: string
+      description: Trigger action (click, hover, keypress, submit)
+    label:
+      type: string
+      description: Button/menu item text
+    shortcut:
+      type: string
+      description: Keyboard shortcut (e.g., "Cmd+D")
+    icon:
+      type: string
+      description: Icon identifier for the trigger
+
+  outputs:
+    trigger:
+      type: object
+      description: Validated UI trigger specification
+
+  invariants:
+    - "All fields are optional"
+    - "shortcut follows modifier+key pattern when present"
+
+  examples:
+    success:
+      - name: context menu trigger
+        given:
+          location: "context menu"
+          label: "Duplicate"
+          icon: "copy"
+        then:
+          trigger: "@exists"
+
+      - name: keyboard shortcut trigger
+        given:
+          shortcut: "Cmd+D"
+          action: "keypress"
+        then:
+          trigger: "@exists"
+
+    errors:
+      - name: "invalid shortcut format"
+        given:
+          shortcut: "invalid"
+        then:
+          error: "INVALID_SHORTCUT"
+
+---
+
+spec.ui.interaction:
+  implementation: src/core/spec/schema.ts:UIInteractionSchema
+  goal: "Define and validate multi-step UI interaction flows"
+  intent: Define UI interaction flow specification
+  description: |
+    Validates UIInteractionSchema - specifies multi-step user interaction
+    flows, loading states, and optimistic updates.
+
+  inputs:
+    flow:
+      type: array
+      items: { type: string }
+      description: Step-by-step flow descriptions
+    loading:
+      type: string
+      description: Loading indicator type
+    optimistic:
+      type: boolean
+      description: Whether to use optimistic UI updates
+    sequence:
+      type: array
+      description: Ordered interaction sequence with waits
+    states:
+      type: object
+      description: UI state definitions with conditions
+
+  outputs:
+    interaction:
+      type: object
+      description: Validated UI interaction specification
+
+  invariants:
+    - "sequence items must have trigger or wait defined"
+    - "states must map names to when/then pairs"
+
+  examples:
+    success:
+      - name: optimistic flow
+        given:
+          optimistic: true
+          loading: "Inline spinner"
+          flow:
+            - "User clicks Duplicate"
+            - "New entry appears immediately"
+            - "Server confirms creation"
+        then:
+          interaction: "@exists"
+
+    errors:
+      - name: "invalid sequence item"
+        given:
+          sequence: [{ invalid: true }]
+        then:
+          error: "INVALID_SEQUENCE"
+
+---
+
+spec.ui.accessibility:
+  implementation: src/core/spec/schema.ts:UIAccessibilitySchema
+  goal: "Define and validate accessibility specifications"
+  intent: Define UI accessibility specification
+  description: |
+    Validates UIAccessibilitySchema - specifies ARIA roles, labels,
+    keyboard navigation, and focus management.
+
+  inputs:
+    role:
+      type: string
+      description: ARIA role
+    label:
+      type: string
+      description: Accessible label
+    keyboardNav:
+      type: array
+      description: Keyboard navigation mappings
+    focusTrap:
+      type: boolean
+      description: Whether to trap focus
+
+  outputs:
+    accessibility:
+      type: object
+      description: Validated accessibility specification
+
+  invariants:
+    - "keyboardNav entries must have key and action"
+    - "role should be valid ARIA role when present"
+
+  examples:
+    success:
+      - name: accessible menu item
+        given:
+          role: "menuitem"
+          label: "Duplicate entry"
+          keyboardNav:
+            - { key: "Enter", action: "activate" }
+            - { key: "Escape", action: "close" }
+        then:
+          accessibility: "@exists"
+
+    errors:
+      - name: "invalid ARIA role"
+        given:
+          role: "invalid_role"
+        then:
+          error: "INVALID_ROLE"
+
+---
+
+spec.ui.schema.merge:
+  implementation: src/core/spec/resolver.ts:mergeUI
+  goal: "Merge UI sections during spec inheritance"
+  intent: Merge UI sections during spec inheritance
+  description: |
+    When a spec inherits from a parent or applies mixins with UI sections,
+    the UI fields should merge with child fields taking precedence.
+
+  inputs:
+    parent:
+      type: object
+      description: Parent spec with UI section
+    child:
+      type: object
+      description: Child spec with UI section
+
+  outputs:
+    merged:
+      type: object
+      description: Merged UI specification
+
+  invariants:
+    - "Child UI fields override parent fields at each subsection level"
+    - "Missing child subsections inherit parent values"
+    - "Nested objects within subsections merge recursively"
+
+  examples:
+    success:
+      - name: child overrides parent trigger
+        given:
+          parent:
+            ui:
+              trigger: { location: "toolbar", label: "Action" }
+              feedback: { success: "Done" }
+          child:
+            ui:
+              trigger: { label: "Custom" }
+        then:
+          merged:
+            ui:
+              trigger: { location: "toolbar", label: "Custom" }
+              feedback: { success: "Done" }
+
+    errors:
+      - name: "invalid UI section structure"
+        given:
+          parent: { ui: "not-an-object" }
+          child: { ui: {} }
+        then:
+          error: "INVALID_UI_SECTION"
+
+# =============================================================================
+# SCHEMA DRIFT PREVENTION
+# =============================================================================
+
+spec.drift.detect_unknown_fields:
+  implementation: src/core/spec/loader.ts:suggestAlternativeField
+  goal: "Detect unknown fields to prevent schema drift"
+  intent: Detect unknown fields in spec definitions
+  description: |
+    When a spec contains fields not in SPEC_NODE_CORE_FIELDS,
+    validation should warn about potential LLM schema drift.
+
+  inputs:
+    specNode:
+      type: object
+      description: Spec node to validate
+
+  outputs:
+    warnings:
+      type: array
+      description: List of unknown field warnings
+
+  invariants:
+    - "Known extension fields (<<, _comment) are allowed"
+    - "Unknown fields generate warnings, not errors"
+    - "Suggestions are provided for common drift patterns"
+
+  examples:
+    success:
+      - name: spec with metadata field triggers warning
+        given:
+          specNode:
+            intent: "Test operation"
+            metadata:
+              copied_fields: ["title", "url"]
+        then:
+          warnings: "@length(@gte(1))"
+          "warnings[0]": "@contains('metadata')"
+
+      - name: spec with valid fields passes
+        given:
+          specNode:
+            intent: "Test operation"
+            invariants:
+              - "result is valid"
+        then:
+          warnings: "@empty"
+
+    errors:
+      - name: "missing spec node"
+        given:
+          specNode: null
+        then:
+          error: "INVALID_SPEC"
+
+---
+
+spec.drift.suggest_alternative:
+  implementation: src/core/spec/loader.ts:suggestAlternativeField
+  goal: "Suggest correct constructs for drifted field names"
+  intent: Suggest correct constructs for drifted fields
+  description: |
+    When unknown fields are detected, provide actionable suggestions
+    pointing to the correct SpecCodex constructs.
+
+  inputs:
+    field:
+      type: string
+      description: Unknown field name
+
+  outputs:
+    suggestion:
+      type: string
+      description: Guidance on correct alternative
+
+  examples:
+    success:
+      - name: metadata suggests invariants
+        given:
+          field: "metadata"
+        then:
+          suggestion: "@contains('invariants')"
+
+      - name: copied_fields suggests invariants
+        given:
+          field: "copied_fields"
+        then:
+          suggestion: "@contains('invariants')"
+
+      - name: validation suggests inputs
+        given:
+          field: "validation"
+        then:
+          suggestion: "@contains('inputs')"
+
+      - name: tests suggests examples
+        given:
+          field: "tests"
+        then:
+          suggestion: "@contains('examples')"
+
+    errors:
+      - name: "empty field name"
+        given:
+          field: ""
+        then:
+          error: "MISSING_FIELD"
+
+# =============================================================================
+# FIXTURE SYSTEM
+# =============================================================================
+
+spec.fixture.load:
+  implementation: src/core/spec/fixtures.ts:loadFixtures
+  goal: "Load fixture registry from project"
+  intent: Load fixture registry from project
+  description: |
+    Loads fixtures from .arch/specs/_fixtures.yaml and merges
+    with built-in fixtures. Project fixtures can override built-ins.
+
+  inputs:
+    projectRoot:
+      type: string
+      description: Project root directory
+
+  outputs:
+    registry:
+      type: object
+      properties:
+        version: { type: string }
+        fixtures: { type: object }
+
+  invariants:
+    - "Built-in fixtures are always available"
+    - "Project fixtures override built-ins with same name"
+    - "Invalid YAML logs warning but returns valid registry"
+
+  examples:
+    success:
+      - name: loads built-in fixtures when no file exists
+        given:
+          projectRoot: "/nonexistent"
+        then:
+          registry:
+            fixtures: "@hasProperties({ authenticated: @exists })"
+
+      - name: built-ins include authenticated, no_access, admin_user
+        given:
+          projectRoot: "/nonexistent"
+        then:
+          "registry.fixtures.authenticated": "@exists"
+          "registry.fixtures.no_access": "@exists"
+          "registry.fixtures.admin_user": "@exists"
+
+    errors:
+      - name: "invalid project root type"
+        given:
+          projectRoot: null
+        then:
+          error: "INVALID_PROJECTROOT"
+
+---
+
+spec.fixture.resolve:
+  implementation: src/core/spec/fixtures.ts:resolveFixture
+  goal: "Resolve fixture reference to concrete value"
+  intent: Resolve fixture reference to concrete value
+  description: |
+    Resolves @fixtureName references using the fixture registry.
+    Generate-mode fixtures return values, documentation-mode return as-is.
+
+  inputs:
+    name:
+      type: string
+      description: Fixture name (without @ prefix)
+    params:
+      type: object
+      description: Optional parameters for parameterized fixtures
+    context:
+      type: object
+      description: Fixture resolution context with registry and cache
+
+  outputs:
+    result:
+      type: object
+      properties:
+        success: { type: boolean }
+        value: { type: any }
+        mode: { type: enum, values: ["generate", "documentation"] }
+        error: { type: string, optional: true }
+
+  invariants:
+    - "Unknown fixtures return success: false with error"
+    - "Documentation-only fixtures return @name as value"
+    - "Resolved fixtures are cached for same params"
+    - "Dependencies are resolved recursively"
+
+  examples:
+    success:
+      - name: resolves generate-mode fixture
+        given:
+          name: "authenticated"
+          params: {}
+          context: { registry: "@authenticated", resolved: {} }
+        then:
+          result:
+            success: true
+            mode: "generate"
+            value: "@hasProperties({ id: @exists })"
+
+      - name: documentation-only returns reference
+        given:
+          name: "archivedEntry"
+          params: {}
+          context:
+            registry:
+              fixtures:
+                archivedEntry:
+                  mode: "documentation"
+                  setup: "Archive via API"
+        then:
+          result:
+            success: true
+            mode: "documentation"
+            value: "@archivedEntry"
+
+    errors:
+      - name: unknown fixture returns error
+        given:
+          name: "unknownFixture"
+        then:
+          result:
+            success: false
+            error: "@contains('Unknown fixture')"
+
+---
+
+spec.fixture.parse_reference:
+  implementation: src/core/spec/fixtures.ts:parseFixtureReference
+  goal: "Parse fixture reference strings"
+  intent: Parse fixture reference string to extract name and params
+  description: |
+    Parses @fixtureName and @fixtureName({"param":"value"}) syntax
+    to extract the fixture name and optional parameters.
+
+  inputs:
+    reference:
+      type: string
+      description: Fixture reference string (e.g., "@authenticated")
+
+  outputs:
+    parsed:
+      type: object
+      nullable: true
+      properties:
+        name: { type: string }
+        params: { type: object }
+
+  invariants:
+    - "Returns null for invalid references"
+    - "Name must start with letter, contain alphanumeric and underscore"
+    - "Params must be valid JSON"
+
+  examples:
+    success:
+      - name: simple reference
+        given:
+          reference: "@authenticated"
+        then:
+          parsed:
+            name: "authenticated"
+            params: {}
+
+      - name: parameterized reference
+        given:
+          reference: "@userWithPermission({\"permission\":\"admin\"})"
+        then:
+          parsed:
+            name: "userWithPermission"
+            params: { permission: "admin" }
+
+    errors:
+      - name: invalid reference returns null
+        given:
+          reference: "notAFixture"
+        then:
+          result.parsed: null
+
+---
+
+spec.fixture.placeholder_integration:
+  implementation: src/core/spec/placeholders.ts:expandPlaceholder
+  goal: "Integrate fixtures with placeholder expansion"
+  intent: Integrate fixtures with placeholder expansion system
+  description: |
+    When a PlaceholderContext includes a fixtureRegistry, unknown
+    @placeholders are resolved as fixtures before returning error.
+
+  inputs:
+    placeholder:
+      type: string
+      description: Placeholder string (e.g., "@validTaskEntry")
+    context:
+      type: object
+      description: PlaceholderContext with optional fixtureRegistry
+
+  outputs:
+    result:
+      type: object
+      description: PlaceholderResult or PlaceholderError
+
+  invariants:
+    - "Built-in placeholders take precedence over fixtures"
+    - "Fixture values are returned as type: 'value'"
+    - "Documentation fixtures return the reference string as value"
+    - "Unknown fixtures without registry return UNKNOWN_PLACEHOLDER error"
+
+  examples:
+    success:
+      - name: custom fixture resolved
+        given:
+          placeholder: "@validEntry"
+          context:
+            fixtureRegistry:
+              fixtures:
+                validEntry:
+                  mode: "generate"
+                  value: { id: "entry_123" }
+        then:
+          result:
+            type: "value"
+            value: "@hasProperties({ id: 'entry_123' })"
+
+      - name: built-in takes precedence
+        given:
+          placeholder: "@authenticated"
+          context:
+            fixtureRegistry:
+              fixtures:
+                authenticated:
+                  mode: "generate"
+                  value: { custom: true }
+        then:
+          result:
+            type: "user"  # Built-in returns user type, not fixture value
+
+    errors:
+      - name: unknown placeholder without registry
+        given:
+          placeholder: "@unknownFixture"
+          context: {}
+        then:
+          error: "UNKNOWN_PLACEHOLDER"
+
+# =============================================================================
+# UI TEST GENERATOR
+# =============================================================================
+
+---
+
+spec.ui.generator:
+  implementation: src/core/spec/generators/ui.ts:generateUITests
+  goal: "Generate UI tests from spec UI sections"
+  intent: Generate UI tests from spec UI sections
+  description: |
+    Generates interaction and accessibility tests from the ui section of specs.
+    Supports Playwright, Cypress, and Testing Library frameworks.
+
+  inputs:
+    spec:
+      type: object
+      description: Resolved spec with UI section
+    options:
+      type: object
+      properties:
+        framework: { type: enum, values: ["playwright", "cypress", "testing-library"] }
+        markers: { type: boolean }
+        accessibilityPlugin: { type: enum, values: ["axe", "none"] }
+        baseSelector: { type: string }
+
+  outputs:
+    result:
+      type: object
+      properties:
+        valid: { type: boolean }
+        testCount: { type: number }
+        code: { type: string }
+        categories: { type: object }
+
+  invariants:
+    - "Returns error when spec has no ui section"
+    - "Returns error when spec has no intent"
+    - "Generated code is valid TypeScript"
+    - "Each ui subsection generates at least one test"
+    - "Markers are included by default"
+
+  examples:
+    success:
+      - name: generates trigger tests
+        given:
+          spec:
+            node:
+              intent: "Duplicate entry"
+              ui:
+                trigger:
+                  location: "context menu"
+                  label: "Duplicate"
+        then:
+          result:
+            valid: true
+            "categories.trigger": "@gt(0)"
+
+      - name: generates accessibility tests with axe
+        given:
+          spec:
+            node:
+              intent: "Modal dialog"
+              ui:
+                accessibility:
+                  role: "dialog"
+          options:
+            accessibilityPlugin: "axe"
+        then:
+          result:
+            valid: true
+            code: "@contains('AxeBuilder')"
+
+    errors:
+      - name: no UI section
+        given:
+          spec:
+            node:
+              intent: "No UI"
+        then:
+          result:
+            valid: false
+            "errors[0].code": "NO_UI_SECTION"
+
+---
+
+spec.ui.generator.trigger:
+  implementation: src/core/spec/generators/ui.ts:generateUITests
+  goal: "Generate trigger interaction tests"
+  intent: Generate trigger tests from UI trigger section
+  description: |
+    Generates tests for UI triggers: menu items, buttons, keyboard shortcuts.
+    Each trigger element generates one or more test cases.
+
+  inputs:
+    trigger:
+      type: object
+      properties:
+        location: { type: string }
+        label: { type: string }
+        shortcut: { type: string }
+
+  outputs:
+    tests:
+      type: array
+      description: Generated trigger test cases
+
+  invariants:
+    - "Context menu triggers test menu item visibility"
+    - "Keyboard shortcuts test key press behavior"
+    - "Shortcut modifiers are converted to framework format"
+
+  examples:
+    success:
+      - name: context menu item
+        given:
+          trigger:
+            location: "context menu"
+            label: "Duplicate"
+        then:
+          tests: "@length(@gte(1))"
+
+      - name: keyboard shortcut
+        given:
+          trigger:
+            shortcut: "Cmd+D"
+        then:
+          tests: "@hasItem({ name: @contains('Cmd+D') })"
+
+    errors:
+      - name: "empty trigger"
+        given:
+          trigger: {}
+        then:
+          error: "EMPTY_TRIGGER"
+
+---
+
+spec.ui.generator.accessibility:
+  implementation: src/core/spec/generators/ui.ts:generateUITests
+  goal: "Generate accessibility tests"
+  intent: Generate accessibility tests from UI accessibility section
+  description: |
+    Generates tests for ARIA roles, labels, keyboard navigation,
+    focus management, and automated accessibility scanning.
+
+  inputs:
+    accessibility:
+      type: object
+      properties:
+        role: { type: string }
+        label: { type: string }
+        keyboardNav: { type: array }
+        focusTrap: { type: boolean }
+
+  outputs:
+    tests:
+      type: array
+      description: Generated accessibility test cases
+
+  invariants:
+    - "ARIA role generates role assertion test"
+    - "ARIA label generates accessible name test"
+    - "Each keyboard nav entry generates key handler test"
+    - "Focus trap generates tab cycling test"
+    - "Axe plugin generates automated a11y scan"
+
+  examples:
+    success:
+      - name: ARIA role and label
+        given:
+          accessibility:
+            role: "menuitem"
+            label: "Duplicate entry"
+        then:
+          tests: "@length(@gte(2))"
+
+      - name: keyboard navigation
+        given:
+          accessibility:
+            keyboardNav:
+              - { key: "Enter", action: "activate" }
+              - { key: "Escape", action: "close" }
+        then:
+          tests: "@length(@gte(2))"
+
+    errors:
+      - name: "empty accessibility"
+        given:
+          accessibility: {}
+        then:
+          error: "EMPTY_ACCESSIBILITY"
+
+---
+
+spec.ui.generator.interaction:
+  implementation: src/core/spec/generators/ui.ts:generateUITests
+  goal: "Generate multi-step interaction tests"
+  intent: Generate interaction tests from UI interaction section
+  description: |
+    Generates tests for multi-step flows, states, optimistic updates,
+    and loading states.
+
+  inputs:
+    interaction:
+      type: object
+      properties:
+        flow: { type: array }
+        optimistic: { type: boolean }
+        loading: { type: string }
+        states: { type: object }
+        sequence: { type: array }
+
+  outputs:
+    tests:
+      type: array
+      description: Generated interaction test cases
+
+  invariants:
+    - "Flow generates multi-step interaction test"
+    - "Optimistic true generates pre-network assertion"
+    - "Loading generates loading indicator test"
+    - "Each state generates state condition test"
+    - "Sequence generates ordered step tests"
+
+  examples:
+    success:
+      - name: optimistic update flow
+        given:
+          interaction:
+            optimistic: true
+            loading: "Inline spinner"
+        then:
+          tests: "@length(@gte(2))"
+
+    errors:
+      - name: "empty interaction"
+        given:
+          interaction: {}
+        then:
+          error: "EMPTY_INTERACTION"
+
+---
+
+spec.ui.generator.feedback:
+  implementation: src/core/spec/generators/ui.ts:generateUITests
+  goal: "Generate feedback display tests"
+  intent: Generate feedback tests from UI feedback section
+  description: |
+    Generates tests for success messages, error messages, and loading indicators.
+
+  inputs:
+    feedback:
+      type: object
+      properties:
+        success: { type: string }
+        error: { type: string }
+        loading: { type: object }
+
+  outputs:
+    tests:
+      type: array
+      description: Generated feedback test cases
+
+  invariants:
+    - "Success message generates visibility assertion"
+    - "Error message generates error state test with mocked failure"
+    - "Loading generates indicator visibility test"
+
+  examples:
+    success:
+      - name: success and error feedback
+        given:
+          feedback:
+            success: "Entry duplicated"
+            error: "Failed to duplicate"
+        then:
+          tests: "@length(@gte(2))"
+
+    errors:
+      - name: "empty feedback"
+        given:
+          feedback: {}
+        then:
+          error: "EMPTY_FEEDBACK"

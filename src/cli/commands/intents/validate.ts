@@ -102,9 +102,7 @@ async function extractIntentsWithScope(
           }
         }
       }
-    } catch {
-      // TypeScript parsing failed, file-level intents already captured
-    }
+    } catch { /* TypeScript parsing failed, file-level intents already captured */ }
   }
 
   return locations;

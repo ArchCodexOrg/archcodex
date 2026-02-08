@@ -70,7 +70,7 @@ export async function loadConcepts(
     const content = await readFile(fullPath);
     const parsed = parseYaml(content);
     return ConceptRegistrySchema.parse(parsed);
-  } catch {
+  } catch { /* file not found or invalid YAML */
     // If concepts.yaml is invalid, return null rather than crashing
     return null;
   }

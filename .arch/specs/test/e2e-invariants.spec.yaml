@@ -1,0 +1,36 @@
+version: "1.0"
+
+spec.test.e2e.invariantTest:
+  type: test
+  inherits: spec.function
+  goal: "Verify invariant DSL parsing and property-based test generation"
+  intent: "Test invariant parsing and property generation"
+
+  inputs:
+    items: { type: array, items: { type: object, properties: { status: { type: string }, value: { type: number } } } }
+
+  outputs:
+    processed: { type: array }
+    count: { type: number }
+
+  invariants:
+    - condition: "result.count >= 0"
+    - condition: "result.processed.every(item => item.status === 'done')"
+    - { "result.count": "@gte(0)" }
+    - forall:
+        variable: item
+        in: result.processed
+        then: { "item.value": "@gte(0)" }
+        where: { "item.status": "active" }
+    - exists:
+        variable: item
+        in: result.processed
+        where: { "item.status": "complete" }
+
+  examples:
+    success:
+      - name: "processes items"
+        given: { items: [{ status: "pending", value: 10 }] }
+        then:
+          result.count: "@gte(0)"
+          result.processed: "@length(1)"

@@ -1,9 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.test
  *
  * Tests for condition evaluator.
  */

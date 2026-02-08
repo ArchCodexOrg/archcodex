@@ -75,6 +75,24 @@ intents:
     suggest_for_archs:
       - "*.engine"
 
+  # === SpecCodex ===
+  spec-infrastructure:
+    description: "SpecCodex infrastructure - spec loading, validation, generation"
+    category: lifecycle
+    suggest_for_paths:
+      - "**/spec/**"
+    suggest_for_archs:
+      - "*.domain"
+      - "*.engine"
+
+  cached:
+    description: "Command output can be cached for performance"
+    category: lifecycle
+    suggest_for_paths:
+      - "**/commands/**"
+    suggest_for_archs:
+      - "*.command"
+
   # === Infrastructure ===
   registry-infrastructure:
     description: "File is the canonical registry loader/accessor infrastructure"

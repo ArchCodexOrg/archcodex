@@ -67,7 +67,7 @@ export class DuplicateDetector {
             const content = await readFile(absolutePath);
             const relativePath = path.relative(this.projectRoot, absolutePath);
             return { relativePath, content };
-          } catch {
+          } catch { /* file cannot be read */
             return null;
           }
         })
@@ -88,7 +88,7 @@ export class DuplicateDetector {
           });
 
           allTypes.push(...filtered);
-        } catch {
+        } catch { /* TypeScript parse error, skip file */
           // Skip files that can't be parsed
         }
       }
@@ -122,7 +122,7 @@ export class DuplicateDetector {
 
         const types = this.extractor.extractFromFile(relativePath, content);
         otherTypes.push(...types.filter(t => !this.options.exportedOnly || t.isExported));
-      } catch {
+      } catch { /* file read or parse error */
         // Skip files that can't be read/parsed
       }
     }

@@ -178,9 +178,9 @@ patterns:
     keywords: [cli, command, commander, option, argument, action]
 
   output_formatting:
-    canonical: src/cli/formatters/json.ts
-    exports: [formatJson, formatHuman, formatCompact]
-    usage: "Use standard formatters for consistent output across commands."
+    canonical: src/cli/formatters/index.ts
+    exports: [JsonFormatter, HumanFormatter, CompactFormatter, printGardenReport]
+    usage: "Use standard formatters for consistent output across commands. Each formatter implements IFormatter."
     keywords: [format, output, json, human, readable, display]
 
   # ---------------------------------------------------------------------------

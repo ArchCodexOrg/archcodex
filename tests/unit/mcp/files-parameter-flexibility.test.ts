@@ -1,10 +1,6 @@
 /**
  * @arch archcodex.test.unit
  * @intent:cli-output
- */
-/**
- * @arch archcodex.core.domain.constraint
- * @intent:tested
  *
  * Tests for flexible files parameter handling:
  * - files parameter accepts both string and array formats

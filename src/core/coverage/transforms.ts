@@ -21,8 +21,8 @@ const TRANSFORM_PLACEHOLDERS = {
  * Apply a transform template to a value.
  *
  * @example
- * applyTransform("bookmark.archived", "handle${PascalCase}") // "handleBookmarkArchived"
- * applyTransform("bookmark.archived", "${snake_case}") // "bookmark_archived"
+ * applyTransform("product.archived", "handle${PascalCase}") // "handleProductArchived"
+ * applyTransform("product.archived", "${snake_case}") // "product_archived"
  * applyTransform("UserEvent", "${value}Handler") // "UserEventHandler"
  */
 export function applyTransform(value: string, transform?: string): string {
@@ -44,7 +44,7 @@ export function applyTransform(value: string, transform?: string): string {
 
 /**
  * Convert to PascalCase.
- * - "bookmark.archived" → "BookmarkArchived"
+ * - "product.archived" → "ProductArchived"
  * - "user_created" → "UserCreated"
  * - "userCreated" → "UserCreated"
  * - "user-created" → "UserCreated"
@@ -60,7 +60,7 @@ export function toPascalCase(str: string): string {
 
 /**
  * Convert to camelCase.
- * - "bookmark.archived" → "bookmarkArchived"
+ * - "product.archived" → "productArchived"
  * - "UserCreated" → "userCreated"
  * - "user_created" → "userCreated"
  */
@@ -71,9 +71,9 @@ export function toCamelCase(str: string): string {
 
 /**
  * Convert to snake_case.
- * - "bookmarkArchived" → "bookmark_archived"
- * - "BookmarkArchived" → "bookmark_archived"
- * - "bookmark.archived" → "bookmark_archived"
+ * - "productArchived" → "product_archived"
+ * - "ProductArchived" → "product_archived"
+ * - "product.archived" → "product_archived"
  */
 export function toSnakeCase(str: string): string {
   return str
@@ -91,8 +91,8 @@ export function toSnakeCase(str: string): string {
 
 /**
  * Convert to UPPER_CASE (screaming snake case).
- * - "bookmark.archived" → "BOOKMARK_ARCHIVED"
- * - "bookmarkArchived" → "BOOKMARK_ARCHIVED"
+ * - "product.archived" → "PRODUCT_ARCHIVED"
+ * - "productArchived" → "PRODUCT_ARCHIVED"
  */
 export function toUpperCase(str: string): string {
   return toSnakeCase(str).toUpperCase();
@@ -100,9 +100,9 @@ export function toUpperCase(str: string): string {
 
 /**
  * Convert to kebab-case.
- * - "bookmarkArchived" → "bookmark-archived"
+ * - "productArchived" → "product-archived"
  * - "UserCreated" → "user-created"
- * - "bookmark_archived" → "bookmark-archived"
+ * - "product_archived" → "product-archived"
  */
 export function toKebabCase(str: string): string {
   return toSnakeCase(str).replace(/_/g, '-');

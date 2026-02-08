@@ -327,9 +327,7 @@ async function resolveFiles(
           // Expand directory to include all TypeScript files
           pattern = path.join(pattern, '**/*.{ts,tsx}');
         }
-      } catch {
-        // Path doesn't exist or can't be accessed - treat as glob pattern
-      }
+      } catch { /* path doesn't exist, treat as glob pattern */ }
       const matches = await globFiles(pattern, { cwd: projectRoot, absolute: false, ignore: exclude });
       filePaths.push(...matches);
     }

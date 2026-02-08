@@ -1,0 +1,505 @@
+# SpecCodex CLI Command Specifications
+#
+# Specs for CLI commands that interact with specs.
+# Follows the progressive disclosure pattern from ArchCodex help.
+
+version: "1.0"
+
+# =============================================================================
+# CLI COMMAND: speccodex help
+# =============================================================================
+# Progressive disclosure help system for SpecCodex.
+# - `speccodex help` shows topics
+# - `speccodex help <topic>` shows commands in topic with examples
+# - `speccodex help --full` shows all commands grouped
+
+spec.speccodex.cli.help:
+  inherits: spec.function
+  implementation: src/cli/commands/spec.ts#createSpecCommand
+
+  # === STRATEGIC ===
+  goal: "Progressive disclosure help system for SpecCodex"
+  outcomes:
+    - "`speccodex help` shows topic list"
+    - "`speccodex help <topic>` shows commands with examples"
+    - "`speccodex help --full` shows all commands grouped"
+    - "Essentials shown in main --help"
+
+  # === OPERATIONAL ===
+  intent: "Show help for SpecCodex commands organized by topic"
+
+  inputs:
+    topic:
+      type: string
+      description: "Topic to show help for (optional)"
+    options:
+      type: object
+      properties:
+        full: { type: boolean, default: false, description: "Show all commands grouped" }
+
+  outputs:
+    stdout:
+      type: string
+      description: "Formatted help output"
+
+  # === INVARIANTS ===
+  invariants:
+    - { "unknown topic returns error with available topics": true }
+    - { "each topic has at least one command": true }
+    - { "commands have examples": true }
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "show topic list (no args)"
+        given:
+          topic: null
+          options: {}
+        then:
+          result.stdout: "@contains('SpecCodex Help Topics')"
+          result.stdout: "@contains('writing')"
+          result.stdout: "@contains('generating')"
+          result.stdout: "@contains('verifying')"
+
+      - name: "show writing topic"
+        given:
+          topic: "writing"
+          options: {}
+        then:
+          result.stdout: "@contains('Writing')"
+          result.stdout: "@contains('parse')"
+          result.stdout: "@contains('validate')"
+          result.stdout: "@contains('schema')"
+
+      - name: "show generating topic"
+        given:
+          topic: "generating"
+          options: {}
+        then:
+          result.stdout: "@contains('Generating')"
+          result.stdout: "@contains('generate')"
+          result.stdout: "@contains('--type unit')"
+          result.stdout: "@contains('--type property')"
+
+      - name: "show verifying topic"
+        given:
+          topic: "verifying"
+          options: {}
+        then:
+          result.stdout: "@contains('Verifying')"
+          result.stdout: "@contains('verify')"
+          result.stdout: "@contains('drift')"
+
+      - name: "show full help"
+        given:
+          topic: null
+          options: { full: true }
+        then:
+          result.stdout: "@contains('SpecCodex - All Commands')"
+          result.stdout: "@contains('writing')"
+          result.stdout: "@contains('generating')"
+          result.stdout: "@contains('verifying')"
+          result.stdout: "@contains('discovering')"
+
+    errors:
+      - name: "unknown topic"
+        given:
+          topic: "nonexistent"
+          options: {}
+        then:
+          result.stderr: "@contains('Unknown topic')"
+          result.stderr: "@contains('Available topics')"
+
+# =============================================================================
+# CLI COMMAND: speccodex list
+# =============================================================================
+# List all specs in the registry.
+
+spec.speccodex.cli.list:
+  inherits: spec.function
+  implementation: src/cli/commands/spec.ts#createSpecCommand
+
+  # === STRATEGIC ===
+  goal: "List all specs in the registry"
+  outcomes:
+    - "Show all spec IDs with optional details"
+    - "Filter by pattern"
+    - "Show wiring status"
+    - "Group by category"
+
+  # === OPERATIONAL ===
+  intent: "List specs from the registry"
+
+  inputs:
+    options:
+      type: object
+      properties:
+        pattern: { type: string, description: "Filter specs by pattern (glob)" }
+        details: { type: boolean, default: false, description: "Show intent and implementation" }
+        unwired: { type: boolean, default: false, description: "Only show unwired specs" }
+        format: { type: enum, values: [terminal, json], default: terminal }
+
+  outputs:
+    stdout:
+      type: string
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "list all specs"
+        given:
+          options: {}
+        then:
+          result.stdout: "@contains('spec.')"
+
+      - name: "list with pattern filter"
+        given:
+          options: { pattern: "spec.speccodex.*" }
+        then:
+          result.stdout: "@contains('spec.speccodex')"
+          result.stdout: "@not(@contains('spec.product'))"
+
+      - name: "list with details"
+        given:
+          options: { details: true }
+        then:
+          result.stdout: "@contains('intent:')"
+          result.stdout: "@contains('implementation:')"
+
+      - name: "list only unwired"
+        given:
+          options: { unwired: true }
+        then:
+          # Only shows specs without implementation
+          result.stdout: "@exists"
+
+      - name: "json format"
+        given:
+          options: { format: json }
+        then:
+          result.stdout: "@startsWith('[')"
+
+    errors:
+      - name: "no specs found"
+        given:
+          options: { pattern: "spec.nonexistent.*" }
+        then:
+          result.stdout: "@contains('0 specs')"
+
+# =============================================================================
+# CLI COMMAND: speccodex resolve
+# =============================================================================
+# Resolve a spec by ID, showing fully expanded form.
+
+spec.speccodex.cli.resolve:
+  inherits: spec.function
+  implementation: src/cli/commands/spec.ts#createSpecCommand
+
+  # === STRATEGIC ===
+  goal: "Show fully resolved spec with inheritance expanded"
+  outcomes:
+    - "Expand inheritance chain"
+    - "Expand mixins with variables"
+    - "Show LLM-friendly format"
+    - "Support multiple output formats"
+
+  # === OPERATIONAL ===
+  intent: "Resolve and display a spec by ID"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      pattern: "spec\\.[a-z][a-z0-9_.]*"
+      description: "Spec ID to resolve"
+    options:
+      type: object
+      properties:
+        format: { type: enum, values: [yaml, json, compact], default: yaml }
+
+  outputs:
+    stdout:
+      type: string
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "resolve spec"
+        given:
+          specId: "spec.speccodex.parse"
+          options: {}
+        then:
+          result.stdout: "@contains('intent:')"
+          result.stdout: "@contains('inputs:')"
+
+      - name: "resolve with compact format"
+        given:
+          specId: "spec.speccodex.parse"
+          options: { format: compact }
+        then:
+          # Compact format is shorter
+          result.stdout: "@exists"
+
+      - name: "resolve shows inheritance"
+        given:
+          specId: "spec.speccodex.parse"
+          options: {}
+        then:
+          result.stdout: "@contains('inheritanceChain:')"
+
+    errors:
+      - name: "unknown spec ID"
+        given:
+          specId: "spec.nonexistent"
+          options: {}
+        then:
+          result.stderr: "@contains('Spec not found')"
+
+# =============================================================================
+# CLI COMMAND: speccodex generate
+# =============================================================================
+# Generate tests from a spec.
+
+spec.speccodex.cli.generate:
+  inherits: spec.function
+  implementation: src/cli/commands/spec.ts#createSpecCommand
+
+  # === STRATEGIC ===
+  goal: "Generate tests from spec examples and invariants"
+  outcomes:
+    - "Generate unit tests from examples"
+    - "Generate property tests from invariants"
+    - "Generate integration tests from effects"
+    - "Support dry-run mode"
+    - "Use marker sections for regeneration"
+
+  # === OPERATIONAL ===
+  intent: "Generate test files from spec"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec ID to generate tests for"
+    options:
+      type: object
+      properties:
+        type: { type: enum, values: [unit, property, integration, all], default: unit }
+        output: { type: string, description: "Output path (default: colocated)" }
+        dryRun: { type: boolean, default: false, description: "Show what would be generated" }
+        force: { type: boolean, default: false, description: "Overwrite existing files" }
+        framework: { type: enum, values: [vitest, jest], default: vitest }
+
+  outputs:
+    stdout:
+      type: string
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "generate unit tests"
+        given:
+          specId: "spec.product.create"
+          options: { type: unit }
+        then:
+          result.stdout: "@contains('Generated')"
+
+      - name: "generate all test types"
+        given:
+          specId: "spec.product.create"
+          options: { type: all }
+        then:
+          result.stdout: "@exists"
+
+      - name: "dry run shows preview"
+        given:
+          specId: "spec.product.create"
+          options: { type: unit, dryRun: true }
+        then:
+          result.stdout: "@contains('Would generate')"
+          result.stdout: "@contains('describe(')"
+
+      - name: "custom output path"
+        given:
+          specId: "spec.product.create"
+          options: { type: unit, output: "tests/generated/" }
+        then:
+          result.stdout: "@contains('tests/generated')"
+
+    errors:
+      - name: "spec not found"
+        given:
+          specId: "spec.nonexistent"
+          options: {}
+        then:
+          result.stderr: "@contains('Spec not found')"
+
+      - name: "spec without examples"
+        given:
+          specId: "spec.function"  # Base spec, no examples
+          options: { type: unit }
+        then:
+          result.stderr: "@contains('No examples')"
+
+      - name: "file exists without force"
+        given:
+          specId: "spec.product.create"
+          options: { type: unit, force: false }
+          # Output file already exists
+        then:
+          result.stderr: "@contains('already exists')"
+          result.stderr: "@contains('--force')"
+
+# =============================================================================
+# CLI COMMAND: speccodex verify
+# =============================================================================
+# Verify implementation matches spec.
+
+spec.speccodex.cli.verify:
+  inherits: spec.function
+  implementation: src/cli/commands/spec.ts#createSpecCommand
+
+  # === STRATEGIC ===
+  goal: "Verify implementation matches spec bidirectionally"
+  outcomes:
+    - "Check implementation file exists"
+    - "Check function signature matches spec inputs"
+    - "Run generated tests against implementation"
+    - "Report drift with suggestions"
+
+  # === OPERATIONAL ===
+  intent: "Verify spec implementation matches"
+
+  inputs:
+    specId:
+      type: string
+      required: true
+      description: "Spec ID to verify"
+    options:
+      type: object
+      properties:
+        signature: { type: boolean, default: true, description: "Check signature match" }
+        behavior: { type: boolean, default: false, description: "Run behavior tests" }
+        fix: { type: boolean, default: false, description: "Suggest fixes" }
+
+  outputs:
+    valid:
+      type: boolean
+    drift:
+      type: array
+    stdout:
+      type: string
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "matching implementation"
+        given:
+          specId: "spec.product.create"
+          options: {}
+        then:
+          result.valid: true
+          result.drift: []
+          result.stdout: "@contains('✓')"
+
+      - name: "with behavior check"
+        given:
+          specId: "spec.product.create"
+          options: { behavior: true }
+        then:
+          result.stdout: "@contains('tests passed')"
+
+    errors:
+      - name: "implementation not found"
+        given:
+          specId: "spec.test.missing"
+          options: {}
+        then:
+          result.valid: false
+          result.stderr: "@contains('Implementation not found')"
+
+      - name: "signature mismatch"
+        given:
+          specId: "spec.test.mismatched"
+          options: { signature: true }
+        then:
+          result.valid: false
+          result.drift: "@hasItem({ type: 'missing_input' })"
+
+      - name: "with fix suggestions"
+        given:
+          specId: "spec.test.mismatched"
+          options: { fix: true }
+        then:
+          result.stdout: "@contains('Suggestion:')"
+
+# =============================================================================
+# CLI COMMAND: speccodex drift
+# =============================================================================
+# Run drift detection to find gaps between specs and implementations.
+
+spec.speccodex.cli.drift:
+  inherits: spec.function
+  implementation: src/cli/commands/spec.ts#createSpecCommand
+
+  # === STRATEGIC ===
+  goal: "CLI command for drift detection"
+  outcomes:
+    - "`speccodex drift` shows full report"
+    - "`speccodex drift --fix` suggests fixes"
+    - "Exit code 1 on errors, 0 on clean"
+    - "CI-friendly output modes"
+
+  # === OPERATIONAL ===
+  intent: "Run drift detection from CLI"
+
+  inputs:
+    options:
+      type: object
+      properties:
+        fix: { type: boolean, default: false, description: "Suggest fixes for drift" }
+        format: { type: enum, values: [terminal, json, markdown], default: terminal }
+        strict: { type: boolean, default: false, description: "Treat warnings as errors" }
+        pattern: { type: string, description: "Filter to specs matching pattern" }
+        includeBase: { type: boolean, default: false, description: "Include base specs" }
+
+  outputs:
+    stdout:
+      type: string
+
+  # === EXAMPLES ===
+  examples:
+    success:
+      - name: "clean codebase"
+        given:
+          options: {}
+          # All specs wired, all implementations documented
+        then:
+          result.stdout: "@contains('100%')"
+
+      - name: "json output for CI"
+        given:
+          options: { format: json }
+        then:
+          result.stdout: "@startsWith('{')"
+
+      - name: "filter by pattern"
+        given:
+          options: { pattern: "spec.speccodex.*" }
+        then:
+          result.stdout: "@contains('speccodex')"
+
+    errors:
+      - name: "drift found"
+        given:
+          options: {}
+          # Some specs unwired
+        then:
+          result.stdout: "@contains('Unwired')"
+
+      - name: "strict mode fails on warnings"
+        given:
+          options: { strict: true }
+          # Only warnings, no errors
+        then:
+          result.stderr: "@exists"

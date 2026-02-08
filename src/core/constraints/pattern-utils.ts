@@ -54,7 +54,7 @@ export function matchesCallPattern(call: FunctionCallInfo, pattern: string): boo
     try {
       const regex = new RegExp(pattern.slice(1, -1));
       return regex.test(call.callee);
-    } catch {
+    } catch { /* invalid regex pattern */
       return false;
     }
   }

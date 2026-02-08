@@ -74,10 +74,8 @@ export async function findProjectRoot(filePath: string, defaultRoot: string): Pr
       await access(resolve(dir, '.arch'));
       cacheProjectRoot(absPath, dir);
       return dir;
-    } catch {
-      // .arch not found, go up
-      dir = dirname(dir);
-    }
+    } catch { /* .arch not found, continue walking up */ }
+    dir = dirname(dir);
   }
 
   // Check root as well
@@ -85,7 +83,7 @@ export async function findProjectRoot(filePath: string, defaultRoot: string): Pr
     await access(resolve(dir, '.arch'));
     cacheProjectRoot(absPath, dir);
     return dir;
-  } catch {
+  } catch { /* .arch not found anywhere */
     return null;
   }
 }
@@ -148,7 +146,7 @@ export async function isProjectInitialized(projectRoot: string): Promise<boolean
   try {
     await access(resolve(projectRoot, '.arch'));
     return true;
-  } catch {
+  } catch { /* .arch not found */
     return false;
   }
 }
