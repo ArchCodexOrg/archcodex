@@ -2,7 +2,7 @@
  * @arch archcodex.cli.barrel
  */
 import { Command } from 'commander';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { createCheckCommand } from './commands/check.js';
@@ -56,7 +56,12 @@ import { createDocCommand } from './commands/doc.js';
 import { createFeatureAuditCommand } from './commands/feature-audit.js';
 import { createAnalyzeCommand } from './commands/analyze.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const VERSION = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8')).version;
+// '../../package.json' works from source (src/cli/), '../../../' from compiled (dist/src/cli/)
+const pkgPath = resolve(__dirname, '../../package.json');
+const VERSION = JSON.parse(readFileSync(
+  existsSync(pkgPath) ? pkgPath : resolve(__dirname, '../../../package.json'),
+  'utf-8'
+)).version;
 /** Create the CLI program. */
 export function createCli(): Command {
   const program = new Command()
