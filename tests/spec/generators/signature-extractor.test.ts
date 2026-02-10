@@ -50,9 +50,8 @@ describe('parseImplementationPath', () => {
 });
 
 describe('extractFunctionSignature', () => {
-  const projectRoot = process.cwd().includes('ArchCodex')
-    ? process.cwd()
-    : process.cwd() + '/../ArchCodex';
+  // Vitest runs from the project root (where vitest.config.ts lives)
+  const projectRoot = process.cwd();
 
   it('extracts function declaration signature and detects factory pattern', () => {
     const result = extractFunctionSignature(
