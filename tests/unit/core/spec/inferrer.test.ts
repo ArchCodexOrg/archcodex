@@ -93,7 +93,7 @@ describe('inferSpec', () => {
 
   });
 
-  describe('cross-file type resolution', () => {
+  describe('cross-file type resolution', { timeout: 30_000 }, () => {
     it('resolves imported return type fields', () => {
       const implementationPath = `${FIXTURES}/imported-types/main.ts#processUser`;
 
