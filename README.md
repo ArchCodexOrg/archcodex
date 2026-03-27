@@ -183,8 +183,7 @@ See [Semantic Intents](docs/intents.md) for details.
 | **Analysis**    | `read`, `neighborhood`, `types`, `garden`                             | Analyze code with context        |
 | **Registry**    | `reindex`, `sync-index`, `migrate-registry`, `audit`, `intents`       | Manage registry and index        |
 | **Versioning**  | `diff`, `migrate`, `simulate`, `watch`, `init`, `fetch`, `feedback`   | Version control and migrations   |
-| **SpecCodex**   | `spec list`, `spec generate`, `spec verify`, `spec infer`, `spec drift` | Specification by Example testing |
-| **Docs**        | `doc adr`, `doc watch`, `doc verify`, `doc templates`                 | Generate documentation           |
+| **SpecCodex**   | `spec list`, `spec generate`, `spec verify`, `spec infer`, `spec drift` | AI and token friendly Specifications with determenistic test generation           |
 
 ### Essential Commands
 
